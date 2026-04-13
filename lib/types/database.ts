@@ -75,7 +75,7 @@ export interface ApparatusCompartment {
 }
 
 // ─── Personnel ───────────────────────────────────────────────────────────────
-export type SignupStatus = 'awaiting_approval' | 'active' | 'denied' | 'temp_password'
+export type SignupStatus = 'awaiting_approval' | 'active' | 'denied' | 'temp_password' | 'profile_setup'
 export type SystemRole = 'admin' | 'officer' | 'member'
 
 export interface Personnel {
