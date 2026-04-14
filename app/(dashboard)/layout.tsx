@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/app/actions/auth'
 import Link from 'next/link'
 import FeedbackButton from '@/components/FeedbackButton'
+import MobileSidebar from '@/components/MobileSidebar'
 
 async function getUserContext() {
   const supabase = await createClient()
@@ -40,83 +41,122 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const systemRole = user?.system_role ?? null
   const isDeptAdmin = systemRole === 'admin'
 
+  const navItems = isSysAdmin ? [
+    { href: '/dashboard', label: 'Overview' },
+  ] : [
+    { href: '/dashboard', label: 'Dashboard' },
+    { href: '/personnel', label: 'Personnel' },
+    { href: '/apparatus', label: 'Apparatus' },
+    { href: '/stations', label: 'Stations' },
+    { href: '/equipment', label: 'Equipment' },
+    { href: '/scba', label: 'SCBA' },
+  ]
+
+  const adminNavItems = isSysAdmin ? [
+    { href: '/admin/departments', label: 'Departments' },
+    { href: '/admin/users', label: 'Users' },
+    { href: '/admin/logs', label: 'System Logs' },
+  ] : isDeptAdmin ? [
+    { href: '/dept-admin/personnel', label: 'Manage Personnel' },
+  ] : []
+
+  const adminLabel = isSysAdmin ? 'System Admin' : 'Dept Admin'
+
+  const userInfo = {
+    name: user ? `${user.first_name} ${user.last_name}` : 'Unknown',
+    role: isSysAdmin ? 'System Admin' : systemRole ?? '',
+    departmentName: user?.department_name ?? (isSysAdmin ? 'System Administrator' : null),
+  }
+
   return (
     <div className="flex min-h-screen bg-zinc-100">
-      <aside className="w-64 bg-red-800 text-white flex flex-col">
-        {/* Logo */}
-        <div className="px-6 py-5 border-b border-red-700">
-          <h1 className="text-xl font-bold tracking-tight">FireOps7</h1>
-          {user?.department_name ? (
-            <p className="text-xs text-red-300 mt-0.5 truncate">{user.department_name}</p>
-          ) : isSysAdmin ? (
-            <p className="text-xs text-red-300 mt-0.5">System Administrator</p>
-          ) : null}
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 flex flex-col gap-1 text-sm overflow-y-auto">
-
-          {/* Regular dept user nav */}
-          {!isSysAdmin && (
-            <>
-              <NavItem href="/dashboard" label="Dashboard" />
-              <NavItem href="/personnel" label="Personnel" />
-              <NavItem href="/apparatus" label="Apparatus" />
-              <NavItem href="/stations" label="Stations" />
-              <NavItem href="/equipment" label="Equipment" />
-              <NavItem href="/scba" label="SCBA" />
-            </>
-          )}
-
-          {/* Sys admin nav */}
-          {isSysAdmin && (
-            <>
-              <NavItem href="/dashboard" label="Overview" />
-              <div className="mt-4 mb-1 px-3 text-xs font-semibold text-red-300 uppercase tracking-wider">
-                System Admin
-              </div>
-              <NavItem href="/admin/departments" label="Departments" />
-              <NavItem href="/admin/users" label="Users" />
-              <NavItem href="/admin/logs" label="System Logs" />
-            </>
-          )}
-
-          {/* Dept Admin section */}
-          {!isSysAdmin && isDeptAdmin && (
-            <>
-              <div className="mt-4 mb-1 px-3 text-xs font-semibold text-red-300 uppercase tracking-wider">
-                Dept Admin
-              </div>
-              <NavItem href="/dept-admin/personnel" label="Manage Personnel" />
-            </>
-          )}
-        </nav>
-
-        {/* Footer */}
-        <div className="px-4 py-4 border-t border-red-700 flex flex-col gap-2">
-          <div className="mb-1">
-            <p className="text-sm font-medium truncate">
-              {user ? `${user.first_name} ${user.last_name}` : 'Unknown'}
-            </p>
-            <p className="text-xs text-red-300 capitalize">
-              {isSysAdmin ? 'System Admin' : systemRole ?? ''}
-            </p>
-          </div>
-
-          {/* Feedback button — available to all users */}
-          <FeedbackButton />
-
-          <form action={signOut}>
-            <button type="submit"
-              className="w-full rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 transition-colors text-left">
-              Sign Out
-            </button>
-          </form>
-        </div>
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-64 bg-red-800 text-white flex-col shrink-0">
+        <SidebarContent
+          navItems={navItems}
+          adminNavItems={adminNavItems}
+          adminLabel={adminLabel}
+          userInfo={userInfo}
+          isSysAdmin={isSysAdmin}
+          isDeptAdmin={isDeptAdmin}
+        />
       </aside>
 
-      <main className="flex-1 p-8 overflow-y-auto">{children}</main>
+      {/* Mobile Header + Sidebar */}
+      <MobileSidebar
+        navItems={navItems}
+        adminNavItems={adminNavItems}
+        adminLabel={adminLabel}
+        userInfo={userInfo}
+        isSysAdmin={isSysAdmin}
+      />
+
+      {/* Main Content */}
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto md:ml-0">
+        {children}
+      </main>
     </div>
+  )
+}
+
+function SidebarContent({
+  navItems,
+  adminNavItems,
+  adminLabel,
+  userInfo,
+  isSysAdmin,
+  isDeptAdmin,
+}: {
+  navItems: { href: string; label: string }[]
+  adminNavItems: { href: string; label: string }[]
+  adminLabel: string
+  userInfo: { name: string; role: string; departmentName: string | null }
+  isSysAdmin: boolean
+  isDeptAdmin: boolean
+}) {
+  return (
+    <>
+      {/* Logo */}
+      <div className="px-6 py-5 border-b border-red-700">
+        <h1 className="text-xl font-bold tracking-tight">FireOps7</h1>
+        {userInfo.departmentName && (
+          <p className="text-xs text-red-300 mt-0.5 truncate">{userInfo.departmentName}</p>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-4 flex flex-col gap-1 text-sm overflow-y-auto">
+        {navItems.map(item => (
+          <NavItem key={item.href} href={item.href} label={item.label} />
+        ))}
+
+        {adminNavItems.length > 0 && (
+          <>
+            <div className="mt-4 mb-1 px-3 text-xs font-semibold text-red-300 uppercase tracking-wider">
+              {adminLabel}
+            </div>
+            {adminNavItems.map(item => (
+              <NavItem key={item.href} href={item.href} label={item.label} />
+            ))}
+          </>
+        )}
+      </nav>
+
+      {/* Footer */}
+      <div className="px-4 py-4 border-t border-red-700 flex flex-col gap-2">
+        <div className="mb-1">
+          <p className="text-sm font-medium truncate">{userInfo.name}</p>
+          <p className="text-xs text-red-300 capitalize">{userInfo.role}</p>
+        </div>
+        <FeedbackButton />
+        <form action={signOut}>
+          <button type="submit"
+            className="w-full rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 transition-colors text-left">
+            Sign Out
+          </button>
+        </form>
+      </div>
+    </>
   )
 }
 
@@ -128,3 +168,5 @@ function NavItem({ href, label }: { href: string; label: string }) {
     </Link>
   )
 }
+
+export { SidebarContent }
