@@ -27,8 +27,10 @@ interface Apparatus {
   license_plate: string | null
   active: boolean
   in_service_date: string | null
-  apparatus_types: { id: string; name: string } | null
-  stations: { id: string; station_name: string; station_number: string | null } | null
+  apparatus_type_id: string | null
+  station_id: string | null
+  type_name: string | null
+  station: { id: string; station_name: string; station_number: string | null } | null
 }
 
 export default function ApparatusListClient({
@@ -54,9 +56,8 @@ export default function ApparatusListClient({
   const [loading, setLoading] = useState(false)
   const [showInactive, setShowInactive] = useState(false)
 
-  // Filter by station and active status
   const filtered = apparatus.filter(a => {
-    const stationMatch = selectedStation === 'all' || a.stations?.id === selectedStation
+    const stationMatch = selectedStation === 'all' || a.station_id === selectedStation
     const activeMatch = showInactive ? true : a.active
     return stationMatch && activeMatch
   })
@@ -96,47 +97,34 @@ export default function ApparatusListClient({
         {stations.length > 1 && (
           <>
             {isAdmin && (
-              <button
-                onClick={() => setSelectedStation('all')}
+              <button onClick={() => setSelectedStation('all')}
                 className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                  selectedStation === 'all'
-                    ? 'bg-red-700 text-white'
-                    : 'bg-white border border-zinc-200 text-zinc-600 hover:border-red-300'
-                }`}
-              >
+                  selectedStation === 'all' ? 'bg-red-700 text-white' : 'bg-white border border-zinc-200 text-zinc-600 hover:border-red-300'
+                }`}>
                 All Stations
               </button>
             )}
             {stations.map(s => (
-              <button
-                key={s.id}
-                onClick={() => setSelectedStation(s.id)}
+              <button key={s.id} onClick={() => setSelectedStation(s.id)}
                 className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                  selectedStation === s.id
-                    ? 'bg-red-700 text-white'
-                    : 'bg-white border border-zinc-200 text-zinc-600 hover:border-red-300'
-                }`}
-              >
+                  selectedStation === s.id ? 'bg-red-700 text-white' : 'bg-white border border-zinc-200 text-zinc-600 hover:border-red-300'
+                }`}>
                 Station {s.station_number} — {s.station_name}
               </button>
             ))}
           </>
         )}
         {isAdmin && (
-          <button
-            onClick={() => setShowInactive(!showInactive)}
+          <button onClick={() => setShowInactive(!showInactive)}
             className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ml-auto ${
-              showInactive
-                ? 'bg-zinc-600 text-white'
-                : 'bg-white border border-zinc-200 text-zinc-400 hover:border-zinc-300'
-            }`}
-          >
-            {showInactive ? 'Hiding Active Only' : 'Show Inactive'}
+              showInactive ? 'bg-zinc-600 text-white' : 'bg-white border border-zinc-200 text-zinc-400 hover:border-zinc-300'
+            }`}>
+            {showInactive ? 'Active Only' : 'Show Inactive'}
           </button>
         )}
       </div>
 
-      {/* Add Apparatus Form */}
+      {/* Add Form */}
       {showForm && isAdmin && (
         <div className="mb-6 rounded-xl bg-white p-5 shadow-sm border border-zinc-200">
           <h2 className="text-base font-semibold text-zinc-900 mb-4">Add Apparatus</h2>
@@ -144,23 +132,18 @@ export default function ApparatusListClient({
             <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>
           )}
           <form action={handleCreate} className="flex flex-col gap-4">
-            {/* Unit # and Name */}
             <div className="flex gap-3">
               <div className="w-28">
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Unit # <span className="text-red-500">*</span></label>
-                <input name="unit_number" type="text" required
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                  placeholder="32" />
+                <input name="unit_number" type="text" required placeholder="32"
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
               </div>
               <div className="flex-1">
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Apparatus Name</label>
-                <input name="apparatus_name" type="text"
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                  placeholder="Engine 32" />
+                <input name="apparatus_name" type="text" placeholder="Engine 32"
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
               </div>
             </div>
-
-            {/* Type and Station */}
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Type</label>
@@ -179,30 +162,23 @@ export default function ApparatusListClient({
                 </select>
               </div>
             </div>
-
-            {/* Make, Model, Year */}
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Make</label>
-                <input name="make" type="text"
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                  placeholder="Rosenbauer" />
+                <input name="make" type="text" placeholder="Rosenbauer"
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
               </div>
               <div className="flex-1">
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Model</label>
                 <input name="model" type="text"
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                  placeholder="1500 GPM Pumper" />
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
               </div>
               <div className="w-24">
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Year</label>
                 <input name="model_year" type="number" min="1900" max="2100"
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                  placeholder="2024" />
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
               </div>
             </div>
-
-            {/* VIN, Plate, In Service */}
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="mb-1 block text-sm font-medium text-zinc-700">VIN</label>
@@ -220,7 +196,6 @@ export default function ApparatusListClient({
                   className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
               </div>
             </div>
-
             <button type="submit" disabled={loading}
               className="w-full rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50 transition-colors">
               {loading ? 'Adding...' : 'Add Apparatus'}
@@ -229,7 +204,7 @@ export default function ApparatusListClient({
         </div>
       )}
 
-      {/* Apparatus Cards — responsive grid */}
+      {/* Cards */}
       {filtered.length === 0 ? (
         <div className="rounded-xl bg-white border border-zinc-200 px-6 py-12 text-center text-sm text-zinc-400">
           No apparatus found for this station.
@@ -237,20 +212,15 @@ export default function ApparatusListClient({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(a => {
-            const type = (a.apparatus_types as any)?.name ?? '—'
-            const station = a.stations
-              ? `Station ${a.stations.station_number} — ${a.stations.station_name}`
+            const stationLabel = a.station
+              ? `Station ${a.station.station_number} — ${a.station.station_name}`
               : 'No station assigned'
 
             return (
-              <Link
-                key={a.id}
-                href={`/apparatus/${a.id}`}
+              <Link key={a.id} href={`/apparatus/${a.id}`}
                 className={`rounded-xl bg-white border shadow-sm p-4 hover:border-red-300 hover:shadow-md transition-all group ${
                   a.active ? 'border-zinc-200' : 'border-zinc-100 opacity-60'
-                }`}
-              >
-                {/* Unit number + status */}
+                }`}>
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <span className="text-3xl font-bold text-zinc-900 group-hover:text-red-700 transition-colors">
@@ -266,24 +236,14 @@ export default function ApparatusListClient({
                     {a.active ? 'Active' : 'Inactive'}
                   </span>
                 </div>
-
-                {/* Type */}
-                <p className="text-xs font-medium text-red-600 mb-3">{type}</p>
-
-                {/* Details */}
+                {a.type_name && <p className="text-xs font-medium text-red-600 mb-3">{a.type_name}</p>}
                 <div className="flex flex-col gap-1 text-xs text-zinc-500">
-                  {(a.make || a.model) && (
-                    <p>{[a.make, a.model].filter(Boolean).join(' · ')}</p>
-                  )}
+                  {(a.make || a.model) && <p>{[a.make, a.model].filter(Boolean).join(' · ')}</p>}
                   {a.model_year && <p>{a.model_year}</p>}
-                  <p className="text-zinc-400">{station}</p>
+                  <p className="text-zinc-400">{stationLabel}</p>
                 </div>
-
-                {/* View arrow */}
                 <div className="mt-3 pt-3 border-t border-zinc-100 flex justify-end">
-                  <span className="text-xs font-semibold text-red-600 group-hover:text-red-800">
-                    View Details →
-                  </span>
+                  <span className="text-xs font-semibold text-red-600 group-hover:text-red-800">View Details →</span>
                 </div>
               </Link>
             )

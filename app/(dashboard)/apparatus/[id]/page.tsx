@@ -23,21 +23,26 @@ export default async function ApparatusDetailPage({ params }: { params: Promise<
   const isAdmin = systemRole === 'admin' || me.is_sys_admin
   const isOfficerOrAbove = isAdmin || systemRole === 'officer'
 
-  // Fetch apparatus
+  // Fetch apparatus — no nested joins to avoid type issues
   const { data: apparatusList } = await adminClient
     .from('apparatus')
-    .select(`
-      id, unit_number, apparatus_name, make, model, model_year,
-      vin, license_plate, active, in_service_date, out_of_service_date, notes,
-      apparatus_types(id, name),
-      stations(id, station_name, station_number)
-    `)
+    .select('id, unit_number, apparatus_name, make, model, model_year, vin, license_plate, active, in_service_date, out_of_service_date, notes, apparatus_type_id, station_id')
     .eq('id', id)
 
   const apparatus = apparatusList?.[0]
   if (!apparatus) redirect('/apparatus')
 
-  // Fetch stations for reassignment
+  // Fetch apparatus type name separately
+  const { data: apparatusTypeData } = apparatus.apparatus_type_id
+    ? await adminClient.from('apparatus_types').select('id, name').eq('id', apparatus.apparatus_type_id)
+    : { data: [] }
+
+  // Fetch station separately
+  const { data: stationData } = apparatus.station_id
+    ? await adminClient.from('stations').select('id, station_name, station_number').eq('id', apparatus.station_id)
+    : { data: [] }
+
+  // Fetch all stations for reassignment dropdown
   const { data: stations } = await adminClient
     .from('stations')
     .select('id, station_number, station_name')
@@ -45,22 +50,33 @@ export default async function ApparatusDetailPage({ params }: { params: Promise<
     .eq('active', true)
     .order('station_number')
 
-  // Fetch apparatus types
+  // Fetch apparatus types for dropdown
   const { data: apparatusTypes } = await adminClient
     .from('apparatus_types')
     .select('id, name, sort_order')
     .eq('active', true)
     .order('sort_order')
 
-  // Fetch compartments for this apparatus
-  const { data: compartments } = await adminClient
+  // Fetch compartments
+  const { data: compartmentLinks } = await adminClient
     .from('apparatus_compartments')
-    .select(`
-      id, active, notes,
-      compartment_names(id, compartment_code, compartment_name, sort_order)
-    `)
+    .select('id, active, notes, compartment_name_id')
     .eq('apparatus_id', id)
-    .order('id')
+
+  // Fetch compartment name details separately
+  const compartmentNameIds = (compartmentLinks ?? []).map(c => c.compartment_name_id).filter(Boolean)
+  const { data: compartmentNameData } = compartmentNameIds.length > 0
+    ? await adminClient.from('compartment_names').select('id, compartment_code, compartment_name, sort_order').in('id', compartmentNameIds)
+    : { data: [] }
+
+  const compartmentNameMap = Object.fromEntries((compartmentNameData ?? []).map(c => [c.id, c]))
+
+  const compartments = (compartmentLinks ?? []).map(c => ({
+    id: c.id,
+    active: c.active,
+    notes: c.notes,
+    compartment_name: compartmentNameMap[c.compartment_name_id] ?? null,
+  }))
 
   // Fetch available compartment names for this department
   const { data: compartmentNames } = await adminClient
@@ -70,12 +86,19 @@ export default async function ApparatusDetailPage({ params }: { params: Promise<
     .eq('active', true)
     .order('sort_order')
 
+  // Build clean apparatus object
+  const apparatusWithRefs = {
+    ...apparatus,
+    apparatus_type: (apparatusTypeData ?? [])[0] ?? null,
+    station: (stationData ?? [])[0] ?? null,
+  }
+
   return (
     <ApparatusDetailClient
-      apparatus={apparatus}
+      apparatus={apparatusWithRefs}
       stations={stations ?? []}
       apparatusTypes={apparatusTypes ?? []}
-      compartments={compartments ?? []}
+      compartments={compartments}
       compartmentNames={compartmentNames ?? []}
       isAdmin={isAdmin}
       isOfficerOrAbove={isOfficerOrAbove}
