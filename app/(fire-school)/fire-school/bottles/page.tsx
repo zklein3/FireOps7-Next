@@ -1,8 +1,34 @@
-export default function FireSchoolBottlesPage() {
+import { createAdminClient } from '@/lib/supabase/admin'
+import FireSchoolBottlesClient from './FireSchoolBottlesClient'
+
+export default async function FireSchoolBottlesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ add?: string }>
+}) {
+  const { add } = await searchParams
+  const adminClient = createAdminClient()
+
+  const { data: bottles } = await adminClient
+    .from('fire_school_bottles')
+    .select('*')
+    .order('bottle_id')
+
+  const { data: fillCounts } = await adminClient
+    .from('fire_school_fill_logs')
+    .select('bottle_id')
+
+  // Count fills per bottle
+  const countMap: Record<string, number> = {}
+  for (const log of fillCounts ?? []) {
+    countMap[log.bottle_id] = (countMap[log.bottle_id] ?? 0) + 1
+  }
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-zinc-900 mb-4">Bottles</h1>
-      <p className="text-zinc-500">Manage fire school SCBA bottles.</p>
-    </div>
+    <FireSchoolBottlesClient
+      bottles={bottles ?? []}
+      fillCounts={countMap}
+      prefillBottleId={add ?? null}
+    />
   )
 }
