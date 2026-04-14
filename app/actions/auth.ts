@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { logError } from '@/lib/logger'
 import { redirect } from 'next/navigation'
 
 // ─── Sign In ─────────────────────────────────────────────────────────────────
@@ -12,18 +13,24 @@ export async function signIn(formData: FormData) {
   const supabase = await createClient()
 
   const { error } = await supabase.auth.signInWithPassword({ email, password })
-  if (error) return { error: error.message }
+  if (error) {
+    await logError(error, '/login', { metadata: { email } })
+    return { error: error.message }
+  }
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Authentication failed.' }
 
   const { data: personnel } = await supabase
     .from('personnel')
-    .select('signup_status')
+    .select('signup_status, id')
     .eq('auth_user_id', user.id)
     .single()
 
-  if (!personnel) return { error: 'No personnel record found for this account.' }
+  if (!personnel) {
+    await logError('No personnel record found', '/login', { metadata: { email } })
+    return { error: 'No personnel record found for this account.' }
+  }
 
   switch (personnel.signup_status) {
     case 'temp_password':
@@ -53,12 +60,14 @@ export async function changePassword(formData: FormData) {
   const adminClient = createAdminClient()
 
   const { error } = await supabase.auth.updateUser({ password })
-  if (error) return { error: error.message }
+  if (error) {
+    await logError(error, '/change-password')
+    return { error: error.message }
+  }
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Session expired. Please log in again.' }
 
-  // Use admin client to update both tables (bypasses RLS)
   const { data: personnel } = await adminClient
     .from('personnel')
     .update({ signup_status: 'profile_setup' })

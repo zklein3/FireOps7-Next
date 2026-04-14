@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/app/actions/auth'
 import Link from 'next/link'
+import FeedbackButton from '@/components/FeedbackButton'
 
 async function getUserContext() {
   const supabase = await createClient()
@@ -18,7 +19,6 @@ async function getUserContext() {
   const me = meList?.[0]
   if (!me) return null
 
-  // Sys admin may not have a department record
   const { data: deptList } = await adminClient
     .from('department_personnel')
     .select('system_role, department_id, departments(name)')
@@ -56,7 +56,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1 text-sm overflow-y-auto">
 
-          {/* Main nav — only show for department users */}
+          {/* Regular dept user nav */}
           {!isSysAdmin && (
             <>
               <NavItem href="/dashboard" label="Dashboard" />
@@ -68,7 +68,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </>
           )}
 
-          {/* Sys admin sees their own nav */}
+          {/* Sys admin nav */}
           {isSysAdmin && (
             <>
               <NavItem href="/dashboard" label="Overview" />
@@ -81,7 +81,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </>
           )}
 
-          {/* Dept Admin section — department users with admin role */}
+          {/* Dept Admin section */}
           {!isSysAdmin && isDeptAdmin && (
             <>
               <div className="mt-4 mb-1 px-3 text-xs font-semibold text-red-300 uppercase tracking-wider">
@@ -92,9 +92,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
           )}
         </nav>
 
-        {/* User Footer */}
-        <div className="px-4 py-4 border-t border-red-700">
-          <div className="mb-2">
+        {/* Footer */}
+        <div className="px-4 py-4 border-t border-red-700 flex flex-col gap-2">
+          <div className="mb-1">
             <p className="text-sm font-medium truncate">
               {user ? `${user.first_name} ${user.last_name}` : 'Unknown'}
             </p>
@@ -102,6 +102,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
               {isSysAdmin ? 'System Admin' : systemRole ?? ''}
             </p>
           </div>
+
+          {/* Feedback button — available to all users */}
+          <FeedbackButton />
+
           <form action={signOut}>
             <button type="submit"
               className="w-full rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 transition-colors text-left">

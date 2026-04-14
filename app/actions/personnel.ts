@@ -2,9 +2,10 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
-// ─── Update own profile (any user) ───────────────────────────────────────────
+// ─── Update own profile ───────────────────────────────────────────────────────
 export async function updateOwnProfile(formData: FormData) {
   const supabase = await createClient()
   const adminClient = createAdminClient()
@@ -24,19 +25,13 @@ export async function updateOwnProfile(formData: FormData) {
 
   const { error } = await adminClient
     .from('personnel')
-    .update({
-      first_name,
-      last_name,
-      display_name: `${first_name} ${last_name}`,
-      phone: phone || null,
-      address: address || null,
-      city: city || null,
-      state: state || null,
-      zip: zip || null,
-    })
+    .update({ first_name, last_name, display_name: `${first_name} ${last_name}`, phone: phone || null, address: address || null, city: city || null, state: state || null, zip: zip || null })
     .eq('auth_user_id', user.id)
 
-  if (error) return { error: error.message }
+  if (error) {
+    await logError(error, '/personnel/[id]')
+    return { error: error.message }
+  }
 
   revalidatePath('/personnel')
   return { success: true }
@@ -50,20 +45,11 @@ export async function updatePersonnelProfile(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Session expired.' }
 
-  const { data: meList } = await adminClient
-    .from('personnel')
-    .select('id, is_sys_admin')
-    .eq('auth_user_id', user.id)
-
+  const { data: meList } = await adminClient.from('personnel').select('id, is_sys_admin').eq('auth_user_id', user.id)
   const me = meList?.[0]
   if (!me) return { error: 'Could not verify your account.' }
 
-  const { data: myDeptList } = await adminClient
-    .from('department_personnel')
-    .select('system_role')
-    .eq('personnel_id', me.id)
-    .eq('active', true)
-
+  const { data: myDeptList } = await adminClient.from('department_personnel').select('system_role').eq('personnel_id', me.id).eq('active', true)
   const myDept = myDeptList?.[0]
   if (!myDept || (myDept.system_role === 'member' && !me.is_sys_admin)) {
     return { error: 'You do not have permission to edit other profiles.' }
@@ -82,19 +68,13 @@ export async function updatePersonnelProfile(formData: FormData) {
 
   const { error } = await adminClient
     .from('personnel')
-    .update({
-      first_name,
-      last_name,
-      display_name: `${first_name} ${last_name}`,
-      phone: phone || null,
-      address: address || null,
-      city: city || null,
-      state: state || null,
-      zip: zip || null,
-    })
+    .update({ first_name, last_name, display_name: `${first_name} ${last_name}`, phone: phone || null, address: address || null, city: city || null, state: state || null, zip: zip || null })
     .eq('id', personnel_id)
 
-  if (error) return { error: error.message }
+  if (error) {
+    await logError(error, '/personnel/[id]', { personnel_id })
+    return { error: error.message }
+  }
 
   revalidatePath(`/personnel/${personnel_id}`)
   revalidatePath('/personnel')
@@ -109,20 +89,11 @@ export async function updateDeptPersonnel(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Session expired.' }
 
-  const { data: meList } = await adminClient
-    .from('personnel')
-    .select('id, is_sys_admin')
-    .eq('auth_user_id', user.id)
-
+  const { data: meList } = await adminClient.from('personnel').select('id, is_sys_admin').eq('auth_user_id', user.id)
   const me = meList?.[0]
   if (!me) return { error: 'Could not verify your account.' }
 
-  const { data: myDeptList } = await adminClient
-    .from('department_personnel')
-    .select('system_role')
-    .eq('personnel_id', me.id)
-    .eq('active', true)
-
+  const { data: myDeptList } = await adminClient.from('department_personnel').select('system_role').eq('personnel_id', me.id).eq('active', true)
   const myDept = myDeptList?.[0]
   if (!myDept || (myDept.system_role !== 'admin' && !me.is_sys_admin)) {
     return { error: 'You do not have permission to edit department info.' }
@@ -138,16 +109,13 @@ export async function updateDeptPersonnel(formData: FormData) {
 
   const { error } = await adminClient
     .from('department_personnel')
-    .update({
-      system_role,
-      role_id: role_id || null,
-      employee_number: employee_number || null,
-      hire_date: hire_date || null,
-      active,
-    })
+    .update({ system_role, role_id: role_id || null, employee_number: employee_number || null, hire_date: hire_date || null, active })
     .eq('id', dept_personnel_id)
 
-  if (error) return { error: error.message }
+  if (error) {
+    await logError(error, '/personnel/[id]', { personnel_id })
+    return { error: error.message }
+  }
 
   revalidatePath(`/personnel/${personnel_id}`)
   revalidatePath('/personnel')
@@ -169,7 +137,6 @@ export async function changeOwnPassword(formData: FormData) {
   if (password !== confirm) return { error: 'New passwords do not match.' }
   if (password.length < 8) return { error: 'New password must be at least 8 characters.' }
 
-  // Verify current password by attempting sign in
   const { error: signInError } = await supabase.auth.signInWithPassword({
     email: user.email!,
     password: current,
@@ -177,9 +144,43 @@ export async function changeOwnPassword(formData: FormData) {
 
   if (signInError) return { error: 'Current password is incorrect.' }
 
-  // Update to new password
   const { error } = await supabase.auth.updateUser({ password })
-  if (error) return { error: error.message }
+  if (error) {
+    await logError(error, '/personnel/[id]')
+    return { error: error.message }
+  }
+
+  return { success: true }
+}
+
+// ─── Submit user feedback/report ──────────────────────────────────────────────
+export async function submitUserReport(formData: FormData) {
+  const supabase = await createClient()
+  const adminClient = createAdminClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Session expired.' }
+
+  const { data: meList } = await adminClient.from('personnel').select('id').eq('auth_user_id', user.id)
+  const me = meList?.[0]
+
+  const message = formData.get('message') as string
+  const report_type = formData.get('report_type') as string
+  const page = formData.get('page') as string
+
+  if (!message) return { error: 'Please enter a message.' }
+
+  const { error } = await adminClient
+    .from('system_logs')
+    .insert({
+      log_type: 'user_report',
+      page: page || 'unknown',
+      message,
+      metadata: { report_type },
+      personnel_id: me?.id ?? null,
+    })
+
+  if (error) return { error: 'Failed to submit report. Please try again.' }
 
   return { success: true }
 }

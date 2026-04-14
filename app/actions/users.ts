@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
 const TEMP_PASSWORD = 'Hello1!'
@@ -30,36 +31,30 @@ export async function createDeptAdmin(formData: FormData) {
     email_confirm: true,
   })
 
-  if (authError || !authData.user) return { error: authError?.message ?? 'Failed to create auth user.' }
+  if (authError || !authData.user) {
+    await logError(authError ?? 'Failed to create auth user', '/admin/users', { metadata: { email } })
+    return { error: authError?.message ?? 'Failed to create auth user.' }
+  }
 
   const { data: personnel, error: personnelError } = await adminClient
     .from('personnel')
-    .insert({
-      email,
-      first_name: '',
-      last_name: '',
-      auth_user_id: authData.user.id,
-      signup_status: 'temp_password',
-      is_sys_admin: false,
-    })
+    .insert({ email, first_name: '', last_name: '', auth_user_id: authData.user.id, signup_status: 'temp_password', is_sys_admin: false })
     .select('id')
     .single()
 
   if (personnelError || !personnel) {
+    await logError(personnelError ?? 'Failed to create personnel', '/admin/users', { metadata: { email } })
     return { error: personnelError?.message ?? 'Failed to create personnel record.' }
   }
 
   const { error: deptError } = await adminClient
     .from('department_personnel')
-    .insert({
-      personnel_id: personnel.id,
-      department_id,
-      system_role: 'admin',
-      signup_status: 'temp_password',
-      active: true,
-    })
+    .insert({ personnel_id: personnel.id, department_id, system_role: 'admin', signup_status: 'temp_password', active: true })
 
-  if (deptError) return { error: deptError.message }
+  if (deptError) {
+    await logError(deptError, '/admin/users', { metadata: { email } })
+    return { error: deptError.message }
+  }
 
   revalidatePath('/admin/users')
   return { success: true }
@@ -76,41 +71,37 @@ export async function createDeptMember(formData: FormData) {
   if (!email || !system_role) return { error: 'Email and access level are required.' }
 
   const validRoles = ['admin', 'officer', 'member']
-  if (!validRoles.includes(system_role)) {
-    return { error: 'Invalid access level.' }
-  }
+  if (!validRoles.includes(system_role)) return { error: 'Invalid access level.' }
 
   const supabase = await createClient()
   const adminClient = createAdminClient()
 
-  // Get the calling user's dept and verify they are an admin
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Session expired.' }
 
-  const { data: callerPersonnel } = await supabase
+  const { data: meList } = await adminClient
     .from('personnel')
     .select('id, is_sys_admin')
     .eq('auth_user_id', user.id)
-    .single()
 
-  if (!callerPersonnel) return { error: 'Could not verify your account.' }
+  const me = meList?.[0]
+  if (!me) return { error: 'Could not verify your account.' }
 
-  const { data: callerDept } = await supabase
+  const { data: myDeptList } = await adminClient
     .from('department_personnel')
     .select('department_id, system_role')
-    .eq('personnel_id', callerPersonnel.id)
+    .eq('personnel_id', me.id)
     .eq('active', true)
-    .single()
 
-  if (!callerDept) return { error: 'Could not verify your department.' }
+  const myDept = myDeptList?.[0]
+  if (!myDept) return { error: 'Could not verify your department.' }
 
-  if (callerDept.system_role !== 'admin' && !callerPersonnel.is_sys_admin) {
+  if (myDept.system_role !== 'admin' && !me.is_sys_admin) {
     return { error: 'You do not have permission to add personnel.' }
   }
 
-  const department_id = callerDept.department_id
+  const department_id = myDept.department_id
 
-  // Check if email already exists
   const { data: existing } = await supabase
     .from('personnel')
     .select('id')
@@ -119,34 +110,28 @@ export async function createDeptMember(formData: FormData) {
 
   if (existing) return { error: 'A user with this email already exists.' }
 
-  // Create auth user
   const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
     email,
     password: TEMP_PASSWORD,
     email_confirm: true,
   })
 
-  if (authError || !authData.user) return { error: authError?.message ?? 'Failed to create auth user.' }
+  if (authError || !authData.user) {
+    await logError(authError ?? 'Failed to create auth user', '/dept-admin/personnel', { metadata: { email } })
+    return { error: authError?.message ?? 'Failed to create auth user.' }
+  }
 
-  // Create personnel record
   const { data: personnel, error: personnelError } = await adminClient
     .from('personnel')
-    .insert({
-      email,
-      first_name: '',
-      last_name: '',
-      auth_user_id: authData.user.id,
-      signup_status: 'temp_password',
-      is_sys_admin: false,
-    })
+    .insert({ email, first_name: '', last_name: '', auth_user_id: authData.user.id, signup_status: 'temp_password', is_sys_admin: false })
     .select('id')
     .single()
 
   if (personnelError || !personnel) {
+    await logError(personnelError ?? 'Failed to create personnel', '/dept-admin/personnel', { metadata: { email } })
     return { error: personnelError?.message ?? 'Failed to create personnel record.' }
   }
 
-  // Create department_personnel record
   const { error: deptError } = await adminClient
     .from('department_personnel')
     .insert({
@@ -160,7 +145,10 @@ export async function createDeptMember(formData: FormData) {
       active: true,
     })
 
-  if (deptError) return { error: deptError.message }
+  if (deptError) {
+    await logError(deptError, '/dept-admin/personnel', { metadata: { email } })
+    return { error: deptError.message }
+  }
 
   revalidatePath('/dept-admin/personnel')
   return { success: true }
