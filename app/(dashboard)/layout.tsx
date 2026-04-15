@@ -59,6 +59,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   ] : isDeptAdmin ? [
     { href: '/dept-admin/personnel', label: 'Manage Personnel' },
     { href: '/dept-admin/compartments', label: 'Compartments' },
+    { href: '/dept-admin/items', label: 'Items' },
   ] : []
 
   const adminLabel = isSysAdmin ? 'System Admin' : 'Dept Admin'
