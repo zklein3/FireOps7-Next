@@ -58,6 +58,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/admin/logs', label: 'System Logs' },
   ] : isDeptAdmin ? [
     { href: '/dept-admin/personnel', label: 'Manage Personnel' },
+    { href: '/dept-admin/compartments', label: 'Compartments' },
   ] : []
 
   const adminLabel = isSysAdmin ? 'System Admin' : 'Dept Admin'
@@ -70,7 +71,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen bg-zinc-100">
-      {/* Desktop Sidebar */}
       <aside className="hidden md:flex w-64 bg-red-800 text-white flex-col shrink-0">
         <SidebarContent
           navItems={navItems}
@@ -82,7 +82,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
         />
       </aside>
 
-      {/* Mobile Header + Sidebar */}
       <MobileSidebar
         navItems={navItems}
         adminNavItems={adminNavItems}
@@ -91,7 +90,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
         isSysAdmin={isSysAdmin}
       />
 
-      {/* Main Content */}
       <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto md:ml-0">
         {children}
       </main>
@@ -116,7 +114,6 @@ function SidebarContent({
 }) {
   return (
     <>
-      {/* Logo */}
       <div className="px-6 py-5 border-b border-red-700">
         <h1 className="text-xl font-bold tracking-tight">FireOps7</h1>
         {userInfo.departmentName && (
@@ -124,7 +121,6 @@ function SidebarContent({
         )}
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-3 py-4 flex flex-col gap-1 text-sm overflow-y-auto">
         {navItems.map(item => (
           <NavItem key={item.href} href={item.href} label={item.label} />
@@ -142,7 +138,6 @@ function SidebarContent({
         )}
       </nav>
 
-      {/* Footer */}
       <div className="px-4 py-4 border-t border-red-700 flex flex-col gap-2">
         <div className="mb-1">
           <p className="text-sm font-medium truncate">{userInfo.name}</p>
