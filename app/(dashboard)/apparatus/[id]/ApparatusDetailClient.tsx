@@ -83,9 +83,7 @@ export default function ApparatusDetailClient({
   const [selectedCompartmentId, setSelectedCompartmentId] = useState('')
 
   async function handleSubmit(formData: FormData) {
-    setError(null)
-    setSuccess(null)
-    setLoading(true)
+    setError(null); setSuccess(null); setLoading(true)
     formData.set('apparatus_id', apparatus.id)
     const result = await updateApparatus(formData)
     if (result?.error) setError(result.error)
@@ -95,23 +93,22 @@ export default function ApparatusDetailClient({
 
   async function handleAssignCompartment() {
     if (!selectedCompartmentId) return
-    setCompError(null)
-    setCompLoading(true)
-    const result = await assignCompartmentToApparatus(apparatus.id, selectedCompartmentId)
+    setCompError(null); setCompLoading(true)
+    // Pass departmentId so sys admin (no dept record) is correctly verified
+    const result = await assignCompartmentToApparatus(apparatus.id, selectedCompartmentId, departmentId)
     if (result?.error) setCompError(result.error)
     else setSelectedCompartmentId('')
     setCompLoading(false)
   }
 
   async function handleRemoveCompartment(compartmentId: string) {
-    setCompError(null)
-    setCompLoading(true)
-    const result = await removeCompartmentFromApparatus(compartmentId, apparatus.id)
+    setCompError(null); setCompLoading(true)
+    // Pass departmentId so sys admin (no dept record) is correctly verified
+    const result = await removeCompartmentFromApparatus(compartmentId, apparatus.id, departmentId)
     if (result?.error) setCompError(result.error)
     setCompLoading(false)
   }
 
-  // Filter out already-assigned compartments from the dropdown
   const assignedNameIds = new Set(compartments.map(c => c.compartment_name?.id).filter(Boolean))
   const availableCompartments = compartmentNames.filter(cn => !assignedNameIds.has(cn.id))
 
@@ -122,7 +119,6 @@ export default function ApparatusDetailClient({
 
   return (
     <div className="max-w-2xl">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => router.back()} className="text-sm text-zinc-500 hover:text-zinc-700">← Back</button>
         <div className="flex-1 min-w-0">
@@ -240,10 +236,8 @@ export default function ApparatusDetailClient({
         <h2 className="text-base font-semibold text-zinc-900 mb-4">
           Compartments ({compartments.filter(c => c.active).length} active)
         </h2>
-
         {compError && <Alert type="error" message={compError} />}
 
-        {/* Assigned compartments */}
         {compartments.length === 0 ? (
           <p className="text-sm text-zinc-400 mb-4">No compartments assigned to this apparatus yet.</p>
         ) : (
@@ -261,17 +255,12 @@ export default function ApparatusDetailClient({
                     )}
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`text-xs rounded-full px-2 py-0.5 ${
-                      c.active ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-400'
-                    }`}>
+                    <span className={`text-xs rounded-full px-2 py-0.5 ${c.active ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-400'}`}>
                       {c.active ? 'Active' : 'Inactive'}
                     </span>
                     {isAdmin && (
-                      <button
-                        onClick={() => handleRemoveCompartment(c.id)}
-                        disabled={compLoading}
-                        className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
-                      >
+                      <button onClick={() => handleRemoveCompartment(c.id)} disabled={compLoading}
+                        className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50">
                         Remove
                       </button>
                     )}
@@ -281,24 +270,19 @@ export default function ApparatusDetailClient({
           </div>
         )}
 
-        {/* Add compartment — admin only */}
         {isAdmin && (
           <div>
             {compartmentNames.length === 0 ? (
               <p className="text-xs text-zinc-400">
-                No compartment names defined for this department yet. Go to{' '}
-                <a href="/dept-admin/compartments" className="text-red-600 hover:underline">Dept Admin → Compartments</a>{' '}
-                to add them.
+                No compartment names defined yet. Go to{' '}
+                <a href="/dept-admin/compartments" className="text-red-600 hover:underline">Dept Admin → Compartments</a> to add them.
               </p>
             ) : availableCompartments.length === 0 ? (
               <p className="text-xs text-zinc-400">All department compartments have been assigned to this apparatus.</p>
             ) : (
               <div className="flex gap-3 pt-3 border-t border-zinc-100">
-                <select
-                  value={selectedCompartmentId}
-                  onChange={e => setSelectedCompartmentId(e.target.value)}
-                  className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                >
+                <select value={selectedCompartmentId} onChange={e => setSelectedCompartmentId(e.target.value)}
+                  className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
                   <option value="">Add compartment...</option>
                   {availableCompartments
                     .sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
@@ -308,11 +292,8 @@ export default function ApparatusDetailClient({
                       </option>
                     ))}
                 </select>
-                <button
-                  onClick={handleAssignCompartment}
-                  disabled={!selectedCompartmentId || compLoading}
-                  className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50 transition-colors"
-                >
+                <button onClick={handleAssignCompartment} disabled={!selectedCompartmentId || compLoading}
+                  className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50 transition-colors">
                   {compLoading ? '...' : 'Add'}
                 </button>
               </div>

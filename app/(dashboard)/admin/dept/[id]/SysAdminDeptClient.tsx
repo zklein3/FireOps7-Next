@@ -79,6 +79,7 @@ export default function SysAdminDeptClient({
 
   async function handleAddCompartment(formData: FormData) {
     setError(null); setSuccess(null); setLoading(true)
+    formData.set('department_id', departmentId)
     const result = await createCompartmentName(formData)
     if (result?.error) setError(result.error)
     else { setSuccess('Compartment added.'); setShowForm(false) }
@@ -87,6 +88,7 @@ export default function SysAdminDeptClient({
 
   async function handleUpdateCompartment(formData: FormData) {
     setError(null); setSuccess(null); setLoading(true)
+    formData.set('department_id', departmentId)
     const result = await updateCompartmentName(formData)
     if (result?.error) setError(result.error)
     else { setSuccess('Compartment updated.'); setEditingCompartmentId(null) }
@@ -134,7 +136,6 @@ export default function SysAdminDeptClient({
         ))}
       </div>
 
-      {/* Alerts */}
       {success && <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 border border-green-200">{success}</div>}
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>}
 
@@ -147,11 +148,11 @@ export default function SysAdminDeptClient({
               {showForm ? 'Cancel' : '+ Add Personnel'}
             </button>
           </div>
-
           {showForm && (
             <div className="mb-6 rounded-xl bg-white p-5 shadow-sm border border-zinc-200">
               <h2 className="text-base font-semibold text-zinc-900 mb-4">Add Personnel</h2>
               <form action={handleAddPersonnel} className="flex flex-col gap-4">
+                <input type="hidden" name="department_id" value={departmentId} />
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Email <span className="text-red-500">*</span></label>
@@ -195,7 +196,6 @@ export default function SysAdminDeptClient({
               </form>
             </div>
           )}
-
           <div className="rounded-xl bg-white shadow-sm border border-zinc-200 overflow-x-auto">
             {personnel.length === 0 ? (
               <div className="px-6 py-12 text-center text-sm text-zinc-400">No personnel yet.</div>
@@ -224,9 +224,7 @@ export default function SysAdminDeptClient({
                             p.system_role === 'admin' ? 'bg-red-100 text-red-700' :
                             p.system_role === 'officer' ? 'bg-blue-100 text-blue-700' :
                             'bg-zinc-100 text-zinc-600'
-                          }`}>
-                            {p.system_role}
-                          </span>
+                          }`}>{p.system_role}</span>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[status] ?? 'bg-zinc-100 text-zinc-500'}`}>
@@ -252,11 +250,11 @@ export default function SysAdminDeptClient({
               {showForm ? 'Cancel' : '+ Add Station'}
             </button>
           </div>
-
           {showForm && (
             <div className="mb-6 rounded-xl bg-white p-5 shadow-sm border border-zinc-200">
               <h2 className="text-base font-semibold text-zinc-900 mb-4">Add Station</h2>
               <form action={handleAddStation} className="flex flex-col gap-4">
+                <input type="hidden" name="department_id" value={departmentId} />
                 <div className="flex gap-3">
                   <div className="w-28">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Station #</label>
@@ -301,7 +299,6 @@ export default function SysAdminDeptClient({
               </form>
             </div>
           )}
-
           <div className="rounded-xl bg-white shadow-sm border border-zinc-200 overflow-hidden">
             {stations.length === 0 ? (
               <div className="px-6 py-12 text-center text-sm text-zinc-400">No stations yet.</div>
@@ -318,9 +315,7 @@ export default function SysAdminDeptClient({
                     </div>
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                       s.active ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-500'
-                    }`}>
-                      {s.active ? 'Active' : 'Inactive'}
-                    </span>
+                    }`}>{s.active ? 'Active' : 'Inactive'}</span>
                   </div>
                 ))}
               </div>
@@ -338,11 +333,11 @@ export default function SysAdminDeptClient({
               {showForm ? 'Cancel' : '+ Add Apparatus'}
             </button>
           </div>
-
           {showForm && (
             <div className="mb-6 rounded-xl bg-white p-5 shadow-sm border border-zinc-200">
               <h2 className="text-base font-semibold text-zinc-900 mb-4">Add Apparatus</h2>
               <form action={handleAddApparatus} className="flex flex-col gap-4">
+                <input type="hidden" name="department_id" value={departmentId} />
                 <div className="flex gap-3">
                   <div className="w-28">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Unit # <span className="text-red-500">*</span></label>
@@ -396,7 +391,6 @@ export default function SysAdminDeptClient({
               </form>
             </div>
           )}
-
           <div className="rounded-xl bg-white shadow-sm border border-zinc-200 overflow-x-auto">
             {apparatus.length === 0 ? (
               <div className="px-6 py-12 text-center text-sm text-zinc-400">No apparatus yet.</div>
@@ -423,9 +417,7 @@ export default function SysAdminDeptClient({
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                           a.active ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-500'
-                        }`}>
-                          {a.active ? 'Active' : 'Inactive'}
-                        </span>
+                        }`}>{a.active ? 'Active' : 'Inactive'}</span>
                       </td>
                     </tr>
                   ))}
@@ -445,7 +437,6 @@ export default function SysAdminDeptClient({
               {showForm ? 'Cancel' : '+ Add Compartment'}
             </button>
           </div>
-
           {showForm && (
             <div className="mb-6 rounded-xl bg-white p-5 shadow-sm border border-zinc-200">
               <h2 className="text-base font-semibold text-zinc-900 mb-4">Add Compartment</h2>
@@ -474,7 +465,6 @@ export default function SysAdminDeptClient({
               </form>
             </div>
           )}
-
           <div className="rounded-xl bg-white shadow-sm border border-zinc-200 overflow-hidden">
             {compartmentNames.length === 0 ? (
               <div className="px-6 py-12 text-center text-sm text-zinc-400">No compartments defined yet.</div>

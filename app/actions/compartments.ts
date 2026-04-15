@@ -5,7 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
-async function verifyAdmin() {
+// Sys admin passes department_id explicitly since they have no dept record
+async function verifyAdmin(override_department_id?: string) {
   const supabase = await createClient()
   const adminClient = createAdminClient()
 
@@ -16,16 +17,24 @@ async function verifyAdmin() {
   const me = meList?.[0]
   if (!me) return null
 
+  // Sys admin — use the override department_id passed from the form
+  if (me.is_sys_admin) {
+    if (!override_department_id) return null
+    return { me, department_id: override_department_id }
+  }
+
+  // Regular dept admin
   const { data: myDeptList } = await adminClient.from('department_personnel').select('department_id, system_role').eq('personnel_id', me.id).eq('active', true)
   const myDept = myDeptList?.[0]
-  if (!myDept || (myDept.system_role !== 'admin' && !me.is_sys_admin)) return null
+  if (!myDept || myDept.system_role !== 'admin') return null
 
   return { me, department_id: myDept.department_id }
 }
 
 // ─── Create Compartment Name ──────────────────────────────────────────────────
 export async function createCompartmentName(formData: FormData) {
-  const ctx = await verifyAdmin()
+  const override_department_id = formData.get('department_id') as string | null
+  const ctx = await verifyAdmin(override_department_id ?? undefined)
   if (!ctx) return { error: 'Only admins can manage compartments.' }
 
   const compartment_code = (formData.get('compartment_code') as string)?.toUpperCase().trim()
@@ -36,7 +45,6 @@ export async function createCompartmentName(formData: FormData) {
 
   const adminClient = createAdminClient()
 
-  // Check for duplicate code in this department
   const { data: existing } = await adminClient
     .from('compartment_names')
     .select('id')
@@ -64,7 +72,8 @@ export async function createCompartmentName(formData: FormData) {
 
 // ─── Update Compartment Name ──────────────────────────────────────────────────
 export async function updateCompartmentName(formData: FormData) {
-  const ctx = await verifyAdmin()
+  const override_department_id = formData.get('department_id') as string | null
+  const ctx = await verifyAdmin(override_department_id ?? undefined)
   if (!ctx) return { error: 'Only admins can manage compartments.' }
 
   const id = formData.get('id') as string
@@ -95,13 +104,12 @@ export async function updateCompartmentName(formData: FormData) {
 }
 
 // ─── Assign Compartment to Apparatus ─────────────────────────────────────────
-export async function assignCompartmentToApparatus(apparatus_id: string, compartment_name_id: string) {
-  const ctx = await verifyAdmin()
+export async function assignCompartmentToApparatus(apparatus_id: string, compartment_name_id: string, department_id?: string) {
+  const ctx = await verifyAdmin(department_id)
   if (!ctx) return { error: 'Only admins can assign compartments.' }
 
   const adminClient = createAdminClient()
 
-  // Check if already assigned
   const { data: existing } = await adminClient
     .from('apparatus_compartments')
     .select('id')
@@ -126,8 +134,8 @@ export async function assignCompartmentToApparatus(apparatus_id: string, compart
 }
 
 // ─── Remove Compartment from Apparatus ───────────────────────────────────────
-export async function removeCompartmentFromApparatus(compartment_id: string, apparatus_id: string) {
-  const ctx = await verifyAdmin()
+export async function removeCompartmentFromApparatus(compartment_id: string, apparatus_id: string, department_id?: string) {
+  const ctx = await verifyAdmin(department_id)
   if (!ctx) return { error: 'Only admins can remove compartments.' }
 
   const adminClient = createAdminClient()
