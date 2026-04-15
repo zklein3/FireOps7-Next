@@ -48,19 +48,23 @@ export default function ApparatusListClient({
   isOfficerOrAbove: boolean
   departmentId: string
 }) {
-  const [selectedStation, setSelectedStation] = useState<string>(
-    stations.length === 1 ? stations[0].id : 'all'
-  )
+  // Always default to 'all' so unassigned apparatus are always visible
+  const [selectedStation, setSelectedStation] = useState<string>('all')
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showInactive, setShowInactive] = useState(false)
 
   const filtered = apparatus.filter(a => {
-    const stationMatch = selectedStation === 'all' || a.station_id === selectedStation
+    const stationMatch =
+      selectedStation === 'all' ? true :
+      selectedStation === 'unassigned' ? a.station_id === null :
+      a.station_id === selectedStation
     const activeMatch = showInactive ? true : a.active
     return stationMatch && activeMatch
   })
+
+  const hasUnassigned = apparatus.some(a => a.station_id === null)
 
   async function handleCreate(formData: FormData) {
     setError(null)
@@ -94,26 +98,35 @@ export default function ApparatusListClient({
 
       {/* Station Filter */}
       <div className="flex flex-wrap gap-2 mb-4">
-        {stations.length > 1 && (
-          <>
-            {isAdmin && (
-              <button onClick={() => setSelectedStation('all')}
-                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                  selectedStation === 'all' ? 'bg-red-700 text-white' : 'bg-white border border-zinc-200 text-zinc-600 hover:border-red-300'
-                }`}>
-                All Stations
-              </button>
-            )}
-            {stations.map(s => (
-              <button key={s.id} onClick={() => setSelectedStation(s.id)}
-                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                  selectedStation === s.id ? 'bg-red-700 text-white' : 'bg-white border border-zinc-200 text-zinc-600 hover:border-red-300'
-                }`}>
-                Station {s.station_number} — {s.station_name}
-              </button>
-            ))}
-          </>
+        {/* All is always visible */}
+        <button onClick={() => setSelectedStation('all')}
+          className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+            selectedStation === 'all' ? 'bg-red-700 text-white' : 'bg-white border border-zinc-200 text-zinc-600 hover:border-red-300'
+          }`}>
+          All
+        </button>
+
+        {/* Per-station filters */}
+        {stations.map(s => (
+          <button key={s.id} onClick={() => setSelectedStation(s.id)}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              selectedStation === s.id ? 'bg-red-700 text-white' : 'bg-white border border-zinc-200 text-zinc-600 hover:border-red-300'
+            }`}>
+            Station {s.station_number} — {s.station_name}
+          </button>
+        ))}
+
+        {/* Unassigned filter — only show if there are unassigned apparatus */}
+        {hasUnassigned && (
+          <button onClick={() => setSelectedStation('unassigned')}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              selectedStation === 'unassigned' ? 'bg-yellow-600 text-white' : 'bg-white border border-zinc-200 text-zinc-500 hover:border-yellow-300'
+            }`}>
+            Unassigned
+          </button>
         )}
+
+        {/* Show inactive toggle — admin only */}
         {isAdmin && (
           <button onClick={() => setShowInactive(!showInactive)}
             className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ml-auto ${
@@ -157,7 +170,7 @@ export default function ApparatusListClient({
                 <label className="mb-1 block text-sm font-medium text-zinc-700">Station</label>
                 <select name="station_id"
                   className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
-                  <option value="">Select station...</option>
+                  <option value="">No station (assign later)</option>
                   {stations.map(s => <option key={s.id} value={s.id}>Station {s.station_number} — {s.station_name}</option>)}
                 </select>
               </div>
@@ -207,7 +220,7 @@ export default function ApparatusListClient({
       {/* Cards */}
       {filtered.length === 0 ? (
         <div className="rounded-xl bg-white border border-zinc-200 px-6 py-12 text-center text-sm text-zinc-400">
-          No apparatus found for this station.
+          No apparatus found.
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -240,7 +253,9 @@ export default function ApparatusListClient({
                 <div className="flex flex-col gap-1 text-xs text-zinc-500">
                   {(a.make || a.model) && <p>{[a.make, a.model].filter(Boolean).join(' · ')}</p>}
                   {a.model_year && <p>{a.model_year}</p>}
-                  <p className="text-zinc-400">{stationLabel}</p>
+                  <p className={a.station ? 'text-zinc-400' : 'text-yellow-600 font-medium'}>
+                    {stationLabel}
+                  </p>
                 </div>
                 <div className="mt-3 pt-3 border-t border-zinc-100 flex justify-end">
                   <span className="text-xs font-semibold text-red-600 group-hover:text-red-800">View Details →</span>
