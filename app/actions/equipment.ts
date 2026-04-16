@@ -59,6 +59,36 @@ export async function createItemCategory(formData: FormData) {
   return { success: true }
 }
 
+// ─── Update Item Category (admin only) ───────────────────────────────────────
+export async function updateItemCategory(formData: FormData) {
+  const ctx = await getContext()
+  if (!ctx?.isAdmin) return { error: 'Only admins can manage item categories.' }
+
+  const adminClient = createAdminClient()
+  const id = formData.get('id') as string
+  const category_name = formData.get('category_name') as string
+  const sort_order = formData.get('sort_order') as string
+  const requires_inspection = formData.get('requires_inspection') === 'true'
+  const active = formData.get('active') === 'true'
+
+  if (!category_name) return { error: 'Category name is required.' }
+
+  const { error } = await adminClient.from('item_categories').update({
+    category_name,
+    sort_order: sort_order ? parseInt(sort_order) : null,
+    requires_inspection,
+    active,
+  }).eq('id', id)
+
+  if (error) {
+    await logError(error, '/dept-admin/items')
+    return { error: error.message }
+  }
+
+  revalidatePath('/dept-admin/items')
+  return { success: true }
+}
+
 // ─── Create Item Type (admin only) ───────────────────────────────────────────
 export async function createItem(formData: FormData) {
   const ctx = await getContext()
@@ -101,6 +131,41 @@ export async function createItem(formData: FormData) {
   return { success: true }
 }
 
+// ─── Update Item Type (admin only) ───────────────────────────────────────────
+export async function updateItem(formData: FormData) {
+  const ctx = await getContext()
+  if (!ctx?.isAdmin) return { error: 'Only admins can manage items.' }
+
+  const adminClient = createAdminClient()
+  const id = formData.get('id') as string
+  const item_name = formData.get('item_name') as string
+  const category_id = formData.get('category_id') as string
+  const item_description = formData.get('item_description') as string
+  const requires_presence_check = formData.get('requires_presence_check') === 'true'
+  const requires_inspection = formData.get('requires_inspection') === 'true'
+  const active = formData.get('active') === 'true'
+
+  if (!item_name) return { error: 'Item name is required.' }
+
+  const { error } = await adminClient.from('items').update({
+    item_name,
+    category_id,
+    item_description: item_description || null,
+    requires_presence_check,
+    requires_inspection,
+    active,
+  }).eq('id', id)
+
+  if (error) {
+    await logError(error, '/dept-admin/items')
+    return { error: error.message }
+  }
+
+  revalidatePath('/dept-admin/items')
+  revalidatePath('/equipment')
+  return { success: true }
+}
+
 // ─── Assign Item to Compartment (officer+) ────────────────────────────────────
 export async function assignItemToCompartment(formData: FormData) {
   const ctx = await getContext()
@@ -116,7 +181,6 @@ export async function assignItemToCompartment(formData: FormData) {
   if (!apparatus_compartment_id || !item_id) return { error: 'Compartment and item are required.' }
   if (!expected_quantity || parseInt(expected_quantity) < 1) return { error: 'Expected quantity must be at least 1.' }
 
-  // Check if already assigned
   const { data: existing } = await adminClient
     .from('item_location_standards')
     .select('id')
