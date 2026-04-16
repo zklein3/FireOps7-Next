@@ -79,6 +79,42 @@ export default function FillStationPage() {
     setScannerOpen(false)
   }, [])
 
+  const extractBottleIdFromScan = useCallback((raw: string): string => {
+    const trimmed = raw.trim()
+
+    if (!trimmed.includes('://') && !trimmed.includes('scan=')) {
+      return trimmed.toUpperCase()
+    }
+
+    try {
+      const url = new URL(trimmed)
+      const scanParam = url.searchParams.get('scan')
+
+      if (scanParam && scanParam.trim()) {
+        return scanParam.trim().toUpperCase()
+      }
+
+      const pathParts = url.pathname.split('/').filter(Boolean)
+      const lastPart = pathParts[pathParts.length - 1]
+      if (lastPart) {
+        return lastPart.trim().toUpperCase()
+      }
+    } catch {
+      // fall through
+    }
+
+    const match = trimmed.match(/[?&]scan=([^&]+)/i)
+    if (match?.[1]) {
+      try {
+        return decodeURIComponent(match[1]).trim().toUpperCase()
+      } catch {
+        return match[1].trim().toUpperCase()
+      }
+    }
+
+    return trimmed.toUpperCase()
+  }, [])
+
   async function handleCheck(overrideBottleId?: string) {
     const rawValue = overrideBottleId ?? bottleInput
     const cleanBottleId = rawValue.trim().toUpperCase()
@@ -211,12 +247,15 @@ export default function FillStationPage() {
 
               try {
                 const codes = await detector.detect(canvas)
-                const value = codes?.[0]?.rawValue?.trim()
+                const raw = codes?.[0]?.rawValue?.trim()
 
-                if (value) {
+                if (raw) {
+                  const bottleId = extractBottleIdFromScan(raw)
+
                   setScanDetected(true)
                   stopScanner()
-                  router.replace(`/fire-school/bottles?scan=${encodeURIComponent(value.toUpperCase())}`)
+                  setBottleInput(bottleId)
+                  await handleCheck(bottleId)
                   return
                 }
               } catch {
@@ -236,7 +275,7 @@ export default function FillStationPage() {
     }
 
     start()
-  }, [scannerOpen, scanDetected, router, stopScanner])
+  }, [scannerOpen, scanDetected, stopScanner, extractBottleIdFromScan])
 
   useEffect(() => {
     return () => {
@@ -294,7 +333,7 @@ export default function FillStationPage() {
           {!scannerSupported && (
             <p className="mt-2 text-xs text-amber-600">
               In-page camera scanning may not work on every browser. QR links with
-              <span className="font-mono"> ?scan=</span> still work on the bottles page.
+              <span className="font-mono"> ?scan=</span> can still be read by the scanner.
             </p>
           )}
 
