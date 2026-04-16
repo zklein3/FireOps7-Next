@@ -24,13 +24,19 @@ interface Bottle {
   active: boolean
 }
 
+interface CheckBottleResult {
+  found: boolean
+  bottle?: Bottle
+  fillable?: boolean
+  reason?: string | null
+}
+
 declare global {
   interface Window {
     BarcodeDetector?: {
       new (options?: { formats?: string[] }): {
         detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>
       }
-      getSupportedFormats?: () => Promise<string[]>
     }
   }
 }
@@ -40,12 +46,7 @@ export default function FillStationPage() {
 
   const [bottleInput, setBottleInput] = useState('')
   const [checking, setChecking] = useState(false)
-  const [result, setResult] = useState<{
-    found: boolean
-    bottle?: Bottle
-    fillable?: boolean
-    reason?: string | null
-  } | null>(null)
+  const [result, setResult] = useState<CheckBottleResult | null>(null)
   const [logging, setLogging] = useState(false)
   const [logged, setLogged] = useState(false)
   const [notes, setNotes] = useState('')
@@ -59,6 +60,9 @@ export default function FillStationPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const frameRef = useRef<number | null>(null)
+  const detectorRef = useRef<{
+    detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>
+  } | null>(null)
 
   const stopScanner = useCallback(() => {
     if (frameRef.current) {
@@ -71,6 +75,7 @@ export default function FillStationPage() {
       streamRef.current = null
     }
 
+    detectorRef.current = null
     setScannerOpen(false)
   }, [])
 
@@ -87,7 +92,7 @@ export default function FillStationPage() {
 
     try {
       const res = await checkBottle(cleanBottleId)
-      setResult(res)
+      setResult(res as CheckBottleResult)
     } finally {
       setChecking(false)
     }
@@ -116,6 +121,7 @@ export default function FillStationPage() {
     setNotes('')
     setScannerError('')
     setScanDetected(false)
+    stopScanner()
     router.replace('/fire-school')
   }
 
@@ -138,7 +144,7 @@ export default function FillStationPage() {
       typeof window !== 'undefined' &&
         typeof navigator !== 'undefined' &&
         !!navigator.mediaDevices?.getUserMedia &&
-        !!window.BarcodeDetector
+        typeof window.BarcodeDetector !== 'undefined'
     )
   }, [])
 
@@ -149,89 +155,88 @@ export default function FillStationPage() {
     if (
       typeof window === 'undefined' ||
       !navigator.mediaDevices?.getUserMedia ||
-      !window.BarcodeDetector
+      typeof window.BarcodeDetector === 'undefined'
     ) {
       setScannerError('Camera QR scanning is not supported on this device/browser.')
       return
     }
 
     try {
-      const supportedFormats = window.BarcodeDetector.getSupportedFormats
-        ? await window.BarcodeDetector.getSupportedFormats()
-        : ['qr_code']
-
-      if (!supportedFormats.includes('qr_code')) {
-        setScannerError('QR scanning is not supported by this browser.')
-        return
-      }
-
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-        },
+        video: { facingMode: { ideal: 'environment' } },
         audio: false,
       })
 
       streamRef.current = stream
-      setScannerOpen(true)
 
-      const video = videoRef.current
-      if (!video) {
-        setScannerError('Scanner video element not ready.')
-        stopScanner()
-        return
-      }
-
-      video.srcObject = stream
-      await video.play()
-
-      const detector = new window.BarcodeDetector({
+      detectorRef.current = new window.BarcodeDetector({
         formats: ['qr_code'],
       })
 
-      const scanLoop = async () => {
-        const currentVideo = videoRef.current
-        const canvas = canvasRef.current
+      setScannerOpen(true)
+    } catch {
+      setScannerError('Unable to access camera.')
+      stopScanner()
+    }
+  }, [stopScanner])
 
-        if (!currentVideo || !canvas || scanDetected) {
-          frameRef.current = requestAnimationFrame(scanLoop)
-          return
-        }
+  useEffect(() => {
+    if (!scannerOpen) return
 
-        if (currentVideo.readyState >= 2) {
-          const ctx = canvas.getContext('2d')
-          if (ctx) {
-            canvas.width = currentVideo.videoWidth
-            canvas.height = currentVideo.videoHeight
-            ctx.drawImage(currentVideo, 0, 0, canvas.width, canvas.height)
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const detector = detectorRef.current
 
-            try {
-              const barcodes = await detector.detect(canvas)
-              const rawValue = barcodes?.[0]?.rawValue?.trim()
+    if (!video || !canvas || !streamRef.current || !detector) {
+      setScannerError('Scanner video element not ready.')
+      stopScanner()
+      return
+    }
 
-              if (rawValue) {
-                const cleaned = rawValue.toUpperCase()
+    const start = async () => {
+      try {
+        video.srcObject = streamRef.current
+        await video.play()
 
-                setScanDetected(true)
-                stopScanner()
-                router.replace(`/fire-school/bottles?scan=${encodeURIComponent(cleaned)}`)
-                return
+        const scanLoop = async () => {
+          if (scanDetected) return
+
+          if (video.readyState >= 2) {
+            const ctx = canvas.getContext('2d')
+
+            if (ctx) {
+              canvas.width = video.videoWidth
+              canvas.height = video.videoHeight
+              ctx.drawImage(video, 0, 0)
+
+              try {
+                const codes = await detector.detect(canvas)
+                const value = codes?.[0]?.rawValue?.trim()
+
+                if (value) {
+                  setScanDetected(true)
+                  stopScanner()
+                  router.replace(`/fire-school/bottles?scan=${encodeURIComponent(value.toUpperCase())}`)
+                  return
+                }
+              } catch {
+                // keep scanning
               }
-            } catch {
-              // keep scanning
             }
           }
+
+          frameRef.current = requestAnimationFrame(scanLoop)
         }
 
         frameRef.current = requestAnimationFrame(scanLoop)
+      } catch {
+        setScannerError('Unable to start scanner.')
+        stopScanner()
       }
-
-      frameRef.current = requestAnimationFrame(scanLoop)
-    } catch {
-      setScannerError('Unable to access camera. Check browser permissions and try again.')
-      stopScanner()
     }
-  }, [router, scanDetected, stopScanner])
+
+    start()
+  }, [scannerOpen, scanDetected, router, stopScanner])
 
   useEffect(() => {
     return () => {
@@ -271,22 +276,14 @@ export default function FillStationPage() {
             </button>
           </div>
 
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="mt-3">
             <button
               type="button"
               onClick={startScanner}
               disabled={checking || scannerOpen}
-              className="rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
             >
               {scannerOpen ? 'Scanner Open...' : 'Scan QR with Camera'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.replace('/fire-school/bottles')}
-              className="rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
-            >
-              Open Bottle Page
             </button>
           </div>
 
