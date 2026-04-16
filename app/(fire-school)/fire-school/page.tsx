@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { checkBottle, logFill } from '@/app/actions/fire-school'
 
@@ -24,8 +24,20 @@ interface Bottle {
   active: boolean
 }
 
+declare global {
+  interface Window {
+    BarcodeDetector?: {
+      new (options?: { formats?: string[] }): {
+        detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>
+      }
+      getSupportedFormats?: () => Promise<string[]>
+    }
+  }
+}
+
 export default function FillStationPage() {
   const router = useRouter()
+
   const [bottleInput, setBottleInput] = useState('')
   const [checking, setChecking] = useState(false)
   const [result, setResult] = useState<{
@@ -38,25 +50,63 @@ export default function FillStationPage() {
   const [logged, setLogged] = useState(false)
   const [notes, setNotes] = useState('')
 
-  async function handleCheck() {
-    if (!bottleInput.trim()) return
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [scannerError, setScannerError] = useState('')
+  const [scannerSupported, setScannerSupported] = useState(false)
+  const [scanDetected, setScanDetected] = useState(false)
+
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const frameRef = useRef<number | null>(null)
+
+  const stopScanner = useCallback(() => {
+    if (frameRef.current) {
+      cancelAnimationFrame(frameRef.current)
+      frameRef.current = null
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+
+    setScannerOpen(false)
+  }, [])
+
+  async function handleCheck(overrideBottleId?: string) {
+    const rawValue = overrideBottleId ?? bottleInput
+    const cleanBottleId = rawValue.trim().toUpperCase()
+
+    if (!cleanBottleId) return
+
+    setBottleInput(cleanBottleId)
     setChecking(true)
     setResult(null)
     setLogged(false)
-    const res = await checkBottle(bottleInput.trim())
-    setResult(res)
-    setChecking(false)
+
+    try {
+      const res = await checkBottle(cleanBottleId)
+      setResult(res)
+    } finally {
+      setChecking(false)
+    }
   }
 
   async function handleLogFill() {
     if (!result?.bottle) return
+
     setLogging(true)
-    const res = await logFill(result.bottle.bottle_id, notes)
-    if (res.success) {
-      setLogged(true)
-      setNotes('')
+
+    try {
+      const res = await logFill(result.bottle.bottle_id, notes)
+      if (res.success) {
+        setLogged(true)
+        setNotes('')
+      }
+    } finally {
+      setLogging(false)
     }
-    setLogging(false)
   }
 
   function handleReset() {
@@ -64,6 +114,9 @@ export default function FillStationPage() {
     setResult(null)
     setLogged(false)
     setNotes('')
+    setScannerError('')
+    setScanDetected(false)
+    router.replace('/fire-school')
   }
 
   const getRequalExpiry = (bottle: Bottle) => {
@@ -80,40 +133,209 @@ export default function FillStationPage() {
     return d
   }
 
+  useEffect(() => {
+    setScannerSupported(
+      typeof window !== 'undefined' &&
+        typeof navigator !== 'undefined' &&
+        !!navigator.mediaDevices?.getUserMedia &&
+        !!window.BarcodeDetector
+    )
+  }, [])
+
+  const startScanner = useCallback(async () => {
+    setScannerError('')
+    setScanDetected(false)
+
+    if (
+      typeof window === 'undefined' ||
+      !navigator.mediaDevices?.getUserMedia ||
+      !window.BarcodeDetector
+    ) {
+      setScannerError('Camera QR scanning is not supported on this device/browser.')
+      return
+    }
+
+    try {
+      const supportedFormats = window.BarcodeDetector.getSupportedFormats
+        ? await window.BarcodeDetector.getSupportedFormats()
+        : ['qr_code']
+
+      if (!supportedFormats.includes('qr_code')) {
+        setScannerError('QR scanning is not supported by this browser.')
+        return
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+        },
+        audio: false,
+      })
+
+      streamRef.current = stream
+      setScannerOpen(true)
+
+      const video = videoRef.current
+      if (!video) {
+        setScannerError('Scanner video element not ready.')
+        stopScanner()
+        return
+      }
+
+      video.srcObject = stream
+      await video.play()
+
+      const detector = new window.BarcodeDetector({
+        formats: ['qr_code'],
+      })
+
+      const scanLoop = async () => {
+        const currentVideo = videoRef.current
+        const canvas = canvasRef.current
+
+        if (!currentVideo || !canvas || scanDetected) {
+          frameRef.current = requestAnimationFrame(scanLoop)
+          return
+        }
+
+        if (currentVideo.readyState >= 2) {
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            canvas.width = currentVideo.videoWidth
+            canvas.height = currentVideo.videoHeight
+            ctx.drawImage(currentVideo, 0, 0, canvas.width, canvas.height)
+
+            try {
+              const barcodes = await detector.detect(canvas)
+              const rawValue = barcodes?.[0]?.rawValue?.trim()
+
+              if (rawValue) {
+                const cleaned = rawValue.toUpperCase()
+
+                setScanDetected(true)
+                stopScanner()
+                router.replace(`/fire-school/bottles?scan=${encodeURIComponent(cleaned)}`)
+                return
+              }
+            } catch {
+              // keep scanning
+            }
+          }
+        }
+
+        frameRef.current = requestAnimationFrame(scanLoop)
+      }
+
+      frameRef.current = requestAnimationFrame(scanLoop)
+    } catch {
+      setScannerError('Unable to access camera. Check browser permissions and try again.')
+      stopScanner()
+    }
+  }, [router, scanDetected, stopScanner])
+
+  useEffect(() => {
+    return () => {
+      stopScanner()
+    }
+  }, [stopScanner])
+
   return (
     <div className="max-w-lg mx-auto">
       <div className="mb-8 text-center">
         <h1 className="text-2xl font-bold text-zinc-900">SCBA Fill Station</h1>
-        <p className="text-sm text-zinc-500 mt-1">Enter a bottle ID to check status and log a fill</p>
+        <p className="text-sm text-zinc-500 mt-1">
+          Enter a bottle ID or scan with the camera
+        </p>
       </div>
 
-      {/* Bottle Entry */}
       {!result && (
         <div className="rounded-xl bg-white shadow-sm border border-zinc-200 p-6">
           <label className="mb-2 block text-sm font-medium text-zinc-700">Bottle ID</label>
-          <div className="flex gap-3">
+
+          <div className="flex flex-col gap-3 sm:flex-row">
             <input
               type="text"
               value={bottleInput}
-              onChange={e => setBottleInput(e.target.value)}
+              onChange={e => setBottleInput(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === 'Enter' && handleCheck()}
               placeholder="B-0001"
-              className="flex-1 rounded-lg border border-zinc-300 px-4 py-3 text-lg font-mono font-bold text-zinc-900 uppercase placeholder-zinc-300 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+              className="flex-1 min-w-0 rounded-lg border border-zinc-300 px-4 py-3 text-base sm:text-lg font-mono font-bold text-zinc-900 uppercase placeholder-zinc-300 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
               autoFocus
             />
             <button
-              onClick={handleCheck}
+              onClick={() => handleCheck()}
               disabled={checking || !bottleInput.trim()}
-              className="rounded-lg bg-orange-600 px-6 py-3 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+              className="w-full sm:w-auto rounded-lg bg-orange-600 px-4 sm:px-6 py-3 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
             >
               {checking ? 'Checking...' : 'Check'}
             </button>
           </div>
-          <p className="mt-2 text-xs text-zinc-400">Press Enter or tap Check to look up the bottle</p>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={startScanner}
+              disabled={checking || scannerOpen}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {scannerOpen ? 'Scanner Open...' : 'Scan QR with Camera'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.replace('/fire-school/bottles')}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+            >
+              Open Bottle Page
+            </button>
+          </div>
+
+          <p className="mt-2 text-xs text-zinc-400">
+            Press Enter, tap Check, or scan a QR code
+          </p>
+
+          {!scannerSupported && (
+            <p className="mt-2 text-xs text-amber-600">
+              In-page camera scanning may not work on every browser. QR links with
+              <span className="font-mono"> ?scan=</span> still work on the bottles page.
+            </p>
+          )}
+
+          {scannerError && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {scannerError}
+            </div>
+          )}
+
+          {scannerOpen && (
+            <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-950 p-3">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full rounded-lg"
+              />
+              <canvas ref={canvasRef} className="hidden" />
+
+              <div className="mt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={stopScanner}
+                  className="flex-1 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
+                >
+                  Cancel Scan
+                </button>
+              </div>
+
+              <p className="mt-2 text-center text-xs text-zinc-300">
+                Point the camera at the bottle QR code
+              </p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Result */}
       {result && !logged && (
         <div className="flex flex-col gap-4">
           {!result.found && (
@@ -124,13 +346,16 @@ export default function FillStationPage() {
                 <span className="font-mono font-bold">{bottleInput.toUpperCase()}</span> is not in the system.
               </p>
               <div className="flex gap-3">
-                <button onClick={handleReset}
-                  className="flex-1 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50">
+                <button
+                  onClick={handleReset}
+                  className="flex-1 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+                >
                   Try Again
                 </button>
                 <button
                   onClick={() => router.push(`/fire-school/bottles?add=${bottleInput.toUpperCase()}`)}
-                  className="flex-1 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700">
+                  className="flex-1 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700"
+                >
                   Add Bottle
                 </button>
               </div>
@@ -139,19 +364,27 @@ export default function FillStationPage() {
 
           {result.found && result.bottle && (
             <>
-              <div className={`rounded-xl shadow-sm border p-5 ${
-                result.fillable ? 'bg-white border-zinc-200' : 'bg-red-50 border-red-200'
-              }`}>
-                <div className="flex items-start justify-between mb-4">
+              <div
+                className={`rounded-xl shadow-sm border p-5 ${
+                  result.fillable ? 'bg-white border-zinc-200' : 'bg-red-50 border-red-200'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-4 gap-3">
                   <div>
-                    <span className="text-3xl font-bold font-mono text-zinc-900">{result.bottle.bottle_id}</span>
+                    <span className="text-3xl font-bold font-mono text-zinc-900 break-all">
+                      {result.bottle.bottle_id}
+                    </span>
                     {result.bottle.department_name && (
-                      <p className="text-sm text-zinc-500 mt-0.5">{result.bottle.department_name}</p>
+                      <p className="text-sm text-zinc-500 mt-0.5">
+                        {result.bottle.department_name}
+                      </p>
                     )}
                   </div>
-                  <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold ${
-                    result.fillable ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}>
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold whitespace-nowrap ${
+                      result.fillable ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}
+                  >
                     {result.fillable ? '✓ OK to Fill' : '✗ Do Not Fill'}
                   </span>
                 </div>
@@ -162,14 +395,45 @@ export default function FillStationPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <DetailField label="PSI" value={result.bottle.psi ? `${result.bottle.psi} PSI` : null} />
-                  <DetailField label="Type" value={result.bottle.cylinder_type ? CYLINDER_TYPE_LABELS[result.bottle.cylinder_type] ?? result.bottle.cylinder_type : null} />
-                  <DetailField label="Manufacture Date" value={result.bottle.manufacture_date ? new Date(result.bottle.manufacture_date).toLocaleDateString() : null} />
-                  <DetailField label="Last Requal" value={result.bottle.last_requal_date ? new Date(result.bottle.last_requal_date).toLocaleDateString() : null} />
-                  <DetailField label="Requal Expiry" value={getRequalExpiry(result.bottle)?.toLocaleDateString() ?? null} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                  <DetailField
+                    label="PSI"
+                    value={result.bottle.psi ? `${result.bottle.psi} PSI` : null}
+                  />
+                  <DetailField
+                    label="Type"
+                    value={
+                      result.bottle.cylinder_type
+                        ? CYLINDER_TYPE_LABELS[result.bottle.cylinder_type] ??
+                          result.bottle.cylinder_type
+                        : null
+                    }
+                  />
+                  <DetailField
+                    label="Manufacture Date"
+                    value={
+                      result.bottle.manufacture_date
+                        ? new Date(result.bottle.manufacture_date).toLocaleDateString()
+                        : null
+                    }
+                  />
+                  <DetailField
+                    label="Last Requal"
+                    value={
+                      result.bottle.last_requal_date
+                        ? new Date(result.bottle.last_requal_date).toLocaleDateString()
+                        : null
+                    }
+                  />
+                  <DetailField
+                    label="Requal Expiry"
+                    value={getRequalExpiry(result.bottle)?.toLocaleDateString() ?? null}
+                  />
                   {result.bottle.requires_service_life && (
-                    <DetailField label="Service Life Ends" value={getServiceLifeExpiry(result.bottle)?.toLocaleDateString() ?? null} />
+                    <DetailField
+                      label="Service Life Ends"
+                      value={getServiceLifeExpiry(result.bottle)?.toLocaleDateString() ?? null}
+                    />
                   )}
                 </div>
               </div>
@@ -194,8 +458,10 @@ export default function FillStationPage() {
                 </div>
               )}
 
-              <button onClick={handleReset}
-                className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50">
+              <button
+                onClick={handleReset}
+                className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+              >
                 ← Check Another Bottle
               </button>
             </>
@@ -203,7 +469,6 @@ export default function FillStationPage() {
         </div>
       )}
 
-      {/* Success */}
       {logged && (
         <div className="rounded-xl bg-white shadow-sm border border-green-200 p-8 text-center">
           <div className="text-5xl mb-4">✅</div>
@@ -211,8 +476,10 @@ export default function FillStationPage() {
           <p className="text-sm text-zinc-500 mb-6">
             Fill recorded for <span className="font-mono font-bold">{result?.bottle?.bottle_id}</span>
           </p>
-          <button onClick={handleReset}
-            className="w-full rounded-lg bg-orange-600 px-4 py-3 text-base font-bold text-white hover:bg-orange-700">
+          <button
+            onClick={handleReset}
+            className="w-full rounded-lg bg-orange-600 px-4 py-3 text-base font-bold text-white hover:bg-orange-700"
+          >
             Fill Another Bottle
           </button>
         </div>
@@ -221,11 +488,17 @@ export default function FillStationPage() {
   )
 }
 
-function DetailField({ label, value }: { label: string; value: string | null | undefined }) {
+function DetailField({
+  label,
+  value,
+}: {
+  label: string
+  value: string | null
+}) {
   return (
-    <div>
-      <p className="text-xs text-zinc-500 mb-0.5">{label}</p>
-      <p className="text-sm font-medium text-zinc-900">{value || '—'}</p>
+    <div className="rounded-lg bg-zinc-50 border border-zinc-200 px-3 py-2">
+      <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="mt-1 font-semibold text-zinc-900 break-words">{value ?? '—'}</div>
     </div>
   )
 }
