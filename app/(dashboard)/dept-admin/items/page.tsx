@@ -43,15 +43,36 @@ export default async function ItemsPage({
     .eq('department_id', department_id)
     .order('item_name')
 
-  // Fetch assets for all asset-tracked items
+  // Fetch assets for asset-tracked items
   const assetItemIds = (items ?? []).filter(i => i.tracks_assets).map(i => i.id)
   const { data: assets } = assetItemIds.length > 0
     ? await adminClient
         .from('item_assets')
-        .select('id, item_id, asset_tag, serial_number, in_service_date, out_of_service_date, status, active, notes')
+        .select('id, item_id, asset_tag, serial_number, in_service_date, out_of_service_date, status, active, notes, has_linked_asset, linked_item_type_id')
         .eq('department_id', department_id)
         .in('item_id', assetItemIds)
         .order('asset_tag')
+    : { data: [] }
+
+  // Fetch inspection templates for inspectable items
+  const inspectionItemIds = (items ?? []).filter(i => i.requires_inspection).map(i => i.id)
+  const { data: templates } = inspectionItemIds.length > 0
+    ? await adminClient
+        .from('item_inspection_templates')
+        .select('id, item_id, template_name, template_description, active')
+        .eq('department_id', department_id)
+        .in('item_id', inspectionItemIds)
+        .order('template_name')
+    : { data: [] }
+
+  // Fetch all steps for those templates
+  const templateIds = (templates ?? []).map(t => t.id)
+  const { data: steps } = templateIds.length > 0
+    ? await adminClient
+        .from('item_inspection_template_steps')
+        .select('id, template_id, step_text, step_description, step_type, response_type, required, fail_if_negative, linked_item_type_id, sort_order, active')
+        .in('template_id', templateIds)
+        .order('sort_order')
     : { data: [] }
 
   return (
@@ -59,6 +80,8 @@ export default async function ItemsPage({
       categories={categories ?? []}
       items={items ?? []}
       assets={assets ?? []}
+      templates={templates ?? []}
+      steps={steps ?? []}
       departmentName={department_name}
       departmentId={department_id}
       initialTab={(tab as any) ?? 'categories'}
