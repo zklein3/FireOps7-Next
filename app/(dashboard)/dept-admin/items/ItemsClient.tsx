@@ -45,11 +45,27 @@ type ActiveTab = 'categories' | 'items' | 'assets'
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 const checkCls = "rounded border-zinc-300 text-red-600 focus:ring-red-500"
 
+// Match actual DB values
 const STATUS_OPTIONS = [
-  { value: 'active', label: 'Active' },
-  { value: 'out_of_service', label: 'Out of Service' },
-  { value: 'retired', label: 'Retired' },
+  { value: 'IN SERVICE', label: 'In Service' },
+  { value: 'OUT OF SERVICE', label: 'Out of Service' },
+  { value: 'RETIRED', label: 'Retired' },
 ]
+
+function statusBadge(status: string) {
+  const s = status?.toUpperCase()
+  if (s === 'IN SERVICE') return 'bg-green-100 text-green-700'
+  if (s === 'OUT OF SERVICE') return 'bg-yellow-100 text-yellow-700'
+  return 'bg-zinc-100 text-zinc-500'
+}
+
+function statusLabel(status: string) {
+  const s = status?.toUpperCase()
+  if (s === 'IN SERVICE') return 'In Service'
+  if (s === 'OUT OF SERVICE') return 'Out of Service'
+  if (s === 'RETIRED') return 'Retired'
+  return status ?? '—'
+}
 
 export default function ItemsClient({
   categories,
@@ -105,7 +121,6 @@ export default function ItemsClient({
     const result = await createItem(formData)
     if (result?.error) { setError(result.error); setLoading(false); return }
     setShowForm(false)
-    // If requires inspection → switch to items tab and open asset form
     if (result.requires_inspection && result.item_id) {
       setTab('items')
       setExpandedItemId(result.item_id)
@@ -150,8 +165,6 @@ export default function ItemsClient({
     acc[a.item_id].push(a)
     return acc
   }, {})
-
-  const assetTrackedItems = items.filter(i => i.tracks_assets)
 
   return (
     <div className="max-w-2xl">
@@ -211,7 +224,6 @@ export default function ItemsClient({
               </form>
             </div>
           )}
-
           <div className="rounded-xl bg-white shadow-sm border border-zinc-200 overflow-hidden">
             {categories.length === 0 ? (
               <div className="px-6 py-12 text-center text-sm text-zinc-400">No categories yet.</div>
@@ -379,7 +391,6 @@ export default function ItemsClient({
                         </div>
                       ) : (
                         <div>
-                          {/* Item row */}
                           <div className="flex items-center px-5 py-4">
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-semibold text-zinc-900">{item.item_name}</p>
@@ -397,10 +408,7 @@ export default function ItemsClient({
                               )}
                               {item.tracks_assets && (
                                 <button
-                                  onClick={() => {
-                                    setExpandedItemId(isExpanded ? null : item.id)
-                                    setAddingAssetToItemId(null)
-                                  }}
+                                  onClick={() => { setExpandedItemId(isExpanded ? null : item.id); setAddingAssetToItemId(null) }}
                                   className="text-xs font-semibold text-blue-600 hover:text-blue-800">
                                   {isExpanded ? 'Hide' : 'Assets'}
                                 </button>
@@ -410,7 +418,6 @@ export default function ItemsClient({
                             </div>
                           </div>
 
-                          {/* Assets section — expanded */}
                           {isExpanded && item.tracks_assets && (
                             <div className="bg-zinc-50 border-t border-zinc-100 px-5 py-4">
                               <div className="flex items-center justify-between mb-3">
@@ -422,7 +429,6 @@ export default function ItemsClient({
                                 </button>
                               </div>
 
-                              {/* Add asset form */}
                               {addingAssetToItemId === item.id && (
                                 <form action={(fd) => handleAddAsset(fd, item.id)} className="mb-4 flex flex-col gap-3 bg-white rounded-lg border border-zinc-200 p-4">
                                   <div className="flex gap-3">
@@ -452,7 +458,6 @@ export default function ItemsClient({
                                 </form>
                               )}
 
-                              {/* Asset list */}
                               {itemAssets.length === 0 ? (
                                 <p className="text-xs text-zinc-400">No assets yet. Add one above.</p>
                               ) : (
@@ -505,12 +510,8 @@ export default function ItemsClient({
                                             </div>
                                           </div>
                                           <div className="flex items-center gap-3">
-                                            <span className={`text-xs rounded-full px-2 py-0.5 ${
-                                              asset.status === 'active' ? 'bg-green-100 text-green-700' :
-                                              asset.status === 'out_of_service' ? 'bg-yellow-100 text-yellow-700' :
-                                              'bg-zinc-100 text-zinc-500'
-                                            }`}>
-                                              {asset.status === 'out_of_service' ? 'Out of Service' : asset.status.charAt(0).toUpperCase() + asset.status.slice(1)}
+                                            <span className={`text-xs rounded-full px-2 py-0.5 ${statusBadge(asset.status)}`}>
+                                              {statusLabel(asset.status)}
                                             </span>
                                             <button onClick={() => { setEditingAssetId(asset.id); reset() }}
                                               className="text-xs font-semibold text-red-600 hover:text-red-800">
@@ -556,12 +557,8 @@ export default function ItemsClient({
                         {asset.serial_number && <p className="text-xs text-zinc-400">S/N: {asset.serial_number}</p>}
                       </div>
                       <div className="flex items-center gap-3 ml-3">
-                        <span className={`text-xs rounded-full px-2 py-0.5 ${
-                          asset.status === 'active' ? 'bg-green-100 text-green-700' :
-                          asset.status === 'out_of_service' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-zinc-100 text-zinc-500'
-                        }`}>
-                          {asset.status === 'out_of_service' ? 'Out of Service' : asset.status.charAt(0).toUpperCase() + asset.status.slice(1)}
+                        <span className={`text-xs rounded-full px-2 py-0.5 ${statusBadge(asset.status)}`}>
+                          {statusLabel(asset.status)}
                         </span>
                         <button
                           onClick={() => { setTab('items'); setExpandedItemId(asset.item_id); setEditingAssetId(asset.id); reset() }}

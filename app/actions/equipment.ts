@@ -5,6 +5,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
+// Asset status values must match DB default: 'IN SERVICE'
+const ASSET_STATUS = {
+  active: 'IN SERVICE',
+  out_of_service: 'OUT OF SERVICE',
+  retired: 'RETIRED',
+}
+
 async function getContext() {
   const supabase = await createClient()
   const adminClient = createAdminClient()
@@ -45,11 +52,10 @@ export async function createItemCategory(formData: FormData) {
     department_id,
     category_name,
     sort_order: sort_order ? parseInt(sort_order) : null,
-    requires_inspection: false,
     active: true,
   })
 
-  if (error) { await logError(error, '/dept-admin/items'); return { error: error.message } }
+  if (error) { await logError(error.message, '/dept-admin/items'); return { error: error.message } }
   revalidatePath('/dept-admin/items')
   return { success: true }
 }
@@ -73,7 +79,7 @@ export async function updateItemCategory(formData: FormData) {
     active,
   }).eq('id', id)
 
-  if (error) { await logError(error, '/dept-admin/items'); return { error: error.message } }
+  if (error) { await logError(error.message, '/dept-admin/items'); return { error: error.message } }
   revalidatePath('/dept-admin/items')
   return { success: true }
 }
@@ -105,18 +111,15 @@ export async function createItem(formData: FormData) {
     tracks_assets: requires_inspection,
     requires_presence_check,
     tracks_expiration,
-    tracks_expiration_date: false,
     requires_inspection,
     requires_maintenance: false,
     active: true,
   }).select('id').single()
 
-  if (error) { await logError(error, '/dept-admin/items'); return { error: error.message } }
+  if (error) { await logError(error.message, '/dept-admin/items'); return { error: error.message } }
 
   revalidatePath('/dept-admin/items')
   revalidatePath('/equipment')
-
-  // If requires inspection, return item id so client can redirect to asset creation
   return { success: true, item_id: newItem?.id, requires_inspection }
 }
 
@@ -149,7 +152,7 @@ export async function updateItem(formData: FormData) {
     active,
   }).eq('id', id)
 
-  if (error) { await logError(error, '/dept-admin/items'); return { error: error.message } }
+  if (error) { await logError(error.message, '/dept-admin/items'); return { error: error.message } }
   revalidatePath('/dept-admin/items')
   revalidatePath('/equipment')
   return { success: true }
@@ -164,7 +167,6 @@ export async function createAsset(formData: FormData) {
   const item_id = formData.get('item_id') as string
   const asset_name = formData.get('asset_name') as string
   const serial_number = formData.get('serial_number') as string
-  const asset_tag = formData.get('asset_tag') as string
   const in_service_date = formData.get('in_service_date') as string
   const notes = formData.get('notes') as string
   const department_id = formData.get('department_id') as string || ctx.department_id
@@ -176,15 +178,15 @@ export async function createAsset(formData: FormData) {
   const { error } = await adminClient.from('item_assets').insert({
     department_id,
     item_id,
-    asset_tag: asset_name, // use asset_name as the display tag
+    asset_tag: asset_name,
     serial_number: serial_number || null,
     in_service_date: in_service_date || null,
     notes: notes || null,
     active: true,
-    status: 'active',
+    status: ASSET_STATUS.active,
   })
 
-  if (error) { await logError(error, '/dept-admin/items'); return { error: error.message } }
+  if (error) { await logError(error.message, '/dept-admin/items'); return { error: error.message } }
   revalidatePath('/dept-admin/items')
   revalidatePath('/equipment')
   return { success: true }
@@ -199,23 +201,27 @@ export async function updateAsset(formData: FormData) {
   const id = formData.get('id') as string
   const asset_name = formData.get('asset_name') as string
   const serial_number = formData.get('serial_number') as string
-  const asset_tag = formData.get('asset_tag') as string
   const in_service_date = formData.get('in_service_date') as string
   const out_of_service_date = formData.get('out_of_service_date') as string
   const status = formData.get('status') as string
   const notes = formData.get('notes') as string
+
+  // Map UI status values to DB values
+  const dbStatus = status === 'out_of_service' ? ASSET_STATUS.out_of_service
+    : status === 'retired' ? ASSET_STATUS.retired
+    : ASSET_STATUS.active
 
   const { error } = await adminClient.from('item_assets').update({
     asset_tag: asset_name,
     serial_number: serial_number || null,
     in_service_date: in_service_date || null,
     out_of_service_date: out_of_service_date || null,
-    status: status || 'active',
+    status: dbStatus,
     active: status !== 'retired',
     notes: notes || null,
   }).eq('id', id)
 
-  if (error) { await logError(error, '/dept-admin/items'); return { error: error.message } }
+  if (error) { await logError(error.message, '/dept-admin/items'); return { error: error.message } }
   revalidatePath('/dept-admin/items')
   return { success: true }
 }
@@ -250,7 +256,7 @@ export async function assignItemToCompartment(formData: FormData) {
     active: true,
   })
 
-  if (error) { await logError(error, '/equipment'); return { error: error.message } }
+  if (error) { await logError(error.message, '/equipment'); return { error: error.message } }
   revalidatePath('/equipment')
   return { success: true }
 }
@@ -267,7 +273,7 @@ export async function removeItemFromCompartment(location_standard_id: string) {
     .delete()
     .eq('id', location_standard_id)
 
-  if (error) { await logError(error, '/equipment'); return { error: error.message } }
+  if (error) { await logError(error.message, '/equipment'); return { error: error.message } }
   revalidatePath('/equipment')
   return { success: true }
 }
