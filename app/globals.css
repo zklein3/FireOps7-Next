@@ -12,24 +12,31 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* Remove dark mode override — app uses explicit light styling throughout */
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Ensure form inputs always have dark text on light background
-   regardless of OS dark mode setting */
-input,
-select,
-textarea {
-  color: #18181b;
-  background-color: #ffffff;
-}
+/* Force light styling on all form elements regardless of OS dark mode */
+@layer base {
+  input,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="date"],
+  input[type="tel"],
+  select,
+  textarea {
+    color: #18181b !important;
+    background-color: #ffffff !important;
+    -webkit-text-fill-color: #18181b !important;
+  }
 
-input::placeholder,
-textarea::placeholder {
-  color: #a1a1aa;
+  input::placeholder,
+  textarea::placeholder {
+    color: #a1a1aa !important;
+    -webkit-text-fill-color: #a1a1aa !important;
+  }
 }
