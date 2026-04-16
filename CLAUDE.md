@@ -45,6 +45,11 @@ CRITICAL PATTERNS:
 | `(dashboard)` | All dashboard routes | Required | Main app |
 | `(fire-school)` | `/fire-school`, `/fire-school/bottles`, `/fire-school/fill-log` | Public | Standalone tool |
 
+### Fire School Routes
+- `/fire-school` — PRIMARY workflow: manual entry + QR scan + bottle check + fill log
+- `/fire-school/bottles` — admin/list page: view all bottles + fill counts + add bottle
+- `/fire-school/fill-log` — history page: view past fill logs only
+
 ### Dashboard Routes
 - `/dashboard` — dept dashboard or sys admin overview
 - `/personnel`, `/personnel/[id]` — roster + profile
@@ -132,14 +137,14 @@ CRITICAL PATTERNS:
 - Stations list (cards) + detail (admin edit, assigned apparatus)
 - Compartment names management + assignment to apparatus
 - Equipment pages — `/equipment` + `/equipment/[id]` (compartment item view, assign/remove)
-- **Item management** — 3 tabs: Categories, Items (with asset expansion), Assets
-- **Asset tracking** — create/edit assets under inspectable item types
-- Item creation flow — if requires_inspection checked → redirects to asset creation on save
+- Item management — 3 tabs: Categories, Items (with asset expansion), Assets
+- Asset tracking — create/edit assets under inspectable item types
+- Item creation flow — if requires_inspection checked → auto-opens asset form on save
 - Dashboard with real data
 - Error logging + email notifications
 - FeedbackButton with React Portal
 - Mobile header overlap fixed, input text color fixed (webkit-text-fill-color)
-- Fire School — Fill Station, Bottles, Fill Log (all public)
+- **Fire School — QR scanning fully working** (see QR section below)
 - Vercel deployed + fireops7.com DNS configured
 
 ## What's Placeholder / Not Yet Built
@@ -152,71 +157,73 @@ CRITICAL PATTERNS:
 - Equipment page — asset assignment to compartments (currently quantity-only items)
 - Resend from address → custom domain
 
+## Fire School — QR Scanning
+
+### Architecture
+- `/fire-school` — ALL workflow lives here: manual entry, QR scan, check, fill log
+- `/fire-school/bottles` — admin list page only, NOT part of scan workflow
+- `/fire-school/fill-log` — history only
+
+### QR Scanning Implementation
+- Uses `BarcodeDetector` Web API (Chrome/Android native support)
+- Opens rear camera via `getUserMedia`
+- Scan loop runs via `requestAnimationFrame`
+- On detection: extracts bottle ID → calls `handleCheck()` directly (no navigation)
+
+### QR Code Format (Production Standard)
+```
+https://fireops7.com/fire-school?scan=B-0001
+```
+- Works with phone camera (outside app) — opens browser to fill station
+- Works with in-app scanner — extracts `?scan=` param
+- Plain text QR (`B-0001`) also supported as fallback
+
+### extractBottleIdFromScan() logic
+1. If no URL detected → return raw value uppercased
+2. Parse as URL → extract `?scan=` param
+3. Fall back to last path segment
+4. Fall back to regex match for `scan=`
+
+### Known Behavior
+- `BarcodeDetector` not supported in all browsers — fallback message shown
+- Mobile browsers may cache old builds — incognito confirms correct behavior
+- iOS Safari has limited `BarcodeDetector` support — manual entry fallback always available
+
+### Suggested Future Improvements
+- Auto-reset after fill (scan next bottle faster)
+- Audible/vibration feedback on scan
+- Scan success animation
+- Timestamp + user tracking on fills
+
 ## Equipment / Item System — DESIGN
 
 ### Item Categories (reporting/filter only)
 - category_name, sort_order, active
 - NO inspection logic at category level
-- Used for filtering: "show all Power Tools on Engine 32"
 
-### Item Types — two behaviors based on flags:
-
-**Quantity-only items** (requires_inspection = false):
-- Axe, Halligan, Pike Pole, Gauze packs
-- Assigned to compartments with expected_quantity
-- item_location_standards holds the assignment
-
-**Asset-tracked items** (requires_inspection = true):
-- Chainsaw, Thermal Imager, Cardiac Monitor
-- tracks_assets = true automatically
-- Individual assets created under item type (Chainsaw 1, Chainsaw 2)
-- Each asset: serial number, asset tag, in-service date, status
-- Assets are what get assigned to compartments (not the item type)
-- Inspections log against specific asset
+### Item Types — two behaviors:
+**Quantity-only** (requires_inspection = false): Axe, Halligan, Gauze
+**Asset-tracked** (requires_inspection = true): Chainsaw, TIC, Cardiac Monitor
 
 ### Item Flags
 - `tracks_quantity` — count based (auto false when requires_inspection = true)
-- `tracks_assets` — individual serial number tracking (auto true when requires_inspection = true)
-- `requires_presence_check` — must be verified present during apparatus check
+- `tracks_assets` — individual tracking (auto true when requires_inspection = true)
+- `requires_presence_check` — verified during apparatus check
 - `requires_inspection` — has inspection template + schedule
-- `tracks_expiration` — has expiry date to track
+- `tracks_expiration` — has expiry date
 
-### Asset Flow (BUILT)
-1. Admin creates item type "Chainsaw" → checks requires_inspection
-2. On save → stays on items tab, auto-opens asset form for that item
-3. Admin creates "Chainsaw 1" (name, serial, in-service date)
-4. Can add "Chainsaw 2" etc. on same screen
-5. Assets tab shows all assets across all item types
-6. Adding future assets → Items tab → Chainsaw → Assets → + Add Asset
-
-### Asset Statuses
-- `active` — in service
-- `out_of_service` — temporarily unavailable
-- `retired` — permanently removed
+### Asset Statuses: `active`, `out_of_service`, `retired`
 
 ### Inspection System (TO BUILD)
-- `item_inspection_templates` — per item type, per department
-  - template_name, template_description, item_id, department_id
-- `item_inspection_template_steps` — individual checklist questions
-  - step_text, response_type (boolean/text/numeric), required, fail_if_negative, sort_order
-- `item_asset_inspection_logs` — completed inspection record
-  - asset_id, template_id, inspected_at, overall_result, inspected_by
-- `item_asset_inspection_log_steps` — individual step responses
-  - boolean_value, text_value, numeric_value, notes
+Tables already exist: `item_inspection_templates`, `item_inspection_template_steps`,
+`item_asset_inspection_logs`, `item_asset_inspection_log_steps`
 
 ### Inspection Schedule (TO BUILD — new table needed)
-- Department sets baseline: Daily / Weekly / Monthly
-- Monthly = system maximum (no apparatus can go longer than monthly)
-- Schedule options:
-  - Daily: select active days + which day gets full inspection
-  - Weekly: select day of week
-  - Monthly by day of week: 1st/2nd/3rd/4th + Mon-Sun (e.g. 2nd Tuesday)
-  - Monthly by date: specific date 1-28 (e.g. 15th of month)
+- Monthly = system maximum
+- Options: Daily (select days), Weekly (select day), Monthly by DOW (2nd Tuesday), Monthly by date (15th)
 - Apparatus can override to more frequent than dept baseline
-- Career depts: daily presence + weekly/monthly full inspection
-- Volunteer depts: typically monthly full inspection
 
-## Database Tables (full list)
+## Database Tables
 
 ### Fire Department (auth-protected, RLS)
 - `departments`, `stations`, `apparatus`, `apparatus_types`
@@ -271,10 +278,3 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 - `member.winfire@fireops7.com` — Winslow Fire member
 - `test.admin@fireops7.com` — Fremont Fire Test dept admin
 - Temp password for new accounts: `Hello1!`
-
-## Fire School
-- URL: /fire-school (public, no login)
-- Bottle check: active=true + requal not expired + service life not exceeded
-- Cylinder types: composite_15, composite_30, steel, aluminum
-- Fill log: one record per fill (bottle_id, filled_at, fill_result, notes)
-- Not found → redirect to /fire-school/bottles?add=BOTTLE_ID
