@@ -3,7 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import ItemsClient from './ItemsClient'
 
-export default async function ItemsPage() {
+export default async function ItemsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string; item_id?: string }>
+}) {
+  const { tab, item_id } = await searchParams
   const supabase = await createClient()
   const adminClient = createAdminClient()
 
@@ -28,22 +33,36 @@ export default async function ItemsPage() {
 
   const { data: categories } = await adminClient
     .from('item_categories')
-    .select('id, category_name, requires_inspection, active, sort_order')
+    .select('id, category_name, active, sort_order')
     .eq('department_id', department_id)
     .order('sort_order')
 
   const { data: items } = await adminClient
     .from('items')
-    .select('id, item_name, item_description, category_id, tracks_quantity, requires_presence_check, requires_inspection, active')
+    .select('id, item_name, item_description, category_id, tracks_quantity, tracks_assets, requires_presence_check, requires_inspection, tracks_expiration, active')
     .eq('department_id', department_id)
     .order('item_name')
+
+  // Fetch assets for all asset-tracked items
+  const assetItemIds = (items ?? []).filter(i => i.tracks_assets).map(i => i.id)
+  const { data: assets } = assetItemIds.length > 0
+    ? await adminClient
+        .from('item_assets')
+        .select('id, item_id, asset_tag, serial_number, in_service_date, out_of_service_date, status, active, notes')
+        .eq('department_id', department_id)
+        .in('item_id', assetItemIds)
+        .order('asset_tag')
+    : { data: [] }
 
   return (
     <ItemsClient
       categories={categories ?? []}
       items={items ?? []}
+      assets={assets ?? []}
       departmentName={department_name}
       departmentId={department_id}
+      initialTab={(tab as any) ?? 'categories'}
+      focusItemId={item_id ?? null}
     />
   )
 }

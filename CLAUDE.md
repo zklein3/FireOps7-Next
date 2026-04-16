@@ -56,7 +56,7 @@ CRITICAL PATTERNS:
 - `/admin/dept/[id]` — sys admin dept drill-in (tabbed: personnel, stations, apparatus, compartments)
 - `/dept-admin/personnel` — manage personnel
 - `/dept-admin/compartments` — manage compartment names
-- `/dept-admin/items` — manage item categories and item types
+- `/dept-admin/items` — manage item categories, item types, and assets (3 tabs)
 
 ### Key Action Files
 - `app/actions/auth.ts` — signIn, changePassword, signOut
@@ -67,7 +67,7 @@ CRITICAL PATTERNS:
 - `app/actions/apparatus.ts` — createApparatus, updateApparatus
 - `app/actions/stations.ts` — createStation, updateStation
 - `app/actions/compartments.ts` — createCompartmentName, updateCompartmentName, assignCompartmentToApparatus, removeCompartmentFromApparatus
-- `app/actions/equipment.ts` — createItemCategory, createItem, assignItemToCompartment, removeItemFromCompartment
+- `app/actions/equipment.ts` — createItemCategory, updateItemCategory, createItem, updateItem, createAsset, updateAsset, assignItemToCompartment, removeItemFromCompartment
 - `app/actions/fire-school.ts` — checkBottle, logFill, addFireSchoolBottle
 
 ## Auth & Signup Flow
@@ -97,7 +97,7 @@ CRITICAL PATTERNS:
 | Edit apparatus/station info | ❌ | ✅ | ✅ | ✅ |
 | Assign items to compartments | ❌ | ✅ | ✅ | ✅ |
 | Add/deactivate apparatus/stations | ❌ | ❌ | ✅ | ✅ |
-| Manage compartments/items/categories | ❌ | ❌ | ✅ | ✅ |
+| Manage compartments/items/categories/assets | ❌ | ❌ | ✅ | ✅ |
 | Add/manage personnel | ❌ | ❌ | ✅ | ✅ |
 
 ## Sys Admin Notes
@@ -109,8 +109,10 @@ CRITICAL PATTERNS:
 ## Mobile Layout
 - Desktop: fixed sidebar (w-64, red-800)
 - Mobile: top bar + hamburger → slide-out drawer (MobileSidebar.tsx)
+- Main content: `pt-20 px-4 pb-4 sm:pt-0 sm:p-6 lg:p-8` — pt-20 clears fixed mobile header
 - All pages responsive: grid-cols-1 sm:grid-cols-2 lg:grid-cols-3
 - Tables: overflow-x-auto + min-w
+- Input text fix: globals.css forces `color: #18181b` and `-webkit-text-fill-color` on all inputs
 
 ## Error Logging & Notifications
 - Table: `system_logs` (log_type: error | user_report | info)
@@ -124,16 +126,19 @@ CRITICAL PATTERNS:
 - Sys admin dashboard — department cards with stats
 - Sys admin — Departments, Users, System Logs (placeholder)
 - Sys admin dept drill-in — `/admin/dept/[id]` tabbed (personnel, stations, apparatus, compartments)
-- Dept Admin — Manage Personnel, Compartments, Items pages
+- Dept Admin — Manage Personnel, Compartments, Items pages (with inline edit)
 - Personnel roster + profile (role-based editing, change password)
 - Apparatus list (All/station/unassigned filters, cards) + detail (edit, compartment assign/remove)
 - Stations list (cards) + detail (admin edit, assigned apparatus)
 - Compartment names management + assignment to apparatus
-- **Equipment pages** — `/equipment` (apparatus cards with item counts) + `/equipment/[id]` (compartment-by-compartment item view, assign/remove items)
-- **Item management** — `/dept-admin/items` (categories tab + items tab, add forms)
+- Equipment pages — `/equipment` + `/equipment/[id]` (compartment item view, assign/remove)
+- **Item management** — 3 tabs: Categories, Items (with asset expansion), Assets
+- **Asset tracking** — create/edit assets under inspectable item types
+- Item creation flow — if requires_inspection checked → redirects to asset creation on save
 - Dashboard with real data
 - Error logging + email notifications
 - FeedbackButton with React Portal
+- Mobile header overlap fixed, input text color fixed (webkit-text-fill-color)
 - Fire School — Fill Station, Bottles, Fill Log (all public)
 - Vercel deployed + fireops7.com DNS configured
 
@@ -141,47 +146,82 @@ CRITICAL PATTERNS:
 - `/scba` — dept SCBA pages
 - `/admin/logs` — full log viewer
 - Supabase auth allowed URLs for custom domain
-- Resend from address update to custom domain
-- Item inspection flow (coming up)
+- Inspection template builder (admin builds checklist per item type)
+- Inspection schedule settings (daily/weekly/monthly per dept)
+- Inspection run UI (officer/member completes inspection)
+- Equipment page — asset assignment to compartments (currently quantity-only items)
+- Resend from address → custom domain
 
-## Equipment / Item System
+## Equipment / Item System — DESIGN
 
-### Database Tables
-- `item_categories` — dept-scoped (category_name, requires_inspection, sort_order)
-- `items` — item type definitions (item_name, category_id, tracks_quantity, requires_presence_check, requires_inspection)
-- `item_location_standards` — what goes where (apparatus_compartment_id, item_id, expected_quantity, minimum_quantity)
-- `item_assets` — individual tracked assets with serial numbers (future)
-- `item_inspection_templates`, `item_inspection_template_steps` — inspection templates (future)
-- `item_asset_inspection_logs`, `item_asset_inspection_log_steps` — inspection logs (future)
+### Item Categories (reporting/filter only)
+- category_name, sort_order, active
+- NO inspection logic at category level
+- Used for filtering: "show all Power Tools on Engine 32"
 
-### Equipment Flow
-1. Admin creates item categories (Forcible Entry, Medical, Power Tools...)
-2. Admin creates item types (Axe, Halligan, Pike Pole...)
-3. Officer/Admin assigns items to compartments on specific apparatus
-4. All users view equipment by apparatus → compartment breakdown
+### Item Types — two behaviors based on flags:
+
+**Quantity-only items** (requires_inspection = false):
+- Axe, Halligan, Pike Pole, Gauze packs
+- Assigned to compartments with expected_quantity
+- item_location_standards holds the assignment
+
+**Asset-tracked items** (requires_inspection = true):
+- Chainsaw, Thermal Imager, Cardiac Monitor
+- tracks_assets = true automatically
+- Individual assets created under item type (Chainsaw 1, Chainsaw 2)
+- Each asset: serial number, asset tag, in-service date, status
+- Assets are what get assigned to compartments (not the item type)
+- Inspections log against specific asset
 
 ### Item Flags
-- `tracks_quantity` — quantity-based (axe x1, gauze x10)
-- `tracks_assets` — individual serial number tracking (future)
-- `requires_presence_check` — must be verified during inspection
-- `requires_inspection` — has its own inspection protocol
+- `tracks_quantity` — count based (auto false when requires_inspection = true)
+- `tracks_assets` — individual serial number tracking (auto true when requires_inspection = true)
+- `requires_presence_check` — must be verified present during apparatus check
+- `requires_inspection` — has inspection template + schedule
+- `tracks_expiration` — has expiry date to track
 
-## Compartment System
-- `compartment_names` — dept-level definitions (code + name + sort_order)
-- `apparatus_compartments` — links compartment_names to specific apparatus
-- Admin only — create/edit/delete compartment names
-- Officer/Admin — assign compartments to apparatus
+### Asset Flow (BUILT)
+1. Admin creates item type "Chainsaw" → checks requires_inspection
+2. On save → stays on items tab, auto-opens asset form for that item
+3. Admin creates "Chainsaw 1" (name, serial, in-service date)
+4. Can add "Chainsaw 2" etc. on same screen
+5. Assets tab shows all assets across all item types
+6. Adding future assets → Items tab → Chainsaw → Assets → + Add Asset
+
+### Asset Statuses
+- `active` — in service
+- `out_of_service` — temporarily unavailable
+- `retired` — permanently removed
+
+### Inspection System (TO BUILD)
+- `item_inspection_templates` — per item type, per department
+  - template_name, template_description, item_id, department_id
+- `item_inspection_template_steps` — individual checklist questions
+  - step_text, response_type (boolean/text/numeric), required, fail_if_negative, sort_order
+- `item_asset_inspection_logs` — completed inspection record
+  - asset_id, template_id, inspected_at, overall_result, inspected_by
+- `item_asset_inspection_log_steps` — individual step responses
+  - boolean_value, text_value, numeric_value, notes
+
+### Inspection Schedule (TO BUILD — new table needed)
+- Department sets baseline: Daily / Weekly / Monthly
+- Monthly = system maximum (no apparatus can go longer than monthly)
+- Schedule options:
+  - Daily: select active days + which day gets full inspection
+  - Weekly: select day of week
+  - Monthly by day of week: 1st/2nd/3rd/4th + Mon-Sun (e.g. 2nd Tuesday)
+  - Monthly by date: specific date 1-28 (e.g. 15th of month)
+- Apparatus can override to more frequent than dept baseline
+- Career depts: daily presence + weekly/monthly full inspection
+- Volunteer depts: typically monthly full inspection
 
 ## Database Tables (full list)
 
 ### Fire Department (auth-protected, RLS)
-- `departments` — 3 rows
-- `stations` — 2+ rows
-- `apparatus` — 4+ rows
-- `apparatus_types` — 20 rows (lookup)
-- `apparatus_compartments` — junction: apparatus ↔ compartment_names
-- `compartment_names` — dept-level compartment definitions
-- `personnel`, `department_personnel`, `personnel_roles` (19 rows)
+- `departments`, `stations`, `apparatus`, `apparatus_types`
+- `apparatus_compartments`, `compartment_names`
+- `personnel`, `department_personnel`, `personnel_roles`
 - `items`, `item_categories`, `item_assets`, `item_location_standards`
 - `item_inspection_templates`, `item_inspection_template_steps`
 - `item_asset_inspection_logs`, `item_asset_inspection_log_steps`
@@ -207,19 +247,23 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 ```
 
 ## Next Steps (priority order)
-1. Run `npm run build` and fix any TypeScript errors
-2. Test equipment pages — add categories, items, assign to compartments
-3. Add fireops7.com to Supabase auth allowed URLs
-4. `/scba` department SCBA pages
-5. `/admin/logs` full log viewer
-6. Item inspection flow
-7. Resend from address → custom domain
+1. Test asset tracking flow — create item with inspection, add assets
+2. Update equipment page to support asset assignment to compartments
+3. Build inspection template builder (admin)
+4. Build inspection schedule settings (admin)
+5. Build inspection run UI (officer/member)
+6. Add fireops7.com to Supabase auth allowed URLs
+7. `/scba` pages
+8. `/admin/logs` full log viewer
 
 ## Dev Workflow
 - Start: `npm run dev` in C:\Users\zklei\Documents\FireOps7-Next
 - Stop: Ctrl+C in VS Code terminal
 - Build: `npm run build` (always before pushing)
-- Git: `git add . && git commit -m "message" && git push`
+- Git push:
+  git add .
+  git commit -m "message"
+  git push
 
 ## Test Accounts
 - `zklein3@outlook.com` — sys admin, no department
