@@ -92,6 +92,12 @@ export default function ItemsClient({
     acc[t.item_id].push(t)
     return acc
   }, {})
+  // All templates regardless of item — for the "all templates" view
+  const allTemplatesByItem = templates.reduce<Record<string, Template[]>>((acc, t) => {
+    if (!acc[t.item_id]) acc[t.item_id] = []
+    acc[t.item_id].push(t)
+    return acc
+  }, {})
   const stepsByTemplate = steps.reduce<Record<string, Step[]>>((acc, s) => {
     if (!acc[s.template_id]) acc[s.template_id] = []
     acc[s.template_id].push(s)
@@ -171,6 +177,8 @@ export default function ItemsClient({
   function getSectionForItem(item_id: string): ItemSection {
     return itemSection[item_id] ?? 'assets'
   }
+
+  const inspectableItems = items.filter(i => i.requires_inspection)
 
   return (
     <div className="max-w-2xl">
@@ -405,7 +413,6 @@ export default function ItemsClient({
                                           <input name="notes" type="text" className={inputCls} />
                                         </div>
                                       </div>
-                                      {/* Linked asset */}
                                       <div className="pt-2 border-t border-zinc-100">
                                         <label className="flex items-center gap-2 cursor-pointer mb-2">
                                           <input type="checkbox" name="has_linked_asset" value="true" className={checkCls}
@@ -450,7 +457,6 @@ export default function ItemsClient({
                                                 <div className="w-36"><select name="status" defaultValue={asset.status} className={inputCls}>{STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
                                               </div>
                                               <input name="notes" type="text" defaultValue={asset.notes ?? ''} placeholder="Notes" className={inputCls} />
-                                              {/* Linked asset edit */}
                                               <div className="pt-2 border-t border-zinc-100">
                                                 <label className="flex items-center gap-2 cursor-pointer mb-2">
                                                   <input type="checkbox" name="has_linked_asset" value="true" defaultChecked={asset.has_linked_asset} className={checkCls} />
@@ -501,7 +507,6 @@ export default function ItemsClient({
                                     </button>
                                   </div>
 
-                                  {/* Add template form */}
                                   {addingTemplateToItemId === item.id && (
                                     <form action={(fd) => handleAddTemplate(fd, item.id)} className="mb-4 flex flex-col gap-3 bg-white rounded-lg border border-zinc-200 p-4">
                                       <div>
@@ -518,7 +523,6 @@ export default function ItemsClient({
                                     </form>
                                   )}
 
-                                  {/* Template list */}
                                   {itemTemplates.length === 0 ? (
                                     <p className="text-xs text-zinc-400">No inspection templates yet. Add one above.</p>
                                   ) : (
@@ -528,13 +532,27 @@ export default function ItemsClient({
                                         const isTemplateExpanded = expandedTemplateId === template.id
                                         return (
                                           <div key={template.id} className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
-                                            {/* Template header */}
                                             {editingTemplateId === template.id ? (
                                               <div className="p-3">
                                                 <form action={handleUpdateTemplate} className="flex flex-col gap-2">
                                                   <input type="hidden" name="id" value={template.id} />
-                                                  <input name="template_name" type="text" required defaultValue={template.template_name} className={inputCls} />
-                                                  <input name="template_description" type="text" defaultValue={template.template_description ?? ''} placeholder="Description" className={inputCls} />
+                                                  <div>
+                                                    <label className="mb-1 block text-xs font-medium text-zinc-500">Template Name</label>
+                                                    <input name="template_name" type="text" required defaultValue={template.template_name} className={inputCls} />
+                                                  </div>
+                                                  <div>
+                                                    <label className="mb-1 block text-xs font-medium text-zinc-500">Description</label>
+                                                    <input name="template_description" type="text" defaultValue={template.template_description ?? ''} placeholder="Description" className={inputCls} />
+                                                  </div>
+                                                  {/* Item type reassignment */}
+                                                  <div>
+                                                    <label className="mb-1 block text-xs font-medium text-zinc-500">Assigned to Item Type</label>
+                                                    <select name="item_id" defaultValue={template.item_id} className={inputCls}>
+                                                      {inspectableItems.map(i => (
+                                                        <option key={i.id} value={i.id}>{i.item_name}</option>
+                                                      ))}
+                                                    </select>
+                                                  </div>
                                                   <select name="active" defaultValue={template.active ? 'true' : 'false'} className={inputCls}>
                                                     <option value="true">Active</option>
                                                     <option value="false">Inactive</option>
@@ -563,7 +581,6 @@ export default function ItemsClient({
                                               </div>
                                             )}
 
-                                            {/* Steps */}
                                             {isTemplateExpanded && (
                                               <div className="p-3 border-t border-zinc-100">
                                                 <div className="flex items-center justify-between mb-2">
@@ -574,7 +591,6 @@ export default function ItemsClient({
                                                   </button>
                                                 </div>
 
-                                                {/* Add step form */}
                                                 {addingStepToTemplateId === template.id && (
                                                   <form action={handleAddStep} className="mb-3 flex flex-col gap-2 bg-zinc-50 rounded-lg border border-zinc-200 p-3">
                                                     <input type="hidden" name="template_id" value={template.id} />
@@ -615,7 +631,6 @@ export default function ItemsClient({
                                                   </form>
                                                 )}
 
-                                                {/* Step list */}
                                                 {templateSteps.length === 0 ? (
                                                   <p className="text-xs text-zinc-400">No steps yet. Add one above.</p>
                                                 ) : (

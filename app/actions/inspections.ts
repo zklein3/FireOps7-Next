@@ -51,10 +51,18 @@ export async function updateInspectionTemplate(formData: FormData) {
   const id = formData.get('id') as string
   const template_name = formData.get('template_name') as string
   const template_description = formData.get('template_description') as string
+  const item_id = formData.get('item_id') as string
   const active = formData.get('active') === 'true'
-  const { error } = await adminClient.from('item_inspection_templates').update({
-    template_name, template_description: template_description || null, active,
-  }).eq('id', id)
+
+  const updateData: Record<string, any> = {
+    template_name,
+    template_description: template_description || null,
+    active,
+  }
+  // Only update item_id if provided (allows reassigning to different item type)
+  if (item_id) updateData.item_id = item_id
+
+  const { error } = await adminClient.from('item_inspection_templates').update(updateData).eq('id', id)
   if (error) { await logError(error.message, '/dept-admin/items'); return { error: error.message } }
   revalidatePath('/dept-admin/items')
   return { success: true }
@@ -176,7 +184,6 @@ export async function submitInspection(payload: {
       )
       const overall_result = hasFail ? 'FAIL' : 'PASS'
 
-      // Use dbErr instead of logError to avoid name collision with imported logError fn
       const { data: logData, error: dbErr } = await adminClient
         .from('item_asset_inspection_logs')
         .insert({
