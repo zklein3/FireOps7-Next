@@ -72,6 +72,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen bg-zinc-100">
+      {/* Desktop sidebar */}
       <aside className="hidden md:flex w-64 bg-red-800 text-white flex-col shrink-0">
         <SidebarContent
           navItems={navItems}
@@ -83,6 +84,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         />
       </aside>
 
+      {/* Mobile header + drawer */}
       <MobileSidebar
         navItems={navItems}
         adminNavItems={adminNavItems}
@@ -91,7 +93,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         isSysAdmin={isSysAdmin}
       />
 
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto md:ml-0">
+      {/* Main content
+          pt-20 on mobile accounts for fixed header height (≈80px covers 2-line header)
+          md:pt-0 resets on desktop since there's no fixed header */}
+      <main className="flex-1 pt-20 px-4 pb-4 sm:pt-0 sm:p-6 lg:p-8 overflow-y-auto">
         {children}
       </main>
     </div>

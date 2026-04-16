@@ -22,31 +22,28 @@ export default function MobileSidebar({
 
   return (
     <>
-      {/* Mobile Top Bar — fixed at top */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-red-800 text-white flex items-center justify-between px-4 py-3 shadow">
-        <div>
-          <h1 className="text-lg font-bold leading-tight">FireOps7</h1>
-          {userInfo.departmentName && (
-            <p className="text-xs text-red-300 leading-tight mt-0.5">{userInfo.departmentName}</p>
-          )}
-        </div>
-        <button
-          onClick={() => setOpen(true)}
-          className="p-2 rounded-lg hover:bg-red-700 transition-colors"
-          aria-label="Open menu"
-        >
-          <div className="flex flex-col gap-1.5">
-            <span className="block w-6 h-0.5 bg-white" />
-            <span className="block w-6 h-0.5 bg-white" />
-            <span className="block w-6 h-0.5 bg-white" />
+      {/* Mobile Top Bar — fixed at top, z-40 */}
+      <div id="mobile-header" className="md:hidden fixed top-0 left-0 right-0 z-40 bg-red-800 text-white shadow">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div>
+            <h1 className="text-lg font-bold leading-tight">FireOps7</h1>
+            {userInfo.departmentName && (
+              <p className="text-xs text-red-300 leading-tight">{userInfo.departmentName}</p>
+            )}
           </div>
-        </button>
+          <button
+            onClick={() => setOpen(true)}
+            className="p-2 rounded-lg hover:bg-red-700 transition-colors"
+            aria-label="Open menu"
+          >
+            <div className="flex flex-col gap-1.5">
+              <span className="block w-6 h-0.5 bg-white" />
+              <span className="block w-6 h-0.5 bg-white" />
+              <span className="block w-6 h-0.5 bg-white" />
+            </div>
+          </button>
+        </div>
       </div>
-
-      {/* Spacer — pushes content below the fixed top bar
-          h-16 = 64px covers single-line header
-          h-20 = 80px covers two-line header (with dept name) */}
-      <div className={`md:hidden ${userInfo.departmentName ? 'h-20' : 'h-16'}`} />
 
       {/* Overlay */}
       {open && (
