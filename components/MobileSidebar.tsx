@@ -22,12 +22,12 @@ export default function MobileSidebar({
 
   return (
     <>
-      {/* Mobile Top Bar */}
+      {/* Mobile Top Bar — fixed at top */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-red-800 text-white flex items-center justify-between px-4 py-3 shadow">
         <div>
-          <h1 className="text-lg font-bold">FireOps7</h1>
+          <h1 className="text-lg font-bold leading-tight">FireOps7</h1>
           {userInfo.departmentName && (
-            <p className="text-xs text-red-300 leading-none">{userInfo.departmentName}</p>
+            <p className="text-xs text-red-300 leading-tight mt-0.5">{userInfo.departmentName}</p>
           )}
         </div>
         <button
@@ -35,7 +35,6 @@ export default function MobileSidebar({
           className="p-2 rounded-lg hover:bg-red-700 transition-colors"
           aria-label="Open menu"
         >
-          {/* Hamburger icon */}
           <div className="flex flex-col gap-1.5">
             <span className="block w-6 h-0.5 bg-white" />
             <span className="block w-6 h-0.5 bg-white" />
@@ -44,8 +43,10 @@ export default function MobileSidebar({
         </button>
       </div>
 
-      {/* Mobile top bar spacer */}
-      <div className="md:hidden h-14" />
+      {/* Spacer — pushes content below the fixed top bar
+          h-16 = 64px covers single-line header
+          h-20 = 80px covers two-line header (with dept name) */}
+      <div className={`md:hidden ${userInfo.departmentName ? 'h-20' : 'h-16'}`} />
 
       {/* Overlay */}
       {open && (
@@ -59,7 +60,6 @@ export default function MobileSidebar({
       <div className={`md:hidden fixed top-0 left-0 bottom-0 z-50 w-72 bg-red-800 text-white flex flex-col transform transition-transform duration-300 ${
         open ? 'translate-x-0' : '-translate-x-full'
       }`}>
-        {/* Header */}
         <div className="px-6 py-5 border-b border-red-700 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">FireOps7</h1>
@@ -75,7 +75,6 @@ export default function MobileSidebar({
           </button>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1 text-sm overflow-y-auto">
           {navItems.map(item => (
             <Link
@@ -107,7 +106,6 @@ export default function MobileSidebar({
           )}
         </nav>
 
-        {/* Footer */}
         <div className="px-4 py-4 border-t border-red-700 flex flex-col gap-2">
           <div className="mb-1">
             <p className="text-sm font-medium truncate">{userInfo.name}</p>
