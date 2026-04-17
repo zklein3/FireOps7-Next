@@ -26,7 +26,7 @@ export default async function EventsPage() {
   const isAdmin = myDept.system_role === 'admin'
   const department_id = myDept.department_id
 
-  // Fetch upcoming instances (next 60 days) + recent past (last 30 days)
+  // Fetch instances: next 60 days + last 30 days
   const past30 = new Date()
   past30.setDate(past30.getDate() - 30)
   const future60 = new Date()
@@ -39,7 +39,7 @@ export default async function EventsPage() {
     .lte('event_date', future60.toISOString().split('T')[0])
     .order('event_date', { ascending: true })
 
-  // Fetch series info for these instances
+  // Fetch series info
   const seriesIds = [...new Set((instances ?? []).map(i => i.series_id))]
   const { data: seriesData } = seriesIds.length > 0
     ? await adminClient
@@ -49,13 +49,14 @@ export default async function EventsPage() {
         .eq('department_id', department_id)
     : { data: [] }
 
-  // Filter to only this department's instances
+  // Filter to this department only
   const deptSeriesIds = new Set((seriesData ?? []).map(s => s.id))
   const deptInstances = (instances ?? []).filter(i => deptSeriesIds.has(i.series_id))
   const seriesMap = Object.fromEntries((seriesData ?? []).map(s => [s.id, s]))
 
-  // Fetch my attendance for these instances
   const instanceIds = deptInstances.map(i => i.id)
+
+  // My attendance
   const { data: myAttendance } = instanceIds.length > 0
     ? await adminClient
         .from('event_attendance')
@@ -66,17 +67,43 @@ export default async function EventsPage() {
 
   const myAttendanceMap = Object.fromEntries((myAttendance ?? []).map(a => [a.instance_id, a]))
 
-  // For officers — fetch pending attendance counts
-  let pendingCounts: Record<string, number> = {}
+  // For officers — fetch ALL pending submissions with submitter name
+  let pendingByInstance: Record<string, { id: string; personnel_id: string; name: string; submitted_at: string }[]> = {}
   if (isOfficerOrAbove && instanceIds.length > 0) {
-    const { data: pending } = await adminClient
+    const { data: pendingRaw } = await adminClient
       .from('event_attendance')
-      .select('instance_id')
+      .select('id, instance_id, personnel_id, submitted_at')
       .in('instance_id', instanceIds)
       .eq('status', 'pending')
-    ;(pending ?? []).forEach(p => {
-      pendingCounts[p.instance_id] = (pendingCounts[p.instance_id] ?? 0) + 1
-    })
+
+    if (pendingRaw && pendingRaw.length > 0) {
+      // Fetch personnel names for pending submissions
+      const personnelIds = [...new Set(pendingRaw.map(p => p.personnel_id))]
+      const { data: pendingPersonnel } = await adminClient
+        .from('personnel')
+        .select('id, first_name, last_name')
+        .in('id', personnelIds)
+
+      const nameMap = Object.fromEntries(
+        (pendingPersonnel ?? []).map(p => [p.id, `${p.first_name} ${p.last_name}`])
+      )
+
+      for (const p of pendingRaw) {
+        if (!pendingByInstance[p.instance_id]) pendingByInstance[p.instance_id] = []
+        pendingByInstance[p.instance_id].push({
+          id: p.id,
+          personnel_id: p.personnel_id,
+          name: nameMap[p.personnel_id] ?? 'Unknown',
+          submitted_at: p.submitted_at,
+        })
+      }
+    }
+  }
+
+  // Pending counts (for badge display)
+  const pendingCounts: Record<string, number> = {}
+  for (const [instanceId, submissions] of Object.entries(pendingByInstance)) {
+    pendingCounts[instanceId] = submissions.length
   }
 
   const events = deptInstances.map(i => ({
@@ -94,9 +121,10 @@ export default async function EventsPage() {
     requires_verification: i.requires_verification,
     my_attendance: myAttendanceMap[i.id] ?? null,
     pending_count: pendingCounts[i.id] ?? 0,
+    pending_submissions: pendingByInstance[i.id] ?? [],
   }))
 
-  // Fetch all personnel for bulk logging (officers only)
+  // All personnel for bulk logging (officers only)
   const { data: personnel } = isOfficerOrAbove
     ? await adminClient
         .from('department_personnel')

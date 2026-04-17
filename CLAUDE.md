@@ -59,6 +59,8 @@ CRITICAL PATTERNS:
 - `/equipment`, `/equipment/[id]` — equipment by apparatus (quantity items)
 - `/inspections` — select apparatus + compartment to inspect
 - `/inspections/run` — run inspection checklist
+- `/events` — events list, self-log attendance, officer manage panel ✅
+- `/events/new` — create one-time or recurring event ✅
 - `/scan` — QR scan landing/redirect route (to build)
 - `/scba` — placeholder
 - `/admin/departments`, `/admin/users`, `/admin/logs` — sys admin pages
@@ -66,6 +68,7 @@ CRITICAL PATTERNS:
 - `/dept-admin/personnel` — manage personnel
 - `/dept-admin/compartments` — manage compartment names
 - `/dept-admin/items` — manage item categories, item types, assets, inspection templates (3 tabs)
+- `/dept-admin/attendance` — excuse types + participation requirements ✅
 
 ### Key Action Files
 - `app/actions/auth.ts` — signIn, changePassword, signOut
@@ -78,6 +81,7 @@ CRITICAL PATTERNS:
 - `app/actions/compartments.ts` — createCompartmentName, updateCompartmentName, assignCompartmentToApparatus, removeCompartmentFromApparatus
 - `app/actions/equipment.ts` — createItemCategory, updateItemCategory, createItem, updateItem, createAsset, updateAsset, assignItemToCompartment, removeItemFromCompartment
 - `app/actions/inspections.ts` — createInspectionTemplate, updateInspectionTemplate, addTemplateStep, updateTemplateStep, deleteTemplateStep, submitInspection
+- `app/actions/attendance.ts` — createEventSeries, updateEventInstance, updateEventSeries, logAttendance, verifyAttendance, cancelEventInstance, createExcuseType, saveParticipationRequirement ✅
 - `app/actions/fire-school.ts` — checkBottle, logFill, addFireSchoolBottle
 
 ## Auth & Signup Flow
@@ -106,8 +110,8 @@ CRITICAL PATTERNS:
 | Submit training/certification progress | ✅ | ✅ | ✅ | ✅ |
 | Log own attendance (within window) | ✅ | ✅ | ✅ | ✅ |
 | Edit own profile | ✅ | ✅ | ✅ | ✅ |
-| Verify training submissions | ❌ | ✅ | ✅ | ✅ |
-| Create training events / log attendance | ❌ | ✅ | ✅ | ✅ |
+| Verify/approve attendance | ❌ | ✅ | ✅ | ✅ |
+| Create events / bulk log attendance | ❌ | ✅ | ✅ | ✅ |
 | Log retroactive attendance | ❌ | ✅ | ✅ | ✅ |
 | Create/log incidents | ❌ | ✅ | ✅ | ✅ |
 | Edit anyone's basic info | ❌ | ✅ | ✅ | ✅ |
@@ -147,7 +151,7 @@ CRITICAL PATTERNS:
 - Sys admin dashboard — department cards with stats
 - Sys admin — Departments, Users, System Logs (placeholder)
 - Sys admin dept drill-in — `/admin/dept/[id]` tabbed
-- Dept Admin — Manage Personnel, Compartments, Items pages (with inline edit)
+- Dept Admin — Manage Personnel, Compartments, Items, Attendance Settings
 - Personnel roster + profile (role-based editing, change password)
 - Apparatus list + detail (edit, compartment assign/remove)
 - Stations list + detail
@@ -157,6 +161,7 @@ CRITICAL PATTERNS:
 - Asset tracking — create/edit assets, linked asset flag, has_linked_asset + linked_item_type_id
 - Inspection template builder — create templates per item type, add/edit/delete steps, reassign to different item type
 - Inspection run UI — `/inspections` select apparatus+compartment → `/inspections/run` checklist with asset picker, presence checks, all step types, submit logs to DB
+- **Attendance module — DB migrated, actions built, events page + new event page + attendance settings page built**
 - Dashboard with real data
 - Error logging + email notifications
 - FeedbackButton with React Portal
@@ -164,7 +169,16 @@ CRITICAL PATTERNS:
 - Fire School — QR scanning fully working
 - Vercel deployed + fireops7.com DNS configured
 
+## IMMEDIATE NEXT — Resume Here Next Session
+**Add pending attendance verification queue to `/events` page (EventsClient.tsx)**
+- When officer clicks "Manage" on an event, the expanded panel currently shows bulk log + personnel checkboxes
+- Need to add a second section below showing pending submissions with Approve / Reject buttons
+- Uses existing `verifyAttendance(attendance_id, 'verified' | 'rejected', rejection_reason?)` action — already built
+- Server page needs to fetch pending attendance records with personnel names for each instance
+- Rejection should show an optional text input for reason before confirming
+
 ## What's Placeholder / Not Yet Built
+- Attendance verification queue in EventsClient (see IMMEDIATE NEXT above)
 - `/scba` — dept SCBA pages
 - `/admin/logs` — full log viewer
 - Supabase auth allowed URLs for custom domain
@@ -172,7 +186,6 @@ CRITICAL PATTERNS:
 - Inspection history/log viewer
 - QR code system (see section below)
 - Training module (see section below)
-- Attendance module (see section below)
 - Incident log module (see section below)
 - Equipment page — asset assignment to compartments (currently quantity-only)
 - Resend from address → custom domain
@@ -223,6 +236,32 @@ CRITICAL PATTERNS:
 - Template edit includes "Assigned to Item Type" dropdown — admin can reassign to different item
 - Step types: BOOLEAN (Yes/No), NUMERIC, TEXT, LONG_TEXT, ASSET_LINK
 
+## Attendance Module (BUILT — missing verification queue)
+
+### DB Tables
+- `excuse_types` — department defined excuse reasons
+- `participation_requirements` — minimum % thresholds per event type
+- `event_series` — recurring event definitions
+- `event_instances` — individual occurrences generated from series
+- `event_attendance` — attendance records per member per instance
+
+### Pages Built
+- `/events` — upcoming/past events, self-log button, officer bulk logging, 12-hour window enforcement
+- `/events/new` — create one-time or recurring event, verification toggle (defaults true)
+- `/dept-admin/attendance` — excuse types + participation requirements
+
+### Key Rules
+- `requires_verification` defaults to TRUE on all events — admin consciously opts out
+- Self-report window: 12 hours from event start time (members only)
+- Officer/admin can log retroactively at any time, no restriction
+- Warning banner shown when editing past events with existing attendance records
+- Members see only own attendance; dept-level aggregates on dashboard
+
+### MISSING — Verification Queue (next session)
+- Officer/admin needs to see pending submissions per event and approve/reject them
+- `verifyAttendance()` action already exists in `app/actions/attendance.ts`
+- Add pending submissions section to EventsClient expanded panel (officer view)
+
 ## QR Code System — DESIGN (to build)
 
 ### Core Principles
@@ -272,249 +311,90 @@ CRITICAL PATTERNS:
 ### Three Training Scenarios
 
 **1. Certification Course Logging (structured)**
-- State-facilitated courses with defined units/chapters (FF1, EMT-B, etc.)
-- Admin creates course in system first — defines chapters with titles + hours
-- Admin enrolls specific members in the course (enrollment = gate to submit)
-- Member submits completed chapter → status: pending
-- Officer/admin verifies or rejects → verified submissions count toward completion
-- When all required units verified → member flagged as eligible to test
-- Admin logs test result → pass creates certification record automatically
+- Admin creates course, defines chapters with titles + hours
+- Admin enrolls specific members (enrollment = gate to submit)
+- Member submits completed chapter → pending
+- Officer/admin verifies → all verified → eligible to test
+- Admin logs test result → pass creates certification record
 
 **2. Direct Certification Entry (standalone)**
-- Member already holds cert (e.g. new hire with existing FF1)
-- Admin logs it directly — no course history required
+- Admin logs cert directly — no course history required
 - Fields: cert name, issuing body, cert number, issue date, expiration date
 
 **3. Regular Training Event (non-certification)**
-- Department runs a training drill/class not tied to a certification
-- Officer/admin creates event: date, topic, hours, location, notes
-- Logs attendance: who showed up
-- No certification attached
+- Officer/admin creates event: date, topic, hours, location
+- Logs attendance — no cert attached
 
 ### Data Model
-
 ```
-certification_types (admin defines — state structured, built out over time)
+certification_types
   ├── cert_name, issuing_body
   ├── does_expire (boolean)
-  ├── expiration_interval_months (editable per cert type — null if no expiration)
+  ├── expiration_interval_months (null if no expiration — e.g. FF1 Nebraska)
   └── is_structured_course (boolean)
 
-certification_course_units (chapters/modules — only if is_structured_course)
-  ├── unit_title, unit_description, required_hours, sort_order
+certification_course_units
+  └── unit_title, unit_description, required_hours, sort_order
 
-course_enrollments (admin assigns member to course — gate to submit progress)
-  ├── personnel_id, certification_type_id, enrolled_by, enrolled_at
-  └── status: active / withdrawn / completed
+course_enrollments (admin assigns — gate to submit)
+  └── personnel_id, certification_type_id, status: active/withdrawn/completed
 
-member_course_progress (member submits unit completions)
-  ├── enrollment_id, unit_id, personnel_id
-  ├── hours_submitted, completed_date, notes
-  ├── status: pending / verified / rejected
-  └── verified_by, verified_at, rejection_reason
+member_course_progress (member submits)
+  ├── enrollment_id, unit_id, hours_submitted, completed_date, notes
+  └── status: pending/verified/rejected + verified_by, verified_at, rejection_reason
 
 member_certifications (actual cert records)
-  ├── personnel_id, certification_type_id
-  ├── cert_number, issued_by, issued_date
-  ├── expiration_date (auto-calculated from issued_date + interval, manual override allowed)
+  ├── personnel_id, certification_type_id, cert_number, issued_by, issued_date
+  ├── expiration_date (auto-calc from issue_date + interval, manual override allowed)
   └── source: course_completion | direct_entry
 
-training_events (regular training — no cert)
-  ├── department_id, event_date, topic, hours, location, notes
-  └── created_by
-
-training_event_attendance
-  └── event_id, personnel_id, logged_by
+training_events + training_event_attendance
 ```
 
 ### Key Rules
-- Member cannot submit course progress unless enrolled by admin
-- Expiration date auto-calculated from issue date + cert type interval (editable override)
-- FF1 Nebraska = no expiration. EMT-B/CPR = 24 months (configurable per cert type)
-- Renewals create new certification record — old records kept for history
-- Dashboard flags certs expiring within configurable window (e.g. 60 days)
-- Member self-service: view enrolled courses, submit chapter completions, view own certs
-
-## Attendance Module — DESIGN (to build)
-
-### Four Event Types
-- **Training** — drills, classes, department-led instruction
-- **Meeting** — regular department meetings, officer meetings, board meetings
-- **Incident** — emergency responses (reactive, not pre-scheduled — see Incident section)
-- **Special Event** — parades, community events, fundraisers, standby coverage
-
-### Scheduled vs Reactive
-- Training, meetings, special events — created in advance, members see them coming
-- Incidents — created during or after the response, no advance scheduling
-
-### Recurring Events — Series + Instances Pattern
-- Series definition stores the recurrence rule
-- Instances are individual occurrences generated from the rule
-- Rolling one-year window — system always maintains instances 12 months out
-- Supabase Edge Function cron job generates new instances as time passes
-- Admin can edit: **This event only** OR **This and all future events**
-- If editing an instance that already has attendance records → show inline warning banner (non-blocking)
-
-**Recurrence options:**
-- Every week on a specific day
-- Every month by day of week (2nd Tuesday)
-- Every month by specific date (15th of every month)
-
-### Verification — Default to Verify
-- `requires_verification` defaults to `true` on all events — admin must consciously uncheck
-- Can be set at series level (all instances inherit) or overridden per instance
-- When `requires_verification = false` → attendance auto-approves on submission
-- When `requires_verification = true` → sits as pending until officer/admin approves
-
-### Attendance Submission Rules
-- **Self-report window** — 12 hours from event start time
-- After window closes → member self-reporting locked
-- Officer/admin can log retroactively at any time — no restriction
-- Officer/admin can bulk log attendance for entire group
-
-### Excused Absences
-- Supported — member or officer submits an excuse for missing an event
-- Admin defines the department's valid excuse types (family emergency, work conflict, medical, etc.)
-- Excuses can count differently toward participation requirements per dept configuration
-
-### Participation Requirements
-- Department configurable — admin sets minimum thresholds per event type if desired
-- Not enforced by system — informational and reportable
-- Dashboard shows department-level aggregate stats
-- Members see only their own attendance data — no peer visibility
-
-### Data Model
-
-```
-event_series
-  ├── department_id, event_type (training/meeting/incident/special)
-  ├── title, description, location
-  ├── recurrence_type (weekly/monthly_by_dow/monthly_by_date/one_time)
-  ├── recurrence_day_of_week, recurrence_week_of_month, recurrence_date
-  ├── start_time, duration_minutes
-  ├── requires_verification (default true)
-  ├── active
-  └── generate_through_date (tracks rolling window progress)
-
-event_instances
-  ├── series_id, event_date, start_time
-  ├── location (can override series default)
-  ├── status (scheduled/cancelled/completed)
-  ├── notes
-  └── requires_verification (inherits from series, overridable per instance)
-
-event_attendance
-  ├── instance_id, personnel_id
-  ├── status (pending/verified/rejected/excused)
-  ├── submitted_at, submitted_by
-  └── verified_at, verified_by, rejection_reason, excuse_type_id
-
-excuse_types (department defined)
-  └── department_id, excuse_name, active
-
-participation_requirements (department configured)
-  └── department_id, event_type, minimum_percentage, period (monthly/quarterly/annual)
-```
-
-### Notifications & Reminders (design TBD)
-- Members should receive reminders for upcoming scheduled events
-- Notification when attendance window opens after an event
-- Notification for pending verification (officers)
-- Tied to broader notification system — design separately
+- Expiration: FF1 Nebraska = no expiration. EMT-B/CPR = 24 months (configurable per type)
+- Renewals create new cert record — old records kept for history
+- Dashboard flags certs expiring within configurable window
 
 ## Incident Log Module — DESIGN (to build)
 
 ### Background
-- Department receives a CAD email (CFS Report PDF) after each call
-- Currently logs vehicles and members manually into NERIS (replaced NFIRS)
-- Goal: bring incident logging into FireOps7, eventually replace external NERIS workflow
-- EMS reporting NOT in scope at this time
+- CAD email (CFS PDF) received after each call — currently transcribed manually into NERIS
+- Goal: bring incident logging into FireOps7, eventually replace NERIS workflow
+- EMS reporting NOT in scope
 
-### What the CAD Report Contains (CFS PDF)
-- CFS # (CAD incident number) — e.g. CFS2610160
-- Call taker name
-- Location / address
-- Primary incident code + description (e.g. SPEC ASSN: Special Assignment)
-- Priority
-- Primary disposition
-- Call time, Completed time
-- Responders — unit identifier (WIN11) and department (WIN)
-- Response times — Assigned, Enroute, Staged, Arrived, Backup Requested, Backup Arrived, Leaving, Arrived At, Completed
-- IR/External Agency Numbers (WIN26-0013 — internal incident number)
-- Unit-specific timestamped activity log
+### Source Documents Analyzed
+- Winslow Run Sheet (Excel) — paper form covering Fire, Rescue, Standby, Mutual Aid, Meeting, Training
+- CAD CFS Report (PDF) — Dodge County 9-1-1, contains CFS#, times, responders, unit activity log
 
-### What the Run Sheet Contains (Paper Form)
-- Date, incident address, owner name
-- Incident type: Fire, Rescue, Standby, Meeting, Training, Mutual Aid (with To/From dept)
-- Time fields: Paged, Page Acknowledged, Enroute, On Scene, Finished at Scene/Transport, Arrived Transport, Finished at Hospital, Back at Station
-- Units dispatched — each apparatus with personnel assigned to it
-  - 11 (Ambulance), 22 (Brush), 24 (Brush), 32 (Engine), 42 (Tender), 43 (Tender), 81 (Air Trailer), Station
-- Fire-specific fields: property lost, estimated dollar losses, cause of fire, vehicle make, insurance info
-- NEFIRES/NERIS Report Done checkbox
-- Full roster signature sheet — all member names with checkboxes (attendance)
-- Point list signatures
+### Build Order
+1. Manual entry (build first)
+2. CAD email parsing via Edge Function (future)
+3. CAD API/webhook (future)
 
-### Three Future Integration Options
-1. **Manual entry** — officer creates incident in FireOps7 after the call (build first)
-2. **CAD email parsing** — Supabase Edge Function parses the CFS email to auto-create incident record (medium complexity)
-3. **CAD API/webhook** — real-time integration with dispatch CAD system (future)
-
-### Incident Data Model (preliminary)
-
+### Data Model
 ```
 incidents
-  ├── department_id
-  ├── incident_number (internal — e.g. WIN26-0013)
-  ├── cad_number (CAD system number — e.g. CFS2610160)
-  ├── incident_date, call_time, completed_time
-  ├── address, location_details
-  ├── incident_type (fire/rescue/ems/standby/mutual_aid/special/other)
+  ├── department_id, incident_number (internal), cad_number
+  ├── incident_date, call_time, completed_time, address
+  ├── incident_type (fire/rescue/standby/mutual_aid/special/other)
   ├── mutual_aid_direction (to/from) + mutual_aid_department
-  ├── disposition
-  ├── narrative / notes
-  ├── neris_reported (boolean)
-  └── created_by, created_at
+  ├── disposition, narrative, neris_reported (boolean)
+  └── created_by
 
-incident_times
-  ├── incident_id
-  └── paged, page_acknowledged, enroute, on_scene, leaving_scene, back_at_station
-      transport_depart, transport_arrived, finished_at_hospital (EMS — future)
+incident_times — paged, page_acknowledged, enroute, on_scene, leaving_scene, back_at_station
 
-incident_apparatus
-  ├── incident_id, apparatus_id
-  └── role (primary/support/staging)
+incident_apparatus — apparatus_id, role (primary/support/staging)
 
-incident_personnel (attendance — who responded)
-  ├── incident_id, personnel_id
-  ├── apparatus_id (which unit they rode)
-  ├── status (pending/verified/rejected)
-  └── verified_by, verified_at
+incident_personnel — personnel_id, apparatus_id, status (pending/verified/rejected)
 
-incident_fire_details (only for fire incidents)
-  ├── incident_id
-  ├── property_lost, estimated_dollar_loss
-  ├── cause_of_fire, vehicle_make, insurance_info
-  └── (NERIS-specific fields to be added as NERIS spec is built out)
+incident_fire_details — property_lost, dollar_loss, cause_of_fire, vehicle_make, insurance_info
 ```
-
-### Incident Attendance Rules
-- Same 12-hour self-report window as other attendance events
-- Officer/admin can log retroactively at any time
-- `requires_verification` defaults to true — same sneaky default as other events
-- Members see their own response history; dept aggregate stats on dashboard
-
-### NERIS Future Scope
-- Capture NERIS-required fields in the incident record as the spec is built out
-- Eventually allow incident export/submission to NERIS from within FireOps7
-- EMS reporting excluded for now
 
 ## Fire School — QR Scanning
 - Uses BarcodeDetector Web API, rear camera via getUserMedia
-- Scan → extracts bottle ID → calls handleCheck() directly (no page navigation)
-- QR standard: `https://fireops7.com/fire-school?scan=B-0001`
-- Plain text QR (B-0001) also supported
-- Note: Fire school IDs are intentionally generic (public, shared across depts)
-- Main app QR system is separate and uses human-readable dept-specific codes
+- Scan → extracts bottle ID → calls handleCheck() directly
+- Fire school IDs are generic (public, shared across depts) — separate from main app QR system
 
 ## Database Tables
 
@@ -525,13 +405,15 @@ incident_fire_details (only for fire incidents)
 - `items`, `item_categories`, `item_assets`, `item_location_standards`
 - `item_inspection_templates`, `item_inspection_template_steps`
 - `item_asset_inspection_logs`, `item_asset_inspection_log_steps`
+- `excuse_types`, `participation_requirements`
+- `event_series`, `event_instances`, `event_attendance`
 - `scba_bottles`, `scba_fill_logs`, `scba_maintenance_logs`, `scba_cylinder_specs`
 - `system_logs`
 
 ### DB Migrations Applied
-- `item_assets`: added `has_linked_asset boolean DEFAULT false`, `linked_item_type_id uuid REFERENCES items(id)`
-- `item_inspection_template_steps`: added `step_type text DEFAULT 'BOOLEAN'`, `linked_item_type_id uuid REFERENCES items(id)`
-- Template item_id moved: Weekly Airpack Inspection → Scott Air Pack
+- `item_assets`: added `has_linked_asset`, `linked_item_type_id`
+- `item_inspection_template_steps`: added `step_type`, `linked_item_type_id`
+- Attendance module: `excuse_types`, `participation_requirements`, `event_series`, `event_instances`, `event_attendance`
 
 ### Fire School (public, no auth)
 - `fire_school_bottles`, `fire_school_fill_logs`
@@ -552,16 +434,15 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 ```
 
 ## Next Steps (priority order)
-1. Test full inspection flow end-to-end (Winslow Fire — Engine 32)
-2. Add fireops7.com to Supabase auth allowed URLs
-3. Inspection schedule settings (daily/weekly/monthly per dept)
-4. Inspection history/log viewer
-5. QR code system — /scan route + QRScanner component + label generation
-6. Training module
-7. Attendance module
-8. Incident log module (start with manual entry, build toward CAD integration)
-9. `/scba` pages
-10. `/admin/logs` full log viewer
+1. **Add pending attendance verification queue to EventsClient** ← START HERE
+2. Test full attendance flow end-to-end (Winslow Fire)
+3. Inspection history/log viewer
+4. Training module
+5. Incident log module (manual entry first)
+6. QR code system
+7. `/scba` pages
+8. `/admin/logs` full log viewer
+9. Supabase auth allowed URLs for custom domain
 
 ## Dev Workflow
 - Start: `npm run dev` in C:\Users\zklei\Documents\FireOps7-Next
@@ -586,9 +467,5 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 
 ## Reference Documents
 - Winslow Run Sheet (Excel) — uploaded April 16, 2026
-  - Paper form used for all incident types: Fire, Rescue, Standby, Meeting, Training, Mutual Aid
-  - Contains: date, address, owner, incident type, time fields, units dispatched with personnel, fire-specific fields, NERIS checkbox, full member roster for attendance signatures
-- CAD CFS Report (PDF) — uploaded April 16, 2026
-  - Auto-generated by Dodge County 9-1-1 dispatch after each call
-  - Contains: CFS#, call taker, location, incident code, priority, disposition, timestamps, responders, unit activity log, IR/external agency numbers
+- CAD CFS Report (PDF) — uploaded April 16, 2026 (Dodge County 9-1-1)
   - Current workflow: received via email after call → manually transcribed into NERIS

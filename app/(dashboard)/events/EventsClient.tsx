@@ -11,6 +11,13 @@ interface AttendanceRecord {
   submitted_at: string
 }
 
+interface PendingSubmission {
+  id: string
+  personnel_id: string
+  name: string
+  submitted_at: string
+}
+
 interface Event {
   id: string
   series_id: string
@@ -26,6 +33,7 @@ interface Event {
   requires_verification: boolean
   my_attendance: AttendanceRecord | null
   pending_count: number
+  pending_submissions: PendingSubmission[]
 }
 
 interface Personnel {
@@ -68,6 +76,10 @@ function formatTime(timeStr: string | null) {
   return `${hour12}:${m} ${ampm}`
 }
 
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
 function isWindowOpen(event_date: string, start_time: string | null): boolean {
   const eventDateTime = new Date(`${event_date}T${start_time || '00:00'}`)
   const windowClose = new Date(eventDateTime.getTime() + 12 * 60 * 60 * 1000)
@@ -97,9 +109,12 @@ export default function EventsClient({
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming')
   const [typeFilter, setTypeFilter] = useState<string>('all')
 
+  // Rejection state: attendanceId -> reason string being typed
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
+  const [rejectionReason, setRejectionReason] = useState('')
+
   function reset() { setError(null); setSuccess(null) }
 
-  // Split events
   const today = new Date().toISOString().split('T')[0]
   const filteredEvents = events.filter(e => {
     if (typeFilter !== 'all' && e.event_type !== typeFilter) return false
@@ -124,6 +139,35 @@ export default function EventsClient({
     const result = await logAttendance(event.id, Array.from(bulkSelected))
     if (result?.error) setError(result.error)
     else { setSuccess(`Logged attendance for ${bulkSelected.size} members.`); setBulkSelected(new Set()); router.refresh() }
+    setLoading(false)
+  }
+
+  async function handleApprove(attendance_id: string) {
+    reset()
+    setLoading(true)
+    const result = await verifyAttendance(attendance_id, 'verified')
+    if (result?.error) setError(result.error)
+    else { setSuccess('Attendance approved.'); router.refresh() }
+    setLoading(false)
+  }
+
+  async function handleReject(attendance_id: string) {
+    reset()
+    setLoading(true)
+    const result = await verifyAttendance(attendance_id, 'rejected', rejectionReason || undefined)
+    if (result?.error) setError(result.error)
+    else { setSuccess('Attendance rejected.'); setRejectingId(null); setRejectionReason(''); router.refresh() }
+    setLoading(false)
+  }
+
+  async function handleApproveAll(submissions: PendingSubmission[]) {
+    reset()
+    setLoading(true)
+    for (const s of submissions) {
+      await verifyAttendance(s.id, 'verified')
+    }
+    setSuccess(`Approved ${submissions.length} submissions.`)
+    router.refresh()
     setLoading(false)
   }
 
@@ -206,6 +250,7 @@ export default function EventsClient({
             const canSelfLog = !past || windowOpen
             const cancelled = event.status === 'cancelled'
             const allIds = personnelList.map(p => p.id)
+            const hasPending = event.pending_submissions.length > 0
 
             return (
               <div key={event.id} className={`rounded-xl bg-white shadow-sm border overflow-hidden ${cancelled ? 'border-zinc-100 opacity-60' : 'border-zinc-200'}`}>
@@ -240,7 +285,7 @@ export default function EventsClient({
                       <div className="flex flex-wrap gap-3 text-xs text-zinc-500">
                         {event.start_time && <span>🕐 {formatTime(event.start_time)}</span>}
                         {event.location && <span>📍 {event.location}</span>}
-                        {isOfficerOrAbove && event.pending_count > 0 && (
+                        {isOfficerOrAbove && hasPending && (
                           <span className="text-yellow-600 font-semibold">⏳ {event.pending_count} pending</span>
                         )}
                       </div>
@@ -249,14 +294,11 @@ export default function EventsClient({
 
                     {/* Right side actions */}
                     <div className="flex flex-col items-end gap-2 shrink-0">
-                      {/* My attendance status */}
                       {event.my_attendance && (
                         <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${STATUS_COLORS[event.my_attendance.status]}`}>
                           {event.my_attendance.status.charAt(0).toUpperCase() + event.my_attendance.status.slice(1)}
                         </span>
                       )}
-
-                      {/* Self-log button */}
                       {!cancelled && !event.my_attendance && canSelfLog && (
                         <button
                           onClick={() => handleSelfLog(event)}
@@ -265,22 +307,16 @@ export default function EventsClient({
                           Log Attendance
                         </button>
                       )}
-
-                      {/* Past + window closed for members */}
                       {!cancelled && !event.my_attendance && past && !windowOpen && !isOfficerOrAbove && (
                         <span className="text-xs text-zinc-400">Window closed</span>
                       )}
-
-                      {/* Expand for officers */}
                       {!cancelled && (
                         <button
-                          onClick={() => { setExpandedId(isExpanded ? null : event.id); setBulkSelected(new Set()); reset() }}
+                          onClick={() => { setExpandedId(isExpanded ? null : event.id); setBulkSelected(new Set()); setRejectingId(null); setRejectionReason(''); reset() }}
                           className="text-xs font-semibold text-blue-600 hover:text-blue-800">
                           {isExpanded ? 'Hide' : isOfficerOrAbove ? 'Manage' : 'Details'}
                         </button>
                       )}
-
-                      {/* Cancel */}
                       {isOfficerOrAbove && !cancelled && (
                         <button onClick={() => handleCancel(event.id)} className="text-xs text-zinc-400 hover:text-red-600">
                           Cancel
@@ -292,21 +328,92 @@ export default function EventsClient({
 
                 {/* Expanded Panel */}
                 {isExpanded && (
-                  <div className="border-t border-zinc-100 bg-zinc-50 px-5 py-4">
+                  <div className="border-t border-zinc-100 bg-zinc-50 px-5 py-4 flex flex-col gap-5">
 
                     {/* Past event warning */}
                     {past && (
-                      <div className="mb-3 rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-2 text-xs text-yellow-700">
+                      <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-2 text-xs text-yellow-700">
                         ⚠️ This event occurred on {formatDate(event.event_date)}.
-                        {event.pending_count > 0 && ` Attendance has already been logged for ${event.pending_count} members.`}
+                        {hasPending && ` Attendance has been logged for ${event.pending_count} members.`}
                         {' '}You are modifying an existing record.
                       </div>
                     )}
 
                     {isOfficerOrAbove ? (
-                      <div>
-                        {/* Bulk attendance logging */}
-                        <div className="mb-4">
+                      <>
+                        {/* ── PENDING VERIFICATION QUEUE ───────────────── */}
+                        {hasPending && (
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider">
+                                Pending Verification ({event.pending_submissions.length})
+                              </p>
+                              <button
+                                onClick={() => handleApproveAll(event.pending_submissions)}
+                                disabled={loading}
+                                className="text-xs font-semibold text-green-600 hover:text-green-800 disabled:opacity-50">
+                                Approve All
+                              </button>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              {event.pending_submissions.map(sub => (
+                                <div key={sub.id} className="rounded-lg bg-white border border-zinc-200 overflow-hidden">
+                                  <div className="flex items-center px-4 py-3 gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-semibold text-zinc-900">{sub.name}</p>
+                                      <p className="text-xs text-zinc-400">Submitted {formatDateTime(sub.submitted_at)}</p>
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                      <button
+                                        onClick={() => handleApprove(sub.id)}
+                                        disabled={loading}
+                                        className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50">
+                                        Approve
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setRejectingId(rejectingId === sub.id ? null : sub.id)
+                                          setRejectionReason('')
+                                        }}
+                                        disabled={loading}
+                                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
+                                        Reject
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Rejection reason input */}
+                                  {rejectingId === sub.id && (
+                                    <div className="px-4 pb-3 border-t border-zinc-100 pt-3 flex gap-2">
+                                      <input
+                                        type="text"
+                                        value={rejectionReason}
+                                        onChange={e => setRejectionReason(e.target.value)}
+                                        placeholder="Reason (optional)"
+                                        className="flex-1 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                                        autoFocus
+                                      />
+                                      <button
+                                        onClick={() => handleReject(sub.id)}
+                                        disabled={loading}
+                                        className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                                        Confirm
+                                      </button>
+                                      <button
+                                        onClick={() => { setRejectingId(null); setRejectionReason('') }}
+                                        className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50">
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── BULK LOG ATTENDANCE ───────────────────────── */}
+                        <div>
                           <div className="flex items-center justify-between mb-2">
                             <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider">Log Attendance</p>
                             <button
@@ -335,7 +442,7 @@ export default function EventsClient({
                             {loading ? 'Logging...' : `Log ${bulkSelected.size > 0 ? bulkSelected.size : ''} ${bulkSelected.size === 1 ? 'Member' : 'Members'}`}
                           </button>
                         </div>
-                      </div>
+                      </>
                     ) : (
                       <div>
                         {event.notes && <p className="text-sm text-zinc-600">{event.notes}</p>}
