@@ -41,6 +41,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/stations', label: 'Stations' },
     { href: '/equipment', label: 'Equipment' },
     { href: '/inspections', label: 'Inspections' },
+    { href: '/events', label: 'Events' },
     { href: '/scba', label: 'SCBA' },
   ]
 
@@ -52,6 +53,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/dept-admin/personnel', label: 'Manage Personnel' },
     { href: '/dept-admin/compartments', label: 'Compartments' },
     { href: '/dept-admin/items', label: 'Items' },
+    { href: '/dept-admin/attendance', label: 'Attendance Settings' },
   ] : []
 
   const adminLabel = isSysAdmin ? 'System Admin' : 'Dept Admin'

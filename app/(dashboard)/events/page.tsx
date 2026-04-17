@@ -1,0 +1,123 @@
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { redirect } from 'next/navigation'
+import EventsClient from './EventsClient'
+
+export default async function EventsPage() {
+  const supabase = await createClient()
+  const adminClient = createAdminClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: meList } = await adminClient.from('personnel').select('id, first_name, last_name, is_sys_admin').eq('auth_user_id', user.id)
+  const me = meList?.[0]
+  if (!me) redirect('/login')
+
+  const { data: myDeptList } = await adminClient
+    .from('department_personnel')
+    .select('department_id, system_role')
+    .eq('personnel_id', me.id)
+    .eq('active', true)
+  const myDept = myDeptList?.[0]
+  if (!myDept) redirect('/dashboard')
+
+  const isOfficerOrAbove = myDept.system_role === 'admin' || myDept.system_role === 'officer'
+  const isAdmin = myDept.system_role === 'admin'
+  const department_id = myDept.department_id
+
+  // Fetch upcoming instances (next 60 days) + recent past (last 30 days)
+  const past30 = new Date()
+  past30.setDate(past30.getDate() - 30)
+  const future60 = new Date()
+  future60.setDate(future60.getDate() + 60)
+
+  const { data: instances } = await adminClient
+    .from('event_instances')
+    .select('id, series_id, event_date, start_time, location, status, notes, requires_verification')
+    .gte('event_date', past30.toISOString().split('T')[0])
+    .lte('event_date', future60.toISOString().split('T')[0])
+    .order('event_date', { ascending: true })
+
+  // Fetch series info for these instances
+  const seriesIds = [...new Set((instances ?? []).map(i => i.series_id))]
+  const { data: seriesData } = seriesIds.length > 0
+    ? await adminClient
+        .from('event_series')
+        .select('id, title, event_type, department_id, recurrence_type, description')
+        .in('id', seriesIds)
+        .eq('department_id', department_id)
+    : { data: [] }
+
+  // Filter to only this department's instances
+  const deptSeriesIds = new Set((seriesData ?? []).map(s => s.id))
+  const deptInstances = (instances ?? []).filter(i => deptSeriesIds.has(i.series_id))
+  const seriesMap = Object.fromEntries((seriesData ?? []).map(s => [s.id, s]))
+
+  // Fetch my attendance for these instances
+  const instanceIds = deptInstances.map(i => i.id)
+  const { data: myAttendance } = instanceIds.length > 0
+    ? await adminClient
+        .from('event_attendance')
+        .select('id, instance_id, status, submitted_at')
+        .eq('personnel_id', me.id)
+        .in('instance_id', instanceIds)
+    : { data: [] }
+
+  const myAttendanceMap = Object.fromEntries((myAttendance ?? []).map(a => [a.instance_id, a]))
+
+  // For officers — fetch pending attendance counts
+  let pendingCounts: Record<string, number> = {}
+  if (isOfficerOrAbove && instanceIds.length > 0) {
+    const { data: pending } = await adminClient
+      .from('event_attendance')
+      .select('instance_id')
+      .in('instance_id', instanceIds)
+      .eq('status', 'pending')
+    ;(pending ?? []).forEach(p => {
+      pendingCounts[p.instance_id] = (pendingCounts[p.instance_id] ?? 0) + 1
+    })
+  }
+
+  const events = deptInstances.map(i => ({
+    id: i.id,
+    series_id: i.series_id,
+    title: seriesMap[i.series_id]?.title ?? '—',
+    event_type: seriesMap[i.series_id]?.event_type ?? 'training',
+    description: seriesMap[i.series_id]?.description ?? null,
+    recurrence_type: seriesMap[i.series_id]?.recurrence_type ?? 'one_time',
+    event_date: i.event_date,
+    start_time: i.start_time,
+    location: i.location,
+    status: i.status,
+    notes: i.notes,
+    requires_verification: i.requires_verification,
+    my_attendance: myAttendanceMap[i.id] ?? null,
+    pending_count: pendingCounts[i.id] ?? 0,
+  }))
+
+  // Fetch all personnel for bulk logging (officers only)
+  const { data: personnel } = isOfficerOrAbove
+    ? await adminClient
+        .from('department_personnel')
+        .select('personnel_id, personnel(id, first_name, last_name)')
+        .eq('department_id', department_id)
+        .eq('active', true)
+    : { data: [] }
+
+  const personnelList = (personnel ?? []).map(p => ({
+    id: (p.personnel as any)?.id ?? p.personnel_id,
+    name: [(p.personnel as any)?.first_name, (p.personnel as any)?.last_name].filter(Boolean).join(' '),
+  })).sort((a, b) => a.name.localeCompare(b.name))
+
+  return (
+    <EventsClient
+      events={events}
+      personnelList={personnelList}
+      myPersonnelId={me.id}
+      myName={`${me.first_name} ${me.last_name}`}
+      isOfficerOrAbove={isOfficerOrAbove}
+      isAdmin={isAdmin}
+    />
+  )
+}
