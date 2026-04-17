@@ -69,7 +69,6 @@ export async function createCourseUnit(formData: FormData) {
   if (!ctx?.isAdmin) return { error: 'Admins only.' }
   const adminClient = createAdminClient()
   const cert_id = formData.get('certification_type_id') as string
-  // Get next sort order
   const { data: existing } = await adminClient.from('certification_course_units').select('sort_order').eq('certification_type_id', cert_id).order('sort_order', { ascending: false }).limit(1)
   const sort_order = (existing?.[0]?.sort_order ?? 0) + 1
   const { error } = await adminClient.from('certification_course_units').insert({
@@ -129,7 +128,7 @@ export async function updateEnrollmentStatus(enrollment_id: string, status: stri
   return { success: true }
 }
 
-// ─── ADMIN: Verify/Reject Progress Submissions ────────────────────────────────
+// ─── ADMIN/OFFICER: Verify/Reject Course Progress ─────────────────────────────
 export async function verifyProgress(progress_id: string, action: 'verified' | 'rejected', rejection_reason?: string) {
   const ctx = await getContext()
   if (!ctx?.isOfficerOrAbove) return { error: 'Officers and admins only.' }
@@ -145,12 +144,11 @@ export async function verifyProgress(progress_id: string, action: 'verified' | '
 
   if (error) { await logError(error.message, '/dept-admin/training'); return { error: error.message } }
 
-  // If all units for this enrollment are now verified, check completion
   if (action === 'verified') {
     const { data: prog } = await adminClient.from('member_course_progress').select('enrollment_id').eq('id', progress_id)
     const enrollmentId = prog?.[0]?.enrollment_id
     if (enrollmentId) {
-      const { data: enrollment } = await adminClient.from('course_enrollments').select('personnel_id, certification_type_id, department_id').eq('id', enrollmentId)
+      const { data: enrollment } = await adminClient.from('course_enrollments').select('certification_type_id').eq('id', enrollmentId)
       const { data: allUnits } = await adminClient.from('certification_course_units').select('id').eq('certification_type_id', enrollment?.[0]?.certification_type_id ?? '').eq('active', true)
       const { data: allProgress } = await adminClient.from('member_course_progress').select('status').eq('enrollment_id', enrollmentId)
       const verifiedCount = (allProgress ?? []).filter(p => p.status === 'verified').length
@@ -160,6 +158,24 @@ export async function verifyProgress(progress_id: string, action: 'verified' | '
     }
   }
 
+  revalidatePath('/dept-admin/training')
+  revalidatePath('/training')
+  return { success: true }
+}
+
+// ─── ADMIN/OFFICER: Verify/Reject Training Event Attendance ──────────────────
+export async function verifyTrainingAttendance(attendance_id: string, action: 'verified' | 'rejected', rejection_reason?: string) {
+  const ctx = await getContext()
+  if (!ctx?.isOfficerOrAbove) return { error: 'Officers and admins only.' }
+  const adminClient = createAdminClient()
+  const now = new Date().toISOString()
+  const { error } = await adminClient.from('training_event_attendance').update({
+    status: action,
+    verified_by: ctx.me.id,
+    verified_at: now,
+    rejection_reason: action === 'rejected' ? (rejection_reason || null) : null,
+  }).eq('id', attendance_id)
+  if (error) { await logError(error.message, '/dept-admin/training'); return { error: error.message } }
   revalidatePath('/dept-admin/training')
   revalidatePath('/training')
   return { success: true }
@@ -190,41 +206,102 @@ export async function createDirectCertification(formData: FormData) {
   return { success: true }
 }
 
-// ─── ADMIN: Training Events ───────────────────────────────────────────────────
+// ─── ADMIN/OFFICER: Create Training Event ─────────────────────────────────────
 export async function createTrainingEvent(formData: FormData) {
   const ctx = await getContext()
   if (!ctx?.isOfficerOrAbove) return { error: 'Officers and admins only.' }
   const adminClient = createAdminClient()
+  const requires_verification = formData.get('requires_verification') !== 'false'
   const { data: evt, error } = await adminClient.from('training_events').insert({
     department_id: ctx.department_id,
     event_date: formData.get('event_date') as string,
+    start_time: (formData.get('start_time') as string) || null,
     topic: formData.get('topic') as string,
     description: (formData.get('description') as string) || null,
     hours: parseFloat(formData.get('hours') as string) || null,
     location: (formData.get('location') as string) || null,
+    requires_verification,
     created_by: ctx.me.id,
   }).select('id').single()
   if (error) { await logError(error.message, '/dept-admin/training'); return { error: error.message } }
   revalidatePath('/dept-admin/training')
+  revalidatePath('/training')
   return { success: true, event_id: evt?.id }
 }
 
+// ─── ADMIN/OFFICER: Bulk Log Training Attendance ──────────────────────────────
 export async function logTrainingAttendance(event_id: string, personnel_ids: string[]) {
   const ctx = await getContext()
   if (!ctx?.isOfficerOrAbove) return { error: 'Officers and admins only.' }
   const adminClient = createAdminClient()
+
+  // Get event requires_verification
+  const { data: evtList } = await adminClient.from('training_events').select('requires_verification').eq('id', event_id)
+  const requiresVerification = evtList?.[0]?.requires_verification ?? true
+  const now = new Date().toISOString()
+
   const records = personnel_ids.map(pid => ({
     event_id,
     personnel_id: pid,
     logged_by: ctx.me.id,
+    submitted_by: ctx.me.id,
+    submitted_at: now,
+    status: 'verified' as const, // officer bulk log = auto-verified
+    verified_by: ctx.me.id,
+    verified_at: now,
   }))
   const { error } = await adminClient.from('training_event_attendance').upsert(records, { onConflict: 'event_id,personnel_id', ignoreDuplicates: true })
   if (error) { await logError(error.message, '/dept-admin/training'); return { error: error.message } }
   revalidatePath('/dept-admin/training')
+  revalidatePath('/training')
   return { success: true }
 }
 
-// ─── MEMBER: Submit Unit Progress ─────────────────────────────────────────────
+// ─── MEMBER: Self-Report Training Event Attendance ────────────────────────────
+export async function selfReportTrainingAttendance(event_id: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const adminClient = createAdminClient()
+
+  // Get event details for window check
+  const { data: evtList } = await adminClient
+    .from('training_events')
+    .select('event_date, start_time, requires_verification, department_id')
+    .eq('id', event_id)
+  const evt = evtList?.[0]
+  if (!evt) return { error: 'Event not found.' }
+
+  // Verify this event belongs to member's department
+  if (evt.department_id !== ctx.department_id) return { error: 'Event not found.' }
+
+  // 12-hour self-report window check
+  if (!ctx.isOfficerOrAbove) {
+    const eventDateTime = new Date(`${evt.event_date}T${evt.start_time || '00:00'}`)
+    const windowClose = new Date(eventDateTime.getTime() + 12 * 60 * 60 * 1000)
+    if (new Date() > windowClose) {
+      return { error: 'Self-report window has closed (12 hours after event start).' }
+    }
+  }
+
+  const now = new Date().toISOString()
+  const status = evt.requires_verification ? 'pending' : 'verified'
+
+  const { error } = await adminClient.from('training_event_attendance').upsert({
+    event_id,
+    personnel_id: ctx.me.id,
+    logged_by: ctx.me.id,
+    submitted_by: ctx.me.id,
+    submitted_at: now,
+    status,
+    ...(status === 'verified' ? { verified_by: ctx.me.id, verified_at: now } : {}),
+  }, { onConflict: 'event_id,personnel_id', ignoreDuplicates: false })
+
+  if (error) { await logError(error.message, '/training'); return { error: error.message } }
+  revalidatePath('/training')
+  return { success: true }
+}
+
+// ─── MEMBER: Submit Course Unit Progress ──────────────────────────────────────
 export async function submitUnitProgress(formData: FormData) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
@@ -232,7 +309,6 @@ export async function submitUnitProgress(formData: FormData) {
   const enrollment_id = formData.get('enrollment_id') as string
   const unit_id = formData.get('unit_id') as string
 
-  // Verify this member owns this enrollment
   const { data: enrollment } = await adminClient.from('course_enrollments').select('personnel_id, status').eq('id', enrollment_id)
   if (enrollment?.[0]?.personnel_id !== ctx.me.id) return { error: 'Not your enrollment.' }
   if (enrollment?.[0]?.status !== 'active') return { error: 'Enrollment is not active.' }

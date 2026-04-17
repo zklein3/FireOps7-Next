@@ -6,7 +6,7 @@ import {
   createCertificationType, updateCertificationType,
   createCourseUnit, updateCourseUnit,
   enrollMember, updateEnrollmentStatus,
-  verifyProgress,
+  verifyProgress, verifyTrainingAttendance,
   createTrainingEvent, logTrainingAttendance,
 } from '@/app/actions/training'
 
@@ -20,7 +20,13 @@ interface Unit { id: string; certification_type_id: string; unit_title: string; 
 interface Enrollment { id: string; personnel_id: string; certification_type_id: string; status: string; enrolled_at: string; name: string }
 interface PendingProgress { id: string; enrollment_id: string; unit_id: string; personnel_id: string; hours_submitted: number | null; completed_date: string | null; notes: string | null; status: string; submitted_at: string; name: string }
 interface Personnel { id: string; name: string }
-interface TrainingEvent { id: string; event_date: string; topic: string; hours: number | null; location: string | null; description: string | null; attendance_count: number }
+interface PendingAttendance { id: string; personnel_id: string; name: string; submitted_at: string }
+interface TrainingEvent {
+  id: string; event_date: string; start_time: string | null; topic: string
+  hours: number | null; location: string | null; description: string | null
+  requires_verification: boolean; verified_count: number
+  pending_attendance: PendingAttendance[]
+}
 
 export default function TrainingAdminClient({
   certTypes, units, enrollments, pendingProgress, allPersonnel, trainingEvents, departmentId,
@@ -46,14 +52,18 @@ export default function TrainingAdminClient({
 
   // Enrollment state
   const [showEnrollForm, setShowEnrollForm] = useState(false)
-  const [enrollCertId, setEnrollCertId] = useState('')
 
-  // Reject state
+  // Reject state — course progress
   const [rejectingProgressId, setRejectingProgressId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
 
+  // Reject state — training attendance
+  const [rejectingAttendanceId, setRejectingAttendanceId] = useState<string | null>(null)
+  const [rejectAttendanceReason, setRejectAttendanceReason] = useState('')
+
   // Training events state
   const [showEventForm, setShowEventForm] = useState(false)
+  const [requiresVerification, setRequiresVerification] = useState(true)
   const [logAttendanceEventId, setLogAttendanceEventId] = useState<string | null>(null)
   const [attendanceSelected, setAttendanceSelected] = useState<Set<string>>(new Set())
 
@@ -83,6 +93,7 @@ export default function TrainingAdminClient({
   }, {})
 
   const totalPending = pendingProgress.length
+  const totalPendingAttendance = trainingEvents.reduce((sum, e) => sum + e.pending_attendance.length, 0)
 
   return (
     <div className="max-w-2xl">
@@ -100,7 +111,7 @@ export default function TrainingAdminClient({
           { key: 'certs', label: 'Cert Types' },
           { key: 'enrollments', label: 'Enrollments' },
           { key: 'pending', label: `Pending${totalPending > 0 ? ` (${totalPending})` : ''}` },
-          { key: 'events', label: 'Training Events' },
+          { key: 'events', label: `Events${totalPendingAttendance > 0 ? ` (${totalPendingAttendance})` : ''}` },
         ] as { key: Tab; label: string }[]).map(t => (
           <button key={t.key} onClick={() => { setTab(t.key); reset() }}
             className={`flex-1 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${tab === t.key ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`}>
@@ -109,7 +120,7 @@ export default function TrainingAdminClient({
         ))}
       </div>
 
-      {/* ── CERT TYPES TAB ─────────────────────────────────────────────────── */}
+      {/* ── CERT TYPES ─────────────────────────────────────────────────────── */}
       {tab === 'certs' && (
         <div>
           <div className="flex justify-end mb-4">
@@ -203,7 +214,6 @@ export default function TrainingAdminClient({
                             </div>
                           </div>
 
-                          {/* Units expansion */}
                           {isExpanded && cert.is_structured_course && (
                             <div className="border-t border-zinc-100 bg-zinc-50 px-5 py-4">
                               <div className="flex items-center justify-between mb-3">
@@ -212,7 +222,6 @@ export default function TrainingAdminClient({
                                   {addingUnitToCertId === cert.id ? 'Cancel' : '+ Add Unit'}
                                 </button>
                               </div>
-
                               {addingUnitToCertId === cert.id && (
                                 <form action={async (fd) => { const r = await wrap(() => createCourseUnit(fd)); if (!r?.error) setAddingUnitToCertId(null) }} className="mb-3 flex flex-col gap-2 bg-white rounded-lg border border-zinc-200 p-3">
                                   <input type="hidden" name="certification_type_id" value={cert.id} />
@@ -224,7 +233,6 @@ export default function TrainingAdminClient({
                                   </div>
                                 </form>
                               )}
-
                               {certUnits.length === 0 ? <p className="text-xs text-zinc-400">No units yet.</p> : (
                                 <div className="flex flex-col gap-2">
                                   {[...certUnits].sort((a, b) => a.sort_order - b.sort_order).map((unit, idx) => (
@@ -271,7 +279,7 @@ export default function TrainingAdminClient({
         </div>
       )}
 
-      {/* ── ENROLLMENTS TAB ────────────────────────────────────────────────── */}
+      {/* ── ENROLLMENTS ─────────────────────────────────────────────────────── */}
       {tab === 'enrollments' && (
         <div>
           <div className="flex justify-end mb-4">
@@ -280,7 +288,6 @@ export default function TrainingAdminClient({
               {showEnrollForm ? 'Cancel' : '+ Enroll Member'}
             </button>
           </div>
-
           {showEnrollForm && (
             <div className="mb-5 rounded-xl bg-white p-5 shadow-sm border border-zinc-200">
               <h2 className="text-sm font-semibold text-zinc-700 mb-4">Enroll Member in Course</h2>
@@ -294,7 +301,7 @@ export default function TrainingAdminClient({
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-zinc-600">Certification Course *</label>
-                  <select name="certification_type_id" required value={enrollCertId} onChange={e => setEnrollCertId(e.target.value)} className={inputCls}>
+                  <select name="certification_type_id" required className={inputCls}>
                     <option value="">Select course...</option>
                     {certTypes.filter(c => c.active).map(c => <option key={c.id} value={c.id}>{c.cert_name}</option>)}
                   </select>
@@ -303,7 +310,6 @@ export default function TrainingAdminClient({
               </form>
             </div>
           )}
-
           <div className="rounded-xl bg-white shadow-sm border border-zinc-200 overflow-hidden">
             {enrollments.length === 0 ? (
               <div className="px-6 py-12 text-center text-sm text-zinc-400">No enrollments yet.</div>
@@ -312,13 +318,13 @@ export default function TrainingAdminClient({
                 {enrollments.map(en => {
                   const cert = certTypes.find(c => c.id === en.certification_type_id)
                   const certUnits = unitsByCert[en.certification_type_id] ?? []
-                  const progress = pendingProgress.filter(p => p.enrollment_id === en.id)
+                  const pending = pendingProgress.filter(p => p.enrollment_id === en.id)
                   return (
                     <div key={en.id} className="flex items-center px-5 py-4 gap-3">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-zinc-900">{en.name}</p>
                         <p className="text-xs text-zinc-400">{cert?.cert_name ?? '—'}</p>
-                        {certUnits.length > 0 && <p className="text-xs text-zinc-400">{progress.length} pending / {certUnits.filter(u => u.active).length} units</p>}
+                        {certUnits.length > 0 && <p className="text-xs text-zinc-400">{pending.length} pending / {certUnits.filter(u => u.active).length} units</p>}
                       </div>
                       <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${en.status === 'active' ? 'bg-green-100 text-green-700' : en.status === 'completed' ? 'bg-blue-100 text-blue-700' : 'bg-zinc-100 text-zinc-500'}`}>
                         {en.status.charAt(0).toUpperCase() + en.status.slice(1)}
@@ -335,7 +341,7 @@ export default function TrainingAdminClient({
         </div>
       )}
 
-      {/* ── PENDING TAB ─────────────────────────────────────────────────────── */}
+      {/* ── PENDING COURSE PROGRESS ─────────────────────────────────────────── */}
       {tab === 'pending' && (
         <div>
           {pendingProgress.length === 0 ? (
@@ -348,7 +354,7 @@ export default function TrainingAdminClient({
                   <div key={certId} className="rounded-xl bg-white shadow-sm border border-zinc-200 overflow-hidden">
                     <div className="px-5 py-3 bg-zinc-50 border-b border-zinc-200">
                       <p className="text-sm font-semibold text-zinc-900">{cert?.cert_name ?? '—'}</p>
-                      <p className="text-xs text-zinc-400">{submissions.length} pending submission{submissions.length !== 1 ? 's' : ''}</p>
+                      <p className="text-xs text-zinc-400">{submissions.length} pending</p>
                     </div>
                     <div className="divide-y divide-zinc-100">
                       {submissions.map(sub => {
@@ -359,20 +365,15 @@ export default function TrainingAdminClient({
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-semibold text-zinc-900">{sub.name}</p>
                                 <p className="text-xs text-zinc-600 mt-0.5">Unit: {unit?.unit_title ?? '—'}</p>
-                                {sub.hours_submitted && <p className="text-xs text-zinc-400">{sub.hours_submitted}h submitted</p>}
+                                {sub.hours_submitted && <p className="text-xs text-zinc-400">{sub.hours_submitted}h</p>}
                                 {sub.completed_date && <p className="text-xs text-zinc-400">Completed: {sub.completed_date}</p>}
                                 {sub.notes && <p className="text-xs text-zinc-400 italic">{sub.notes}</p>}
-                                <p className="text-xs text-zinc-300">Submitted {new Date(sub.submitted_at).toLocaleDateString()}</p>
                               </div>
                               <div className="flex gap-2 shrink-0">
                                 <button onClick={() => wrap(() => verifyProgress(sub.id, 'verified'))} disabled={loading}
-                                  className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50">
-                                  Approve
-                                </button>
+                                  className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50">Approve</button>
                                 <button onClick={() => { setRejectingProgressId(rejectingProgressId === sub.id ? null : sub.id); setRejectReason('') }} disabled={loading}
-                                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
-                                  Reject
-                                </button>
+                                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">Reject</button>
                               </div>
                             </div>
                             {rejectingProgressId === sub.id && (
@@ -396,7 +397,7 @@ export default function TrainingAdminClient({
         </div>
       )}
 
-      {/* ── TRAINING EVENTS TAB ─────────────────────────────────────────────── */}
+      {/* ── TRAINING EVENTS ─────────────────────────────────────────────────── */}
       {tab === 'events' && (
         <div>
           <div className="flex justify-end mb-4">
@@ -409,16 +410,24 @@ export default function TrainingAdminClient({
           {showEventForm && (
             <div className="mb-5 rounded-xl bg-white p-5 shadow-sm border border-zinc-200">
               <h2 className="text-sm font-semibold text-zinc-700 mb-4">New Training Event</h2>
-              <form action={async (fd) => { const r = await wrap(() => createTrainingEvent(fd)); if (!r?.error) setShowEventForm(false) }} className="flex flex-col gap-3">
+              <form action={async (fd) => { fd.set('requires_verification', requiresVerification ? 'true' : 'false'); const r = await wrap(() => createTrainingEvent(fd)); if (!r?.error) setShowEventForm(false) }} className="flex flex-col gap-3">
                 <div className="flex gap-3">
                   <div className="flex-1"><label className="mb-1 block text-xs font-medium text-zinc-600">Topic *</label><input name="topic" required className={inputCls} placeholder="Airway Management" /></div>
                   <div className="w-36"><label className="mb-1 block text-xs font-medium text-zinc-600">Date *</label><input name="event_date" type="date" required className={inputCls} /></div>
                 </div>
                 <div className="flex gap-3">
                   <div className="flex-1"><label className="mb-1 block text-xs font-medium text-zinc-600">Location</label><input name="location" className={inputCls} placeholder="Station 1" /></div>
-                  <div className="w-24"><label className="mb-1 block text-xs font-medium text-zinc-600">Hours</label><input name="hours" type="number" step="0.5" min="0" className={inputCls} placeholder="2" /></div>
+                  <div className="w-28"><label className="mb-1 block text-xs font-medium text-zinc-600">Start Time</label><input name="start_time" type="time" className={inputCls} /></div>
+                  <div className="w-20"><label className="mb-1 block text-xs font-medium text-zinc-600">Hours</label><input name="hours" type="number" step="0.5" min="0" className={inputCls} placeholder="2" /></div>
                 </div>
-                <div><label className="mb-1 block text-xs font-medium text-zinc-600">Description</label><input name="description" className={inputCls} placeholder="Optional notes" /></div>
+                <input name="description" className={inputCls} placeholder="Description (optional)" />
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" checked={requiresVerification} onChange={e => setRequiresVerification(e.target.checked)} className={`mt-0.5 ${checkCls}`} />
+                  <div>
+                    <p className="text-sm font-medium text-zinc-800">Require attendance verification</p>
+                    <p className="text-xs text-zinc-400">When checked, member self-reported attendance must be approved by an officer.</p>
+                  </div>
+                </label>
                 <button type="submit" disabled={loading} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">{loading ? '...' : 'Create Event'}</button>
               </form>
             </div>
@@ -426,7 +435,7 @@ export default function TrainingAdminClient({
 
           <div className="rounded-xl bg-white shadow-sm border border-zinc-200 overflow-hidden">
             {trainingEvents.length === 0 ? (
-              <div className="px-6 py-12 text-center text-sm text-zinc-400">No training events yet.</div>
+              <div className="px-6 py-12 text-center text-sm text-zinc-400">No training events in the past 30 days or upcoming 60 days.</div>
             ) : (
               <div className="divide-y divide-zinc-100">
                 {trainingEvents.map(evt => (
@@ -438,38 +447,81 @@ export default function TrainingAdminClient({
                           <span>{new Date(evt.event_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                           {evt.location && <span>📍 {evt.location}</span>}
                           {evt.hours && <span>{evt.hours}h</span>}
-                          <span>{evt.attendance_count} attended</span>
+                          <span>{evt.verified_count} verified</span>
+                          {evt.pending_attendance.length > 0 && (
+                            <span className="text-yellow-600 font-semibold">⏳ {evt.pending_attendance.length} pending</span>
+                          )}
                         </div>
                       </div>
                       <button onClick={() => { setLogAttendanceEventId(logAttendanceEventId === evt.id ? null : evt.id); setAttendanceSelected(new Set()) }}
                         className="text-xs font-semibold text-blue-600 hover:text-blue-800 shrink-0">
-                        {logAttendanceEventId === evt.id ? 'Hide' : 'Log Attendance'}
+                        {logAttendanceEventId === evt.id ? 'Hide' : 'Manage'}
                       </button>
                     </div>
 
                     {logAttendanceEventId === evt.id && (
-                      <div className="border-t border-zinc-100 bg-zinc-50 px-5 py-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider">Select Members</p>
-                          <button onClick={() => setAttendanceSelected(prev => prev.size === allPersonnel.length ? new Set() : new Set(allPersonnel.map(p => p.id)))}
-                            className="text-xs text-blue-600 font-semibold hover:text-blue-800">
-                            {attendanceSelected.size === allPersonnel.length ? 'Deselect All' : 'Select All'}
+                      <div className="border-t border-zinc-100 bg-zinc-50 px-5 py-4 flex flex-col gap-4">
+
+                        {/* Pending self-reports */}
+                        {evt.pending_attendance.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-2">
+                              Pending Self-Reports ({evt.pending_attendance.length})
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              {evt.pending_attendance.map(sub => (
+                                <div key={sub.id} className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
+                                  <div className="flex items-center px-4 py-3 gap-3">
+                                    <div className="flex-1">
+                                      <p className="text-sm font-semibold text-zinc-900">{sub.name}</p>
+                                      <p className="text-xs text-zinc-400">Submitted {new Date(sub.submitted_at).toLocaleDateString()}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button onClick={() => wrap(() => verifyTrainingAttendance(sub.id, 'verified'))} disabled={loading}
+                                        className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50">Approve</button>
+                                      <button onClick={() => { setRejectingAttendanceId(rejectingAttendanceId === sub.id ? null : sub.id); setRejectAttendanceReason('') }} disabled={loading}
+                                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">Reject</button>
+                                    </div>
+                                  </div>
+                                  {rejectingAttendanceId === sub.id && (
+                                    <div className="px-4 pb-3 border-t border-zinc-100 pt-3 flex gap-2">
+                                      <input value={rejectAttendanceReason} onChange={e => setRejectAttendanceReason(e.target.value)} placeholder="Reason (optional)" autoFocus
+                                        className="flex-1 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+                                      <button onClick={() => { wrap(() => verifyTrainingAttendance(sub.id, 'rejected', rejectAttendanceReason)); setRejectingAttendanceId(null) }} disabled={loading}
+                                        className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50">Confirm</button>
+                                      <button onClick={() => setRejectingAttendanceId(null)} className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50">Cancel</button>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Bulk log attendance */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider">Log Attendance</p>
+                            <button onClick={() => setAttendanceSelected(prev => prev.size === allPersonnel.length ? new Set() : new Set(allPersonnel.map(p => p.id)))}
+                              className="text-xs text-blue-600 font-semibold hover:text-blue-800">
+                              {attendanceSelected.size === allPersonnel.length ? 'Deselect All' : 'Select All'}
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto mb-3">
+                            {allPersonnel.map(p => (
+                              <label key={p.id} className="flex items-center gap-2 rounded-lg bg-white border border-zinc-200 px-3 py-2 cursor-pointer hover:bg-zinc-50">
+                                <input type="checkbox" checked={attendanceSelected.has(p.id)} onChange={() => setAttendanceSelected(prev => { const next = new Set(prev); if (next.has(p.id)) next.delete(p.id); else next.add(p.id); return next })}
+                                  className="rounded border-zinc-300 text-red-600 focus:ring-red-500" />
+                                <span className="text-xs text-zinc-800">{p.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                          <button onClick={() => { if (attendanceSelected.size > 0) wrap(() => logTrainingAttendance(evt.id, Array.from(attendanceSelected))).then(() => setLogAttendanceEventId(null)) }}
+                            disabled={loading || attendanceSelected.size === 0}
+                            className="w-full rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+                            {loading ? 'Logging...' : `Log ${attendanceSelected.size} Members`}
                           </button>
                         </div>
-                        <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto mb-3">
-                          {allPersonnel.map(p => (
-                            <label key={p.id} className="flex items-center gap-2 rounded-lg bg-white border border-zinc-200 px-3 py-2 cursor-pointer hover:bg-zinc-50">
-                              <input type="checkbox" checked={attendanceSelected.has(p.id)} onChange={() => setAttendanceSelected(prev => { const next = new Set(prev); if (next.has(p.id)) next.delete(p.id); else next.add(p.id); return next })}
-                                className="rounded border-zinc-300 text-red-600 focus:ring-red-500" />
-                              <span className="text-xs text-zinc-800">{p.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                        <button onClick={() => { if (attendanceSelected.size > 0) wrap(() => logTrainingAttendance(evt.id, Array.from(attendanceSelected))).then(() => setLogAttendanceEventId(null)) }}
-                          disabled={loading || attendanceSelected.size === 0}
-                          className="w-full rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
-                          {loading ? 'Logging...' : `Log ${attendanceSelected.size} Members`}
-                        </button>
                       </div>
                     )}
                   </div>

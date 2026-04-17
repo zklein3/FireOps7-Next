@@ -19,6 +19,7 @@ export default async function TrainingPage() {
   if (!myDept) redirect('/dashboard')
 
   const department_id = myDept.department_id
+  const isOfficerOrAbove = myDept.system_role === 'admin' || myDept.system_role === 'officer'
 
   // My enrollments
   const { data: enrollments } = await adminClient
@@ -27,18 +28,18 @@ export default async function TrainingPage() {
     .eq('personnel_id', me.id)
     .eq('department_id', department_id)
 
-  // Cert types for my enrollments
+  // Cert types
   const certTypeIds = [...new Set((enrollments ?? []).map(e => e.certification_type_id))]
   const { data: certTypes } = certTypeIds.length > 0
     ? await adminClient.from('certification_types').select('id, cert_name, issuing_body, does_expire, expiration_interval_months, is_structured_course').in('id', certTypeIds)
     : { data: [] }
 
-  // Units for my enrolled courses
+  // Units
   const { data: units } = certTypeIds.length > 0
     ? await adminClient.from('certification_course_units').select('id, certification_type_id, unit_title, unit_description, required_hours, sort_order, active').in('certification_type_id', certTypeIds).eq('active', true).order('sort_order')
     : { data: [] }
 
-  // My progress on these enrollments
+  // My progress
   const enrollmentIds = (enrollments ?? []).map(e => e.id)
   const { data: myProgress } = enrollmentIds.length > 0
     ? await adminClient.from('member_course_progress').select('id, enrollment_id, unit_id, status, hours_submitted, completed_date, submitted_at').in('enrollment_id', enrollmentIds)
@@ -53,18 +54,29 @@ export default async function TrainingPage() {
     .eq('active', true)
     .order('cert_name')
 
-  // My training event attendance
-  const { data: myAttendance } = await adminClient
-    .from('training_event_attendance')
-    .select('event_id, logged_at')
-    .eq('personnel_id', me.id)
+  // All dept training events (last 30 days + future 60 days) for self-reporting
+  const past30 = new Date(); past30.setDate(past30.getDate() - 30)
+  const future60 = new Date(); future60.setDate(future60.getDate() + 60)
 
-  const attendedEventIds = new Set((myAttendance ?? []).map(a => a.event_id))
+  const { data: allTrainingEvents } = await adminClient
+    .from('training_events')
+    .select('id, event_date, start_time, topic, hours, location, description, requires_verification')
+    .eq('department_id', department_id)
+    .gte('event_date', past30.toISOString().split('T')[0])
+    .lte('event_date', future60.toISOString().split('T')[0])
+    .order('event_date', { ascending: false })
 
-  // Training events I attended
-  const { data: trainingEvents } = attendedEventIds.size > 0
-    ? await adminClient.from('training_events').select('id, event_date, topic, hours, location').in('id', Array.from(attendedEventIds)).eq('department_id', department_id).order('event_date', { ascending: false }).limit(20)
+  // My attendance records for these events
+  const allEventIds = (allTrainingEvents ?? []).map(e => e.id)
+  const { data: myAttendanceRaw } = allEventIds.length > 0
+    ? await adminClient
+        .from('training_event_attendance')
+        .select('id, event_id, status, submitted_at')
+        .eq('personnel_id', me.id)
+        .in('event_id', allEventIds)
     : { data: [] }
+
+  const myAttendanceMap = Object.fromEntries((myAttendanceRaw ?? []).map(a => [a.event_id, a]))
 
   return (
     <TrainingClient
@@ -73,8 +85,13 @@ export default async function TrainingPage() {
       units={units ?? []}
       myProgress={myProgress ?? []}
       myCerts={myCerts ?? []}
-      trainingEvents={trainingEvents ?? []}
+      trainingEvents={(allTrainingEvents ?? []).map(e => ({
+        ...e,
+        my_attendance: myAttendanceMap[e.id] ?? null,
+      }))}
+      myPersonnelId={me.id}
       myName={`${me.first_name} ${me.last_name}`}
+      isOfficerOrAbove={isOfficerOrAbove}
     />
   )
 }
