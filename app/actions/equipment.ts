@@ -232,6 +232,21 @@ export async function removeItemFromCompartment(location_standard_id: string) {
   return { success: true }
 }
 
+// ─── Update Item Expected Quantity ────────────────────────────────────────────
+export async function updateItemQuantity(location_standard_id: string, expected_quantity: number) {
+  const ctx = await getContext()
+  if (!ctx?.isOfficerOrAbove) return { error: 'Only officers and admins can update quantities.' }
+  if (!expected_quantity || expected_quantity < 1) return { error: 'Quantity must be at least 1.' }
+  const adminClient = createAdminClient()
+  const { error } = await adminClient
+    .from('item_location_standards')
+    .update({ expected_quantity })
+    .eq('id', location_standard_id)
+  if (error) { await logError(error.message, '/equipment'); return { error: error.message } }
+  revalidatePath('/equipment')
+  return { success: true }
+}
+
 // ─── Move Item to Different Compartment ───────────────────────────────────────
 export async function moveItemToCompartment(location_standard_id: string, target_compartment_id: string) {
   const ctx = await getContext()

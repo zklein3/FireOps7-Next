@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { assignItemToCompartment, removeItemFromCompartment, moveItemToCompartment } from '@/app/actions/equipment'
+import { assignItemToCompartment, removeItemFromCompartment, moveItemToCompartment, updateItemQuantity } from '@/app/actions/equipment'
 
 interface Apparatus {
   id: string
@@ -85,6 +85,10 @@ export default function EquipmentDetailClient({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // Edit quantity state: location_standard_id -> draft value
+  const [editingQty, setEditingQty] = useState<string | null>(null)
+  const [qtyDraft, setQtyDraft] = useState('')
+
   // Move modal state
   const [moveTarget, setMoveTarget] = useState<MoveTarget | null>(null)
   const [moveApparatusId, setMoveApparatusId] = useState('')
@@ -113,6 +117,17 @@ export default function EquipmentDetailClient({
       setSelectedItem('')
       setQuantity('1')
     }
+    setLoading(false)
+  }
+
+  async function handleUpdateQty(locationId: string) {
+    const qty = parseInt(qtyDraft)
+    if (!qty || qty < 1) return
+    setError(null)
+    setLoading(true)
+    const result = await updateItemQuantity(locationId, qty)
+    if (result?.error) setError(result.error)
+    else setEditingQty(null)
     setLoading(false)
   }
 
@@ -270,11 +285,45 @@ export default function EquipmentDetailClient({
                         <p className="text-xs text-zinc-400">{item.category_name}</p>
                       </div>
                       <div className="flex items-center gap-4">
-                        <div className="text-center">
-                          <p className="text-lg font-bold text-zinc-900">{item.expected_quantity}</p>
-                          <p className="text-xs text-zinc-400">{item.requires_inspection ? 'assets' : 'expected'}</p>
-                        </div>
-                        {isOfficerOrAbove && (
+                        {isOfficerOrAbove && editingQty === item.id ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              value={qtyDraft}
+                              onChange={e => setQtyDraft(e.target.value)}
+                              className="w-16 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-center focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleUpdateQty(item.id)}
+                              disabled={loading || !qtyDraft || parseInt(qtyDraft) < 1}
+                              className="text-xs font-semibold text-green-700 hover:text-green-900 disabled:opacity-50"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingQty(null)}
+                              className="text-xs text-zinc-400 hover:text-zinc-600"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            className={`text-center ${isOfficerOrAbove ? 'cursor-pointer hover:opacity-70' : ''}`}
+                            onClick={() => {
+                              if (!isOfficerOrAbove) return
+                              setEditingQty(item.id)
+                              setQtyDraft(String(item.expected_quantity))
+                            }}
+                            title={isOfficerOrAbove ? 'Click to edit' : undefined}
+                          >
+                            <p className="text-lg font-bold text-zinc-900">{item.expected_quantity}</p>
+                            <p className="text-xs text-zinc-400">{item.requires_inspection ? 'assets' : 'expected'}</p>
+                          </div>
+                        )}
+                        {isOfficerOrAbove && editingQty !== item.id && (
                           <div className="flex items-center gap-3">
                             <button
                               onClick={() => openMoveModal(item, c.id)}
