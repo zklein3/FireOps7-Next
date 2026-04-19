@@ -177,7 +177,18 @@ CRITICAL PATTERNS:
 - Vercel deployed + fireops7.com DNS configured
 
 ## IMMEDIATE NEXT — Resume Here Next Session
-**Inspection history/log viewer**
+**Flow & Presentation Polish** — feature build-out is paused, focus is UX/UI
+
+Areas to work through (pick one to start):
+1. **Onboarding / empty states** — what does a brand new department see on first login? Empty tables with no guidance are confusing.
+2. **Navigation flow** — dead ends, missing back paths, confusing redirects after actions
+3. **Dashboard** — is it actually useful at a glance? Could show pending incidents, expiring certs, overdue inspections
+4. **Mobile experience** — systematic walkthrough of every page on a phone, not just fixing issues as they're found
+5. **Visual consistency** — spacing, card styles, typography, badge colors across all pages
+
+---
+
+**Deferred — Inspection history/log viewer**
 - Query `item_asset_inspection_logs` + `item_asset_inspection_log_steps` for dept
 - Filter by apparatus, date range, result (PASS/FAIL)
 - Drill into a log to see each step response
