@@ -59,8 +59,9 @@ CRITICAL PATTERNS:
 - `/equipment`, `/equipment/[id]` — equipment by apparatus (quantity items)
 - `/inspections` — select apparatus + compartment to inspect
 - `/inspections/run` — run inspection checklist
-- `/events` — events list, self-log attendance, officer manage panel ✅
+- `/events` — events list, self-log attendance, officer manage panel, verification queue ✅
 - `/events/new` — create one-time or recurring event ✅
+- `/training` — my enrollments, certifications, training events (self-report + officer log) ✅
 - `/scan` — QR scan landing/redirect route (to build)
 - `/scba` — placeholder
 - `/admin/departments`, `/admin/users`, `/admin/logs` — sys admin pages
@@ -69,6 +70,7 @@ CRITICAL PATTERNS:
 - `/dept-admin/compartments` — manage compartment names
 - `/dept-admin/items` — manage item categories, item types, assets, inspection templates (3 tabs)
 - `/dept-admin/attendance` — excuse types + participation requirements ✅
+- `/dept-admin/training` — cert types, course units, enrollments, pending progress verification, direct cert entry, training events ✅
 
 ### Key Action Files
 - `app/actions/auth.ts` — signIn, changePassword, signOut
@@ -82,6 +84,7 @@ CRITICAL PATTERNS:
 - `app/actions/equipment.ts` — createItemCategory, updateItemCategory, createItem, updateItem, createAsset, updateAsset, assignItemToCompartment, removeItemFromCompartment
 - `app/actions/inspections.ts` — createInspectionTemplate, updateInspectionTemplate, addTemplateStep, updateTemplateStep, deleteTemplateStep, submitInspection
 - `app/actions/attendance.ts` — createEventSeries, updateEventInstance, updateEventSeries, logAttendance, verifyAttendance, cancelEventInstance, createExcuseType, saveParticipationRequirement ✅
+- `app/actions/training.ts` — createCertificationType, updateCertificationType, createCourseUnit, updateCourseUnit, enrollMember, verifyProgress, logDirectCert, createTrainingEvent, logTrainingAttendance, verifyTrainingAttendance ✅
 - `app/actions/fire-school.ts` — checkBottle, logFill, addFireSchoolBottle
 
 ## Auth & Signup Flow
@@ -161,8 +164,10 @@ CRITICAL PATTERNS:
 - Asset tracking — create/edit assets, linked asset flag, has_linked_asset + linked_item_type_id
 - Inspection template builder — create templates per item type, add/edit/delete steps, reassign to different item type
 - Inspection run UI — `/inspections` select apparatus+compartment → `/inspections/run` checklist with asset picker, presence checks, all step types, submit logs to DB
-- **Attendance module — DB migrated, actions built, events page + new event page + attendance settings page built**
-- Dashboard with real data
+- **Attendance module — fully built including verification queue (approve/reject with reason, approve all)**
+- **Training module — DB migrated, cert types + course units, enrollments, member progress + verification, direct cert entry, training events with self-report + officer log + verification queue**
+- **Incident log module — DB migrated, manual entry, apparatus + per-unit times, personnel with POV support, fire details, officer verification + finalize flow**
+- Dashboard with real data + upcoming events/training this week with personal attendance status
 - Error logging + email notifications
 - FeedbackButton with React Portal
 - Mobile header overlap fixed, input text color fixed
@@ -170,24 +175,19 @@ CRITICAL PATTERNS:
 - Vercel deployed + fireops7.com DNS configured
 
 ## IMMEDIATE NEXT — Resume Here Next Session
-**Add pending attendance verification queue to `/events` page (EventsClient.tsx)**
-- When officer clicks "Manage" on an event, the expanded panel currently shows bulk log + personnel checkboxes
-- Need to add a second section below showing pending submissions with Approve / Reject buttons
-- Uses existing `verifyAttendance(attendance_id, 'verified' | 'rejected', rejection_reason?)` action — already built
-- Server page needs to fetch pending attendance records with personnel names for each instance
-- Rejection should show an optional text input for reason before confirming
+**Inspection history/log viewer**
+- Query `item_asset_inspection_logs` + `item_asset_inspection_log_steps` for dept
+- Filter by apparatus, date range, result (PASS/FAIL)
+- Drill into a log to see each step response
 
 ## What's Placeholder / Not Yet Built
-- Attendance verification queue in EventsClient (see IMMEDIATE NEXT above)
+- Inspection history/log viewer
 - `/scba` — dept SCBA pages
 - `/admin/logs` — full log viewer
-- Supabase auth allowed URLs for custom domain
-- Inspection schedule settings (daily/weekly/monthly per dept)
-- Inspection history/log viewer
 - QR code system (see section below)
-- Training module (see section below)
-- Incident log module (see section below)
 - Equipment page — asset assignment to compartments (currently quantity-only)
+- Inspection schedule settings (daily/weekly/monthly per dept)
+- Supabase auth allowed URLs for custom domain
 - Resend from address → custom domain
 
 ## Equipment / Item System
@@ -236,7 +236,7 @@ CRITICAL PATTERNS:
 - Template edit includes "Assigned to Item Type" dropdown — admin can reassign to different item
 - Step types: BOOLEAN (Yes/No), NUMERIC, TEXT, LONG_TEXT, ASSET_LINK
 
-## Attendance Module (BUILT — missing verification queue)
+## Attendance Module (FULLY BUILT ✅)
 
 ### DB Tables
 - `excuse_types` — department defined excuse reasons
@@ -246,7 +246,7 @@ CRITICAL PATTERNS:
 - `event_attendance` — attendance records per member per instance
 
 ### Pages Built
-- `/events` — upcoming/past events, self-log button, officer bulk logging, 12-hour window enforcement
+- `/events` — upcoming/past events, self-log button, officer bulk logging + verification queue (approve/reject/approve all)
 - `/events/new` — create one-time or recurring event, verification toggle (defaults true)
 - `/dept-admin/attendance` — excuse types + participation requirements
 
@@ -256,11 +256,6 @@ CRITICAL PATTERNS:
 - Officer/admin can log retroactively at any time, no restriction
 - Warning banner shown when editing past events with existing attendance records
 - Members see only own attendance; dept-level aggregates on dashboard
-
-### MISSING — Verification Queue (next session)
-- Officer/admin needs to see pending submissions per event and approve/reject them
-- `verifyAttendance()` action already exists in `app/actions/attendance.ts`
-- Add pending submissions section to EventsClient expanded panel (officer view)
 
 ## QR Code System — DESIGN (to build)
 
@@ -306,7 +301,7 @@ CRITICAL PATTERNS:
 6. Add scan buttons (optional shortcut) to inspections landing, equipment pages
 7. Add scan-to-associate flow in asset edit form
 
-## Training Module — DESIGN (to build)
+## Training Module (FULLY BUILT ✅)
 
 ### Three Training Scenarios
 
@@ -356,7 +351,11 @@ training_events + training_event_attendance
 - Renewals create new cert record — old records kept for history
 - Dashboard flags certs expiring within configurable window
 
-## Incident Log Module — DESIGN (to build)
+### Pages Built
+- `/training` — my enrollments (course progress, submit units), my certifications, training events (self-report)
+- `/dept-admin/training` — cert types + course units, enrollments, pending progress verification, direct cert entry, training events + attendance log + verification queue
+
+## Incident Log Module (BUILT ✅ — manual entry)
 
 ### Background
 - CAD email (CFS PDF) received after each call — currently transcribed manually into NERIS
@@ -407,6 +406,10 @@ incident_fire_details — property_lost, dollar_loss, cause_of_fire, vehicle_mak
 - `item_asset_inspection_logs`, `item_asset_inspection_log_steps`
 - `excuse_types`, `participation_requirements`
 - `event_series`, `event_instances`, `event_attendance`
+- `certification_types`, `certification_course_units`, `course_enrollments`
+- `member_course_progress`, `member_certifications`
+- `training_events`, `training_event_attendance`
+- `incidents`, `incident_apparatus`, `incident_personnel`, `incident_fire_details`
 - `scba_bottles`, `scba_fill_logs`, `scba_maintenance_logs`, `scba_cylinder_specs`
 - `system_logs`
 
@@ -414,6 +417,8 @@ incident_fire_details — property_lost, dollar_loss, cause_of_fire, vehicle_mak
 - `item_assets`: added `has_linked_asset`, `linked_item_type_id`
 - `item_inspection_template_steps`: added `step_type`, `linked_item_type_id`
 - Attendance module: `excuse_types`, `participation_requirements`, `event_series`, `event_instances`, `event_attendance`
+- Training module: `certification_types`, `certification_course_units`, `course_enrollments`, `member_course_progress`, `member_certifications`, `training_events`, `training_event_attendance`
+- Incident module: `incidents`, `incident_apparatus`, `incident_personnel`, `incident_fire_details`
 
 ### Fire School (public, no auth)
 - `fire_school_bottles`, `fire_school_fill_logs`
@@ -434,15 +439,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 ```
 
 ## Next Steps (priority order)
-1. **Add pending attendance verification queue to EventsClient** ← START HERE
-2. Test full attendance flow end-to-end (Winslow Fire)
-3. Inspection history/log viewer
-4. Training module
-5. Incident log module (manual entry first)
-6. QR code system
-7. `/scba` pages
-8. `/admin/logs` full log viewer
-9. Supabase auth allowed URLs for custom domain
+1. **Inspection history/log viewer** ← START HERE
+2. Incident log — test + any follow-up tweaks
+3. QR code system
+4. `/scba` pages
+5. `/admin/logs` full log viewer
+6. Equipment — asset assignment to compartments
+7. Supabase auth allowed URLs for custom domain
 
 ## Dev Workflow
 - Start: `npm run dev` in C:\Users\zklei\Documents\FireOps7-Next
