@@ -45,7 +45,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/events', label: 'Events' },
     { href: '/training', label: 'Training' },
     { href: '/incidents', label: 'Incidents' },
-    { href: '/scba', label: 'SCBA' },
     ...(isOfficerOrAbove ? [{ href: '/reports/inventory', label: 'Reports' }] : []),
   ]
 
