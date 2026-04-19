@@ -181,12 +181,13 @@ CRITICAL PATTERNS:
 - Vercel deployed + fireops7.com DNS configured
 
 ## IMMEDIATE NEXT — Resume Here Next Session
-System logs viewer built. Next up:
+Equipment multi-asset inspection + move/edit built. Next up:
 
 1. **Member activity reports** — `/reports/my-activity` — member views own attendance, events, training in one place
 2. **Attendance reports** — officer/admin view of participation rates per member/event type
 3. **Training/cert reports** — expiring certs, completion rates
-4. **Flow & Presentation Polish** — onboarding/empty states, navigation dead ends, dashboard usefulness, mobile walkthrough, visual consistency
+4. **Asset roster view** — view all assets department-wide, filterable by item type/class
+5. **Flow & Presentation Polish** — onboarding/empty states, navigation dead ends, dashboard usefulness, mobile walkthrough, visual consistency
 
 ## What's Placeholder / Not Yet Built
 - Member activity reports (`/reports/my-activity`)
