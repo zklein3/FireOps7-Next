@@ -152,7 +152,7 @@ CRITICAL PATTERNS:
 - Full auth flow + middleware routing
 - Role-aware sidebar + mobile hamburger drawer
 - Sys admin dashboard — department cards with stats
-- Sys admin — Departments, Users, System Logs (placeholder)
+- Sys admin — Departments, Users, System Logs (full log viewer with resolve/resolve-all, tab filters, metadata expand, show-resolved toggle) ✅
 - Sys admin dept drill-in — `/admin/dept/[id]` tabbed
 - Dept Admin — Manage Personnel, Compartments, Items, Attendance Settings
 - Personnel roster + profile (role-based editing, change password)
@@ -178,20 +178,16 @@ CRITICAL PATTERNS:
 - Vercel deployed + fireops7.com DNS configured
 
 ## IMMEDIATE NEXT — Resume Here Next Session
-**Reports section** — inventory reports built, member activity reports (own attendance/events/training) deferred for next session.
+System logs viewer built. Next up:
 
-Next up in reports:
 1. **Member activity reports** — `/reports/my-activity` — member views own attendance, events, training in one place
 2. **Attendance reports** — officer/admin view of participation rates per member/event type
 3. **Training/cert reports** — expiring certs, completion rates
-
-Also still on deck:
 4. **Flow & Presentation Polish** — onboarding/empty states, navigation dead ends, dashboard usefulness, mobile walkthrough, visual consistency
 
 ## What's Placeholder / Not Yet Built
 - Member activity reports (`/reports/my-activity`)
 - Attendance + training/cert reports (officer/admin)
-- `/admin/logs` — full log viewer
 - QR code system (see section below)
 - Equipment page — asset assignment to compartments (currently quantity-only)
 - Inspection schedule settings (daily/weekly/monthly per dept)
@@ -453,14 +449,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 2. Attendance + training/cert reports (officer/admin view)
 3. Incident log — test + any follow-up tweaks
 4. QR code system
-5. `/admin/logs` full log viewer
-6. Equipment — asset assignment to compartments
-7. Supabase auth allowed URLs for custom domain
+5. Equipment — asset assignment to compartments
+6. Supabase auth allowed URLs for custom domain
 
 ## Dev Workflow
-- Start: `npm run dev` in C:\Users\zklei\Documents\FireOps7-Next
+- Start: `npm run dev` in C:\Users\zklein3\Documents\FireOps7-Next
 - Stop: Ctrl+C in VS Code terminal
 - Build: `npm run build` (always before pushing)
+- **Push policy: always git push after a successful build — troubleshooting on live site (Vercel)**
 - Git push:
   git add .
   git commit -m "message"
