@@ -52,6 +52,7 @@ type StepResponse = {
 
 type PresenceResponse = {
   location_standard_id: string
+  item_id: string
   present: boolean
   actual_quantity?: number
   notes?: string
@@ -60,10 +61,11 @@ type PresenceResponse = {
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 
 export default function InspectionRunClient({
-  apparatus, compartment, checklistItems, inspectorName, personnelId, departmentId,
+  apparatus, compartment, compartmentId, checklistItems, inspectorName, personnelId, departmentId,
 }: {
   apparatus: { id: string; unit_number: string; apparatus_name: string | null }
   compartment: { code: string; name: string | null }
+  compartmentId: string
   checklistItems: ChecklistItem[]
   inspectorName: string
   personnelId: string
@@ -88,10 +90,10 @@ export default function InspectionRunClient({
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  function setPresence(location_standard_id: string, field: keyof PresenceResponse, value: any) {
+  function setPresence(location_standard_id: string, item_id: string, field: keyof PresenceResponse, value: any) {
     setPresenceResponses(prev => ({
       ...prev,
-      [location_standard_id]: { ...prev[location_standard_id], location_standard_id, [field]: value },
+      [location_standard_id]: { ...prev[location_standard_id], location_standard_id, item_id, [field]: value },
     }))
   }
 
@@ -162,7 +164,7 @@ export default function InspectionRunClient({
     try {
       const result = await submitInspection({
         apparatus_id: apparatus.id,
-        compartment_id: '',
+        compartment_id: compartmentId,
         personnel_id: personnelId,
         department_id: departmentId,
         inspector_name: inspectorName,
@@ -249,7 +251,7 @@ export default function InspectionRunClient({
                   </p>
                   <div className="flex gap-3 mb-3">
                     <button
-                      onClick={() => setPresence(item.location_standard_id, 'present', true)}
+                      onClick={() => setPresence(item.location_standard_id, item.item_id, 'present', true)}
                       className={`flex-1 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors ${
                         presenceResponses[item.location_standard_id]?.present === true
                           ? 'bg-green-600 border-green-600 text-white'
@@ -258,7 +260,7 @@ export default function InspectionRunClient({
                       ✓ Present
                     </button>
                     <button
-                      onClick={() => setPresence(item.location_standard_id, 'present', false)}
+                      onClick={() => setPresence(item.location_standard_id, item.item_id, 'present', false)}
                       className={`flex-1 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors ${
                         presenceResponses[item.location_standard_id]?.present === false
                           ? 'bg-red-600 border-red-600 text-white'
@@ -273,7 +275,7 @@ export default function InspectionRunClient({
                       <input
                         type="number" min="0"
                         defaultValue={item.expected_quantity}
-                        onChange={e => setPresence(item.location_standard_id, 'actual_quantity', parseInt(e.target.value))}
+                        onChange={e => setPresence(item.location_standard_id, item.item_id, 'actual_quantity', parseInt(e.target.value))}
                         className="w-20 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
                       />
                     </div>

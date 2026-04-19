@@ -31,6 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const isSysAdmin = user?.is_sys_admin ?? false
   const systemRole = user?.system_role ?? null
   const isDeptAdmin = systemRole === 'admin'
+  const isOfficerOrAbove = isDeptAdmin || systemRole === 'officer'
 
   const navItems = isSysAdmin ? [
     { href: '/dashboard', label: 'Overview' },
@@ -45,6 +46,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/training', label: 'Training' },
     { href: '/incidents', label: 'Incidents' },
     { href: '/scba', label: 'SCBA' },
+    ...(isOfficerOrAbove ? [{ href: '/reports/inventory', label: 'Reports' }] : []),
   ]
 
   const adminNavItems = isSysAdmin ? [

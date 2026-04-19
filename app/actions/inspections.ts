@@ -157,6 +157,7 @@ export async function submitInspection(payload: {
   }[]
   presence_checks: {
     location_standard_id: string
+    item_id: string
     present: boolean
     actual_quantity?: number
     notes?: string
@@ -193,6 +194,8 @@ export async function submitInspection(payload: {
           overall_result,
           inspected_by_personnel_id: payload.personnel_id,
           inspected_by_name: payload.inspector_name,
+          apparatus_id: payload.apparatus_id || null,
+          compartment_id: payload.compartment_id || null,
         })
         .select('id')
         .single()
@@ -219,6 +222,30 @@ export async function submitInspection(payload: {
           await logError(stepsErr.message, '/inspections/run')
           return { error: stepsErr.message }
         }
+      }
+    }
+
+    // Store presence check results
+    if (payload.presence_checks.length > 0) {
+      const presenceInserts = payload.presence_checks.map(pc => ({
+        department_id: payload.department_id,
+        apparatus_id: payload.apparatus_id,
+        compartment_id: payload.compartment_id || null,
+        location_standard_id: pc.location_standard_id || null,
+        item_id: pc.item_id,
+        inspected_at: now,
+        inspected_by_personnel_id: payload.personnel_id,
+        inspected_by_name: payload.inspector_name,
+        present: pc.present,
+        actual_quantity: pc.actual_quantity ?? null,
+        notes: pc.notes ?? null,
+      }))
+      const { error: presenceErr } = await adminClient
+        .from('compartment_presence_check_logs')
+        .insert(presenceInserts)
+      if (presenceErr) {
+        await logError(presenceErr.message, '/inspections/run')
+        return { error: presenceErr.message }
       }
     }
 

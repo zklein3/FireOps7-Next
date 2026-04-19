@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { updateApparatus } from '@/app/actions/apparatus'
 import { assignCompartmentToApparatus, removeCompartmentFromApparatus } from '@/app/actions/compartments'
 
@@ -132,6 +133,14 @@ export default function ApparatusDetailClient({
         }`}>
           {apparatus.active ? 'Active' : 'Inactive'}
         </span>
+        {isOfficerOrAbove && (
+          <Link
+            href={`/reports/inventory?apparatusId=${apparatus.id}`}
+            className="shrink-0 text-xs font-medium text-red-700 hover:underline"
+          >
+            View Reports
+          </Link>
+        )}
       </div>
 
       {/* Apparatus Info */}

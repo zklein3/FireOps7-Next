@@ -171,6 +171,7 @@ export default async function InspectionRunPage({
     <InspectionRunClient
       apparatus={{ id: apparatus.id, unit_number: apparatus.unit_number, apparatus_name: apparatus.apparatus_name }}
       compartment={{ code: compName?.compartment_code ?? '—', name: compName?.compartment_name ?? null }}
+      compartmentId={compartment_id}
       checklistItems={checklistItems as any}
       inspectorName={`${me.first_name} ${me.last_name}`}
       personnelId={me.id}

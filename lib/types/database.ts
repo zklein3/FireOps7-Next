@@ -236,6 +236,22 @@ export interface ItemAssetInspectionLogStep {
   created_at: string
 }
 
+export interface CompartmentPresenceCheckLog {
+  id: string
+  department_id: string
+  apparatus_id: string
+  compartment_id: string | null
+  location_standard_id: string | null
+  item_id: string
+  inspected_at: string
+  inspected_by_personnel_id: string | null
+  inspected_by_name: string | null
+  present: boolean
+  actual_quantity: number | null
+  notes: string | null
+  created_at: string
+}
+
 // ─── SCBA (Department) ───────────────────────────────────────────────────────
 export type CylinderMaterial = 'steel' | 'aluminum' | 'composite'
 export type FillResult = 'FILLED' | 'PARTIAL' | 'FAILED'
