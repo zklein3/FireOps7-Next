@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import Link from 'next/link'
 
 interface ApparatusItem {
   id: string
@@ -264,20 +265,28 @@ export default function InventoryReportClient({
           </div>
         </div>
 
-        {/* Back to all apparatus */}
+        {/* Back navigation */}
         {selectedApparatus && (
-          <div className="mb-4">
+          <div className="mb-4 flex items-center gap-4">
+            <Link
+              href={`/apparatus/${selectedApparatus.id}`}
+              className="text-sm text-zinc-500 hover:text-zinc-700"
+            >
+              ← Back to {selectedApparatus.unit_number}
+            </Link>
             <button
               onClick={clearApparatus}
-              className="text-sm text-red-700 hover:underline"
+              className="text-sm text-zinc-400 hover:text-zinc-600"
             >
-              ← All apparatus
+              All apparatus
             </button>
-            <h2 className="text-lg font-semibold text-zinc-800 mt-1">
-              {selectedApparatus.unit_number}
-              {selectedApparatus.apparatus_name && ` — ${selectedApparatus.apparatus_name}`}
-            </h2>
           </div>
+        )}
+        {selectedApparatus && (
+          <h2 className="text-lg font-semibold text-zinc-800 mb-4">
+            {selectedApparatus.unit_number}
+            {selectedApparatus.apparatus_name && ` — ${selectedApparatus.apparatus_name}`}
+          </h2>
         )}
 
         {/* Apparatus card list (no selection) */}

@@ -1,10 +1,14 @@
 {
   "permissions": {
     "allow": [
+      "Bash(git pull *)",
+      "Bash(git stash *)",
+      "Bash(mv .claude/settings.local.json .claude/settings.local.json.bak)",
+      "Bash(mv .claude/settings.local.json.bak .claude/settings.local.json)",
+      "Bash(npx supabase *)",
       "Bash(git add *)",
-      "Bash(git commit -m 'Update CLAUDE.md — pivot to flow and presentation polish *)",
-      "Bash(git push *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
