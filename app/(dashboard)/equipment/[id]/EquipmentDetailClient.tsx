@@ -272,7 +272,7 @@ export default function EquipmentDetailClient({
                       <div className="flex items-center gap-4">
                         <div className="text-center">
                           <p className="text-lg font-bold text-zinc-900">{item.expected_quantity}</p>
-                          <p className="text-xs text-zinc-400">expected</p>
+                          <p className="text-xs text-zinc-400">{item.requires_inspection ? 'assets' : 'expected'}</p>
                         </div>
                         {isOfficerOrAbove && (
                           <div className="flex items-center gap-3">

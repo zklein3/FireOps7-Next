@@ -164,6 +164,7 @@ CRITICAL PATTERNS:
 - Asset tracking — create/edit assets, linked asset flag, has_linked_asset + linked_item_type_id
 - Inspection template builder — create templates per item type, add/edit/delete steps, reassign to different item type
 - Inspection run UI — `/inspections` select apparatus+compartment → `/inspections/run` checklist with asset picker, presence checks, all step types, submit logs to DB (apparatus_id, compartment_id, presence checks all persisted)
+- **Multi-asset inspection — `expected_quantity` on asset-tracked items drives N inspection slots per item type; each slot gets its own asset picker (cross-slot deduplication) + full checklist; each submits a separate inspection log row**
 - **Inventory Reports — `/reports/inventory` — apparatus cards, date range filter, flagged item reference cards, window.print() print view; linked from apparatus detail page**
 - **Equipment move — Move button on each item in equipment detail → modal to pick any apparatus + compartment, single-step reassign (cross-truck supported)**
 - **Attendance module — fully built including verification queue (approve/reject with reason, approve all)**
