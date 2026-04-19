@@ -153,13 +153,13 @@ export default function SysAdminDeptClient({
               <h2 className="text-base font-semibold text-zinc-900 mb-4">Add Personnel</h2>
               <form action={handleAddPersonnel} className="flex flex-col gap-4">
                 <input type="hidden" name="department_id" value={departmentId} />
-                <div className="flex gap-3">
-                  <div className="flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Email <span className="text-red-500">*</span></label>
                     <input name="email" type="email" required placeholder="member@dept.com"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
-                  <div className="w-36">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Access Level <span className="text-red-500">*</span></label>
                     <select name="system_role" required defaultValue="member"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
@@ -169,8 +169,8 @@ export default function SysAdminDeptClient({
                     </select>
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <div className="flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Title / Rank</label>
                     <select name="role_id"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
@@ -178,12 +178,12 @@ export default function SysAdminDeptClient({
                       {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
                   </div>
-                  <div className="w-36">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Employee #</label>
                     <input name="employee_number" type="text"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
-                  <div className="w-40">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Hire Date</label>
                     <input name="hire_date" type="date"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
@@ -255,13 +255,13 @@ export default function SysAdminDeptClient({
               <h2 className="text-base font-semibold text-zinc-900 mb-4">Add Station</h2>
               <form action={handleAddStation} className="flex flex-col gap-4">
                 <input type="hidden" name="department_id" value={departmentId} />
-                <div className="flex gap-3">
-                  <div className="w-28">
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="col-span-1">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Station #</label>
                     <input name="station_number" type="text" placeholder="2"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
-                  <div className="flex-1">
+                  <div className="col-span-3">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Station Name <span className="text-red-500">*</span></label>
                     <input name="station_name" type="text" required placeholder="Headquarters"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
@@ -272,13 +272,13 @@ export default function SysAdminDeptClient({
                   <input name="address_line_1" type="text" placeholder="123 Main St"
                     className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                 </div>
-                <div className="flex gap-3">
-                  <div className="flex-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="col-span-2 sm:col-span-1">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">City</label>
                     <input name="city" type="text"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
-                  <div className="w-24">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">State</label>
                     <select name="state"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
@@ -286,7 +286,7 @@ export default function SysAdminDeptClient({
                       {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
-                  <div className="w-28">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">ZIP</label>
                     <input name="postal_code" type="text"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
@@ -338,37 +338,37 @@ export default function SysAdminDeptClient({
               <h2 className="text-base font-semibold text-zinc-900 mb-4">Add Apparatus</h2>
               <form action={handleAddApparatus} className="flex flex-col gap-4">
                 <input type="hidden" name="department_id" value={departmentId} />
-                <div className="flex gap-3">
-                  <div className="w-28">
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="col-span-1">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Unit # <span className="text-red-500">*</span></label>
                     <input name="unit_number" type="text" required placeholder="32"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
-                  <div className="flex-1">
+                  <div className="col-span-3">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Apparatus Name</label>
                     <input name="apparatus_name" type="text" placeholder="Engine 32"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <div className="flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Make</label>
                     <input name="make" type="text"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
-                  <div className="flex-1">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Model</label>
                     <input name="model" type="text"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
-                  <div className="w-24">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Year</label>
                     <input name="model_year" type="number"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <div className="flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Station</label>
                     <select name="station_id"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
@@ -378,7 +378,7 @@ export default function SysAdminDeptClient({
                       ))}
                     </select>
                   </div>
-                  <div className="w-36">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-zinc-700">In Service Date</label>
                     <input name="in_service_date" type="date"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
@@ -441,18 +441,18 @@ export default function SysAdminDeptClient({
             <div className="mb-6 rounded-xl bg-white p-5 shadow-sm border border-zinc-200">
               <h2 className="text-base font-semibold text-zinc-900 mb-4">Add Compartment</h2>
               <form action={handleAddCompartment} className="flex flex-col gap-4">
-                <div className="flex gap-3">
-                  <div className="w-32">
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="col-span-1">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Code <span className="text-red-500">*</span></label>
                     <input name="compartment_code" type="text" required placeholder="D1"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm font-mono uppercase focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
-                  <div className="flex-1">
+                  <div className="col-span-2">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Name / Description</label>
                     <input name="compartment_name" type="text" placeholder="Driver Side 1"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                   </div>
-                  <div className="w-24">
+                  <div className="col-span-1">
                     <label className="mb-1 block text-sm font-medium text-zinc-700">Sort</label>
                     <input name="sort_order" type="number" min="1"
                       className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
@@ -478,20 +478,20 @@ export default function SysAdminDeptClient({
                         <div className="p-4">
                           <form action={handleUpdateCompartment} className="flex flex-col gap-3">
                             <input type="hidden" name="id" value={c.id} />
-                            <div className="flex gap-3">
-                              <div className="w-32">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              <div>
                                 <input name="compartment_code" type="text" required defaultValue={c.compartment_code}
                                   className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm font-mono uppercase focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                               </div>
-                              <div className="flex-1">
+                              <div>
                                 <input name="compartment_name" type="text" defaultValue={c.compartment_name ?? ''}
                                   className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                               </div>
-                              <div className="w-24">
+                              <div>
                                 <input name="sort_order" type="number" defaultValue={c.sort_order ?? ''}
                                   className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                               </div>
-                              <div className="w-28">
+                              <div>
                                 <select name="active" defaultValue={c.active ? 'true' : 'false'}
                                   className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
                                   <option value="true">Active</option>
