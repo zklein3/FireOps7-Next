@@ -63,7 +63,7 @@ CRITICAL PATTERNS:
 - `/events/new` — create one-time or recurring event ✅
 - `/training` — my enrollments, certifications, training events (self-report + officer log) ✅
 - `/scan` — QR scan landing/redirect route (to build)
-- `/scba` — placeholder
+- `/reports/inventory` — inventory inspection reports (officer/admin only) ✅
 - `/admin/departments`, `/admin/users`, `/admin/logs` — sys admin pages
 - `/admin/dept/[id]` — sys admin dept drill-in (tabbed: personnel, stations, apparatus, compartments)
 - `/dept-admin/personnel` — manage personnel
@@ -163,7 +163,8 @@ CRITICAL PATTERNS:
 - Item management — 3 tabs: Categories, Items (with asset expansion), Assets
 - Asset tracking — create/edit assets, linked asset flag, has_linked_asset + linked_item_type_id
 - Inspection template builder — create templates per item type, add/edit/delete steps, reassign to different item type
-- Inspection run UI — `/inspections` select apparatus+compartment → `/inspections/run` checklist with asset picker, presence checks, all step types, submit logs to DB
+- Inspection run UI — `/inspections` select apparatus+compartment → `/inspections/run` checklist with asset picker, presence checks, all step types, submit logs to DB (apparatus_id, compartment_id, presence checks all persisted)
+- **Inventory Reports — `/reports/inventory` — apparatus cards, date range filter, flagged item reference cards, window.print() print view; linked from apparatus detail page**
 - **Attendance module — fully built including verification queue (approve/reject with reason, approve all)**
 - **Training module — DB migrated, cert types + course units, enrollments, member progress + verification, direct cert entry, training events with self-report + officer log + verification queue**
 - **Incident log module — DB migrated, manual entry, apparatus + per-unit times, personnel with POV support, fire details, officer verification + finalize flow**
@@ -177,26 +178,19 @@ CRITICAL PATTERNS:
 - Vercel deployed + fireops7.com DNS configured
 
 ## IMMEDIATE NEXT — Resume Here Next Session
-**Flow & Presentation Polish** — feature build-out is paused, focus is UX/UI
+**Reports section** — inventory reports built, member activity reports (own attendance/events/training) deferred for next session.
 
-Areas to work through (pick one to start):
-1. **Onboarding / empty states** — what does a brand new department see on first login? Empty tables with no guidance are confusing.
-2. **Navigation flow** — dead ends, missing back paths, confusing redirects after actions
-3. **Dashboard** — is it actually useful at a glance? Could show pending incidents, expiring certs, overdue inspections
-4. **Mobile experience** — systematic walkthrough of every page on a phone, not just fixing issues as they're found
-5. **Visual consistency** — spacing, card styles, typography, badge colors across all pages
+Next up in reports:
+1. **Member activity reports** — `/reports/my-activity` — member views own attendance, events, training in one place
+2. **Attendance reports** — officer/admin view of participation rates per member/event type
+3. **Training/cert reports** — expiring certs, completion rates
 
----
-
-**Deferred — Inspection history/log viewer**
-- Query `item_asset_inspection_logs` + `item_asset_inspection_log_steps` for dept
-- Filter by apparatus, date range, result (PASS/FAIL)
-- Drill into a log to see each step response
-- Lives under `/inspections` or a new `/inspections/history` route
+Also still on deck:
+4. **Flow & Presentation Polish** — onboarding/empty states, navigation dead ends, dashboard usefulness, mobile walkthrough, visual consistency
 
 ## What's Placeholder / Not Yet Built
-- Inspection history/log viewer
-- `/scba` — dept SCBA pages
+- Member activity reports (`/reports/my-activity`)
+- Attendance + training/cert reports (officer/admin)
 - `/admin/logs` — full log viewer
 - QR code system (see section below)
 - Equipment page — asset assignment to compartments (currently quantity-only)
@@ -236,7 +230,7 @@ Areas to work through (pick one to start):
 3. For asset-tracked items → dropdown to select which specific asset is present
 4. If multiple templates → user picks which one (Daily/Weekly/Monthly)
 5. ASSET_LINK steps → dropdown of available linked assets
-6. Submit → logs to item_asset_inspection_logs + item_asset_inspection_log_steps
+6. Submit → logs to item_asset_inspection_logs (with apparatus_id + compartment_id) + item_asset_inspection_log_steps + compartment_presence_check_logs
 7. Overall result = PASS/FAIL based on fail_if_negative steps
 
 ### Compartment Assignment
@@ -417,7 +411,8 @@ incident_fire_details — property_lost, dollar_loss, cause_of_fire, vehicle_mak
 - `personnel`, `department_personnel`, `personnel_roles`
 - `items`, `item_categories`, `item_assets`, `item_location_standards`
 - `item_inspection_templates`, `item_inspection_template_steps`
-- `item_asset_inspection_logs`, `item_asset_inspection_log_steps`
+- `item_asset_inspection_logs` (+ apparatus_id, compartment_id columns), `item_asset_inspection_log_steps`
+- `compartment_presence_check_logs`
 - `excuse_types`, `participation_requirements`
 - `event_series`, `event_instances`, `event_attendance`
 - `certification_types`, `certification_course_units`, `course_enrollments`
@@ -433,6 +428,7 @@ incident_fire_details — property_lost, dollar_loss, cause_of_fire, vehicle_mak
 - Attendance module: `excuse_types`, `participation_requirements`, `event_series`, `event_instances`, `event_attendance`
 - Training module: `certification_types`, `certification_course_units`, `course_enrollments`, `member_course_progress`, `member_certifications`, `training_events`, `training_event_attendance`
 - Incident module: `incidents`, `incident_apparatus`, `incident_personnel`, `incident_fire_details`
+- Inspection logs: added `apparatus_id`, `compartment_id` to `item_asset_inspection_logs`; new `compartment_presence_check_logs` table
 
 ### Fire School (public, no auth)
 - `fire_school_bottles`, `fire_school_fill_logs`
@@ -453,10 +449,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 ```
 
 ## Next Steps (priority order)
-1. **Inspection history/log viewer** ← START HERE
-2. Incident log — test + any follow-up tweaks
-3. QR code system
-4. `/scba` pages
+1. **Member activity reports** (`/reports/my-activity`) ← START HERE
+2. Attendance + training/cert reports (officer/admin view)
+3. Incident log — test + any follow-up tweaks
+4. QR code system
 5. `/admin/logs` full log viewer
 6. Equipment — asset assignment to compartments
 7. Supabase auth allowed URLs for custom domain
