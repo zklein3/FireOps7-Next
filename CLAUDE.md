@@ -167,6 +167,8 @@ CRITICAL PATTERNS:
 - **Attendance module — fully built including verification queue (approve/reject with reason, approve all)**
 - **Training module — DB migrated, cert types + course units, enrollments, member progress + verification, direct cert entry, training events with self-report + officer log + verification queue**
 - **Incident log module — DB migrated, manual entry, apparatus + per-unit times, personnel with POV support, fire details, officer verification + finalize flow**
+- Sys admin dept drill-in — mobile layout fixed (responsive grid forms)
+- Incident new form — paged/in-service times auto-fill from apparatus entries
 - Dashboard with real data + upcoming events/training this week with personal attendance status
 - Error logging + email notifications
 - FeedbackButton with React Portal
@@ -179,6 +181,7 @@ CRITICAL PATTERNS:
 - Query `item_asset_inspection_logs` + `item_asset_inspection_log_steps` for dept
 - Filter by apparatus, date range, result (PASS/FAIL)
 - Drill into a log to see each step response
+- Lives under `/inspections` or a new `/inspections/history` route
 
 ## What's Placeholder / Not Yet Built
 - Inspection history/log viewer
