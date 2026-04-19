@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { assignItemToCompartment, removeItemFromCompartment } from '@/app/actions/equipment'
+import { assignItemToCompartment, removeItemFromCompartment, moveItemToCompartment } from '@/app/actions/equipment'
 
 interface Apparatus {
   id: string
@@ -43,11 +43,30 @@ interface Category {
   sort_order: number | null
 }
 
+interface ApparatusOption {
+  id: string
+  unit_number: string
+  apparatus_name: string | null
+  compartments: {
+    id: string
+    compartment_code: string
+    compartment_name: string | null
+    sort_order: number
+  }[]
+}
+
+interface MoveTarget {
+  locationId: string
+  itemName: string
+  sourceCompartmentId: string
+}
+
 export default function EquipmentDetailClient({
   apparatus,
   compartments,
   allItems,
   allCategories,
+  allApparatus,
   isAdmin,
   isOfficerOrAbove,
 }: {
@@ -55,6 +74,7 @@ export default function EquipmentDetailClient({
   compartments: Compartment[]
   allItems: Item[]
   allCategories: Category[]
+  allApparatus: ApparatusOption[]
   isAdmin: boolean
   isOfficerOrAbove: boolean
 }) {
@@ -64,6 +84,13 @@ export default function EquipmentDetailClient({
   const [quantity, setQuantity] = useState('1')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Move modal state
+  const [moveTarget, setMoveTarget] = useState<MoveTarget | null>(null)
+  const [moveApparatusId, setMoveApparatusId] = useState('')
+  const [moveCompartmentId, setMoveCompartmentId] = useState('')
+  const [moveError, setMoveError] = useState<string | null>(null)
+  const [moveLoading, setMoveLoading] = useState(false)
 
   const stationLabel = apparatus.station
     ? `Station ${apparatus.station.station_number} — ${apparatus.station.station_name}`
@@ -97,11 +124,32 @@ export default function EquipmentDetailClient({
     setLoading(false)
   }
 
+  function openMoveModal(item: CompartmentItem, sourceCompartmentId: string) {
+    setMoveTarget({ locationId: item.id, itemName: item.item_name, sourceCompartmentId })
+    setMoveApparatusId(apparatus.id)
+    setMoveCompartmentId('')
+    setMoveError(null)
+  }
+
+  async function handleMove() {
+    if (!moveTarget || !moveCompartmentId) return
+    setMoveError(null)
+    setMoveLoading(true)
+    const result = await moveItemToCompartment(moveTarget.locationId, moveCompartmentId)
+    if (result?.error) setMoveError(result.error)
+    else setMoveTarget(null)
+    setMoveLoading(false)
+  }
+
   // Group items by category for dropdown
   const itemsByCategory = allCategories.map(cat => ({
     ...cat,
     items: allItems.filter(i => i.category_id === cat.id),
   })).filter(cat => cat.items.length > 0)
+
+  // Compartments available for the selected move-target apparatus
+  const moveApparatusCompartments = allApparatus
+    .find(a => a.id === moveApparatusId)?.compartments ?? []
 
   return (
     <div className="max-w-2xl">
@@ -227,13 +275,22 @@ export default function EquipmentDetailClient({
                           <p className="text-xs text-zinc-400">expected</p>
                         </div>
                         {isOfficerOrAbove && (
-                          <button
-                            onClick={() => handleRemove(item.id)}
-                            disabled={loading}
-                            className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
-                          >
-                            Remove
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => openMoveModal(item, c.id)}
+                              disabled={loading}
+                              className="text-xs text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                            >
+                              Move
+                            </button>
+                            <button
+                              onClick={() => handleRemove(item.id)}
+                              disabled={loading}
+                              className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
+                            >
+                              Remove
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -242,6 +299,74 @@ export default function EquipmentDetailClient({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Move Modal */}
+      {moveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-6">
+            <h2 className="text-base font-bold text-zinc-900 mb-1">Move Item</h2>
+            <p className="text-sm text-zinc-500 mb-5">
+              Moving <span className="font-semibold text-zinc-800">{moveTarget.itemName}</span> to a new compartment.
+            </p>
+
+            {moveError && (
+              <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{moveError}</div>
+            )}
+
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 mb-1">Apparatus</label>
+                <select
+                  value={moveApparatusId}
+                  onChange={e => { setMoveApparatusId(e.target.value); setMoveCompartmentId('') }}
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                >
+                  {allApparatus.map(a => (
+                    <option key={a.id} value={a.id}>
+                      Unit {a.unit_number}{a.apparatus_name ? ` — ${a.apparatus_name}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 mb-1">Compartment</label>
+                <select
+                  value={moveCompartmentId}
+                  onChange={e => setMoveCompartmentId(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  disabled={!moveApparatusId}
+                >
+                  <option value="">Select compartment...</option>
+                  {moveApparatusCompartments
+                    .filter(c => c.id !== moveTarget.sourceCompartmentId || moveApparatusId !== apparatus.id)
+                    .map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.compartment_code}{c.compartment_name ? ` — ${c.compartment_name}` : ''}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setMoveTarget(null)}
+                className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMove}
+                disabled={!moveCompartmentId || moveLoading}
+                className="flex-1 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
+              >
+                {moveLoading ? 'Moving...' : 'Move Item'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

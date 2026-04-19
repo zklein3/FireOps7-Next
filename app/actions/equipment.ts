@@ -231,3 +231,30 @@ export async function removeItemFromCompartment(location_standard_id: string) {
   revalidatePath('/equipment')
   return { success: true }
 }
+
+// ─── Move Item to Different Compartment ───────────────────────────────────────
+export async function moveItemToCompartment(location_standard_id: string, target_compartment_id: string) {
+  const ctx = await getContext()
+  if (!ctx?.isOfficerOrAbove) return { error: 'Only officers and admins can move items.' }
+  const adminClient = createAdminClient()
+
+  const { data: existing } = await adminClient
+    .from('item_location_standards').select('id, item_id')
+    .eq('id', location_standard_id)
+  const record = existing?.[0]
+  if (!record) return { error: 'Item assignment not found.' }
+
+  const { data: conflict } = await adminClient
+    .from('item_location_standards').select('id')
+    .eq('apparatus_compartment_id', target_compartment_id)
+    .eq('item_id', record.item_id)
+  if (conflict?.[0]) return { error: 'This item is already assigned to the target compartment.' }
+
+  const { error } = await adminClient
+    .from('item_location_standards')
+    .update({ apparatus_compartment_id: target_compartment_id })
+    .eq('id', location_standard_id)
+  if (error) { await logError(error.message, '/equipment'); return { error: error.message } }
+  revalidatePath('/equipment')
+  return { success: true }
+}

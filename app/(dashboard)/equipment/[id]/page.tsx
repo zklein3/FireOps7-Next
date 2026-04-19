@@ -93,6 +93,51 @@ export default async function EquipmentDetailPage({ params }: { params: Promise<
     .eq('active', true)
     .order('sort_order')
 
+  // Fetch all apparatus + compartments for move modal
+  const { data: allApparatusList } = await adminClient
+    .from('apparatus')
+    .select('id, unit_number, apparatus_name')
+    .eq('department_id', myDept.department_id)
+    .eq('active', true)
+    .order('unit_number')
+
+  const allApparatusIds = (allApparatusList ?? []).map(a => a.id)
+  const { data: allCompartmentLinks } = allApparatusIds.length > 0
+    ? await adminClient
+        .from('apparatus_compartments')
+        .select('id, apparatus_id, compartment_name_id')
+        .in('apparatus_id', allApparatusIds)
+        .eq('active', true)
+    : { data: [] }
+
+  const allCompartmentNameIds = (allCompartmentLinks ?? []).map(c => c.compartment_name_id).filter(Boolean)
+  const { data: allCompartmentNames } = allCompartmentNameIds.length > 0
+    ? await adminClient
+        .from('compartment_names')
+        .select('id, compartment_code, compartment_name, sort_order')
+        .in('id', allCompartmentNameIds)
+    : { data: [] }
+
+  const allCompartmentNameMap = Object.fromEntries((allCompartmentNames ?? []).map(c => [c.id, c]))
+
+  const allApparatus = (allApparatusList ?? []).map(a => ({
+    id: a.id,
+    unit_number: a.unit_number,
+    apparatus_name: a.apparatus_name,
+    compartments: (allCompartmentLinks ?? [])
+      .filter(c => c.apparatus_id === a.id)
+      .map(c => {
+        const cn = allCompartmentNameMap[c.compartment_name_id]
+        return {
+          id: c.id,
+          compartment_code: cn?.compartment_code ?? '—',
+          compartment_name: cn?.compartment_name ?? null,
+          sort_order: cn?.sort_order ?? 999,
+        }
+      })
+      .sort((a, b) => a.sort_order - b.sort_order),
+  }))
+
   // Build compartment data with their items
   const compartments = (compartmentLinks ?? [])
     .map(c => {
@@ -134,6 +179,7 @@ export default async function EquipmentDetailPage({ params }: { params: Promise<
       compartments={compartments}
       allItems={allItems ?? []}
       allCategories={allCategories ?? []}
+      allApparatus={allApparatus}
       isAdmin={isAdmin}
       isOfficerOrAbove={isOfficerOrAbove}
     />
