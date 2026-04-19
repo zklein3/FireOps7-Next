@@ -165,6 +165,7 @@ CRITICAL PATTERNS:
 - Inspection template builder — create templates per item type, add/edit/delete steps, reassign to different item type
 - Inspection run UI — `/inspections` select apparatus+compartment → `/inspections/run` checklist with asset picker, presence checks, all step types, submit logs to DB (apparatus_id, compartment_id, presence checks all persisted)
 - **Inventory Reports — `/reports/inventory` — apparatus cards, date range filter, flagged item reference cards, window.print() print view; linked from apparatus detail page**
+- **Equipment move — Move button on each item in equipment detail → modal to pick any apparatus + compartment, single-step reassign (cross-truck supported)**
 - **Attendance module — fully built including verification queue (approve/reject with reason, approve all)**
 - **Training module — DB migrated, cert types + course units, enrollments, member progress + verification, direct cert entry, training events with self-report + officer log + verification queue**
 - **Incident log module — DB migrated, manual entry, apparatus + per-unit times, personnel with POV support, fire details, officer verification + finalize flow**
@@ -190,6 +191,7 @@ System logs viewer built. Next up:
 - Attendance + training/cert reports (officer/admin)
 - QR code system (see section below)
 - Equipment page — asset assignment to compartments (currently quantity-only)
+- Equipment page — move item between compartments/apparatus ✅
 - Inspection schedule settings (daily/weekly/monthly per dept)
 - Supabase auth allowed URLs for custom domain
 - Resend from address → custom domain
