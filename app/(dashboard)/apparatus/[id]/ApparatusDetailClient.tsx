@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { updateApparatus } from '@/app/actions/apparatus'
 import { assignCompartmentToApparatus, removeCompartmentFromApparatus } from '@/app/actions/compartments'
@@ -75,7 +74,6 @@ export default function ApparatusDetailClient({
   isOfficerOrAbove: boolean
   departmentId: string
 }) {
-  const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -121,7 +119,7 @@ export default function ApparatusDetailClient({
   return (
     <div className="max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="text-sm text-zinc-500 hover:text-zinc-700">← Back</button>
+        <Link href="/apparatus" className="text-sm text-zinc-500 hover:text-zinc-700">← Back</Link>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 truncate">
             Unit {apparatus.unit_number}{apparatus.apparatus_name ? ` — ${apparatus.apparatus_name}` : ''}
