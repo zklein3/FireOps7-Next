@@ -122,10 +122,10 @@ export default function SysAdminDeptClient({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-white rounded-xl border border-zinc-200 p-1">
+      <div className="flex gap-1 mb-6 bg-white rounded-xl border border-zinc-200 p-1 overflow-x-auto">
         {tabs.map(t => (
           <button key={t.key} onClick={() => { setTab(t.key); resetForm() }}
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 shrink-0 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
               tab === t.key ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'
             }`}>
             {t.label}

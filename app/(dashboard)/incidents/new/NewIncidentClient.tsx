@@ -52,6 +52,10 @@ export default function NewIncidentClient({
   const [mutualAidDir, setMutualAidDir] = useState('')
   const [nerisReported, setNerisReported] = useState(false)
 
+  // Incident-level times that can auto-fill from apparatus
+  const [incidentPaged, setIncidentPaged] = useState('')
+  const [incidentInService, setIncidentInService] = useState('')
+
   // Apparatus rows
   const [apparatusRows, setApparatusRows] = useState<ApparatusEntry[]>([])
   const [showAddApparatus, setShowAddApparatus] = useState(false)
@@ -69,6 +73,11 @@ export default function NewIncidentClient({
   function addApparatusRow() {
     if (!newApparatus.apparatus_id) return
     if (apparatusRows.some(r => r.apparatus_id === newApparatus.apparatus_id)) return
+    // Auto-fill incident paged/in-service if not already set
+    if (newApparatus.paged_at && !incidentPaged) setIncidentPaged(newApparatus.paged_at)
+    if (newApparatus.available_at) {
+      if (!incidentInService || newApparatus.available_at > incidentInService) setIncidentInService(newApparatus.available_at)
+    }
     setApparatusRows(prev => [...prev, { ...newApparatus }])
     setNewApparatus({ apparatus_id: '', role: 'primary', paged_at: '', enroute_at: '', on_scene_at: '', leaving_scene_at: '', available_at: '' })
     setShowAddApparatus(false)
@@ -216,21 +225,32 @@ export default function NewIncidentClient({
 
         {/* Incident Times */}
         <section className="rounded-xl bg-white border border-zinc-200 p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-zinc-900">Incident Times <span className="text-zinc-400 font-normal text-xs">(overall)</span></h2>
+          <h2 className="text-sm font-semibold text-zinc-900">Incident Times <span className="text-zinc-400 font-normal text-xs">(overall — paged &amp; in service auto-fill from apparatus)</span></h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {[
-              { name: 'call_time', label: 'Call Time' },
-              { name: 'paged_at', label: 'Paged' },
-              { name: 'first_enroute_at', label: 'First Enroute' },
-              { name: 'first_on_scene_at', label: 'First On Scene' },
-              { name: 'last_leaving_scene_at', label: 'Last Leaving Scene' },
-              { name: 'in_service_at', label: 'In Service' },
-            ].map(f => (
-              <div key={f.name}>
-                <label className={labelCls}>{f.label}</label>
-                <input name={f.name} type="datetime-local" className={inputCls} />
-              </div>
-            ))}
+            <div>
+              <label className={labelCls}>Call Time</label>
+              <input name="call_time" type="datetime-local" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Paged</label>
+              <input name="paged_at" type="datetime-local" value={incidentPaged} onChange={e => setIncidentPaged(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>First Enroute</label>
+              <input name="first_enroute_at" type="datetime-local" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>First On Scene</label>
+              <input name="first_on_scene_at" type="datetime-local" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Last Leaving Scene</label>
+              <input name="last_leaving_scene_at" type="datetime-local" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>In Service</label>
+              <input name="in_service_at" type="datetime-local" value={incidentInService} onChange={e => setIncidentInService(e.target.value)} className={inputCls} />
+            </div>
           </div>
         </section>
 
