@@ -161,12 +161,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 - Client hides those IDs from all asset dropdowns (both ASSET_LINK selects and standalone slot selects)
 
 ### After That — Priority Order
-1. Member activity reports (`/reports/my-activity`)
-2. Attendance + training/cert reports (officer/admin view)
-3. Training/cert reports — expiring certs, completion rates
-4. Asset roster view — dept-wide, filterable by item type
-5. QR + Compartment + Inspection Session system (see REFERENCE.md for full design)
-6. Flow & Presentation Polish
+1. **Sys admin user account management** — change email, force password reset, deactivate/reactivate, change role, move department (one session, eliminates most DB fix needs before scaling to more test departments)
+2. Member activity reports (`/reports/my-activity`)
+3. Attendance + training/cert reports (officer/admin view)
+4. Training/cert reports — expiring certs, completion rates
+5. Asset roster view — dept-wide, filterable by item type
+6. QR + Compartment + Inspection Session system (see REFERENCE.md for full design)
+7. Flow & Presentation Polish
 
 ## Dev Workflow
 - Start: `npm run dev` in project directory
