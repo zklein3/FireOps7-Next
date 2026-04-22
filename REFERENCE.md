@@ -38,7 +38,7 @@
 - QR code system
 - ASSET_LINK sub-inspection (next build — see CLAUDE.md)
 - Inspection schedule settings (daily/weekly/monthly per dept)
-- **Sys admin: change user email** — no UI exists; requires updating both `auth.users` and `personnel` tables. Until built, fix via Supabase MCP or dashboard. Uses `supabase.auth.admin.updateUserById(authUserId, { email })` + personnel table update.
+- Sys admin user account management (change email, role, department, force password reset, deactivate/reactivate) — **built** in `/admin/users` Manage modal
 - Supabase auth allowed URLs for custom domain
 - Resend from address → custom domain
 
