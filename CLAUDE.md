@@ -12,7 +12,10 @@
 ## GitHub
 - Repo: https://github.com/zklein3/FireOps7-Next
 - Branch: main
-- Local path: C:\Users\zklei\Documents\FireOps7-Next
+- Local path: varies by machine (personal: `C:\Users\zklein3\Documents\FireOps7-Next`, shared: `C:\Users\zklei\Documents\FireOps7-Next`)
+
+## Machine Setup Note
+`.claude/settings.json` is gitignored — each machine maintains its own Claude Code settings. If you pull this repo on a new machine and `settings.json` is missing or reset, that is expected. Re-configure permissions locally as needed. Do NOT commit `.claude/settings.json`.
 
 ## Production
 - Vercel: https://fire-ops7-next.vercel.app
