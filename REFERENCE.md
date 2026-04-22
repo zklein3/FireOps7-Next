@@ -99,10 +99,10 @@
 - Warning banner shown when editing past events with existing attendance records
 - Members see only own attendance; dept-level aggregates on dashboard
 
-## QR Code System — DESIGN (to build)
+## QR + Compartment Page + Inspection Session — DESIGN (to build)
 
 ### Core Principles
-- Scanning is ADDITIVE — never required. Every page works fully without it
+- Scanning is ADDITIVE — never required. Every page works without it
 - Manual navigation always available everywhere
 - Two scan modes: phone camera outside app, in-app scanner
 - QR codes use human-readable codes, not UUIDs — app looks up UUID internally
@@ -114,29 +114,64 @@
 - SCBA bottle: bottle ID (e.g. `B-0001`) — already in use
 
 ### DB Changes Needed
-- Add `qr_code` field to `apparatus`, `apparatus_compartments`, `item_assets`
-- Admin can set custom code OR scan existing manufacturer QR to associate
+- Add `qr_code` text field to `apparatus`, `apparatus_compartments`, `item_assets`
+- Add `inspection_session_id` UUID to `item_asset_inspection_logs` — groups all compartment submissions from one weekly sweep into one session
+- Admin can type human-readable code OR scan existing manufacturer QR to associate
 
 ### Two Scan Modes
 **Mode 1 — Phone camera outside app:**
 - QR encodes URL: `https://www.fireops7.com/scan?type=compartment&code=ENGINE-32-D1`
-- Not logged in → redirected to login → after auth → back to `/scan` → resolves → destination
-- Logged in → `/scan` looks up code → redirects to final destination
+- Not logged in → redirected to login → after auth → back to `/scan` → resolves → redirects
+- Logged in → `/scan` looks up code → redirects to destination
 
 **Mode 2 — In-app scanner:**
-- User already logged in, taps scan button on relevant pages
-- App calls camera via BarcodeDetector/getUserMedia
-- Reads QR, extracts code, navigates internally — no redirect needed
-- Reusable `QRScanner` component shared across pages
+- User already logged in, taps scan button on relevant page
+- BarcodeDetector/getUserMedia (already working in Fire School — extract to reusable `QRScanner` component)
+- Reads QR, navigates internally — no redirect needed
 
-### Implementation Steps (when building)
-1. Add `qr_code` field to apparatus, apparatus_compartments, item_assets tables
-2. Build `/scan` route with type+code lookup and auth redirect logic
-3. Build reusable `QRScanner` component (extract from fire school page)
-4. Install `qrcode.react` npm package
-5. Add "Generate QR Label" button + print layout to apparatus, compartment, asset pages
-6. Add scan buttons (optional shortcut) to inspections landing, equipment pages
-7. Add scan-to-associate flow in asset edit form
+### New Routes & Pages
+
+| Route | Purpose |
+|---|---|
+| `/equipment/[apparatus_id]/[compartment_id]` | Compartment page — QR scan landing |
+| `/inspections/apparatus/[id]` | Weekly inspection session — full apparatus sweep |
+| `/scan` | QR lookup + auth redirect |
+
+### Compartment Page (`/equipment/[apparatus_id]/[compartment_id]`)
+- Header: apparatus name + compartment name/code
+- Item list: each item with expected quantity, current asset status
+- Three action buttons:
+  - **Verify Present** — lightweight presence-check-only flow (no asset checklists); logs to `compartment_presence_check_logs`; designed for daily shift checks
+  - **Start Inspection** — launches existing inspection run pre-filled with apparatus + compartment (skips selection screen)
+  - **View History** — recent inspection logs for this compartment
+- Accessible via QR scan or manual nav from apparatus detail page
+
+### Weekly Inspection Session (`/inspections/apparatus/[id]`)
+- Shows all compartments for the apparatus as a checklist (incomplete by default)
+- User taps a compartment → existing inspection run flow → submits → returns to session view → compartment marked complete
+- All submissions in the session share an `inspection_session_id` UUID — reports can group by session
+- Progress persists if user leaves and returns (session tracked by session ID in URL or DB)
+- "Start Weekly Inspection" button lives on the apparatus detail page
+
+### Use Case Mapping
+- **Daily check (career dept shift change):** Scan compartment → compartment page → Verify Present → done
+- **Weekly full inspection:** Apparatus detail → Start Weekly Inspection → session view → work through each compartment
+- **Ad hoc single compartment inspection:** Scan or navigate → compartment page → Start Inspection
+
+### QR Label Generation & Printing
+- `qrcode.react` npm package — generates QR as SVG client-side, no third party
+- QR encodes the full scan URL (e.g. `https://www.fireops7.com/scan?type=compartment&code=ENGINE-32-D1`)
+- "Print QR Label" button on apparatus detail + compartment page
+- Print layout: QR image + code text + apparatus/compartment name — uses `window.print()` (same as inventory reports)
+
+### Build Order (when starting this)
+1. DB migration: `qr_code` fields on apparatus, apparatus_compartments, item_assets; `inspection_session_id` on item_asset_inspection_logs
+2. Compartment page (`/equipment/[apparatus_id]/[compartment_id]`) with item list + Verify Present + Start Inspection
+3. Weekly inspection session (`/inspections/apparatus/[id]`)
+4. `/scan` route with type+code lookup and auth redirect logic
+5. `QRScanner` component (extract from fire school page), add scan buttons to relevant pages
+6. QR label print layout + "Print QR Label" buttons
+7. Admin UI: qr_code field on apparatus/compartment/asset edit forms
 
 ## Training Module Detail
 

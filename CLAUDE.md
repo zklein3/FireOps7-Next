@@ -165,7 +165,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 2. Attendance + training/cert reports (officer/admin view)
 3. Training/cert reports — expiring certs, completion rates
 4. Asset roster view — dept-wide, filterable by item type
-5. Flow & Presentation Polish
+5. QR + Compartment + Inspection Session system (see REFERENCE.md for full design)
+6. Flow & Presentation Polish
 
 ## Dev Workflow
 - Start: `npm run dev` in project directory
