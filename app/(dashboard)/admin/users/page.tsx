@@ -14,7 +14,7 @@ export default async function UsersPage() {
     .from('personnel')
     .select(`
       id, first_name, last_name, email, signup_status, is_sys_admin, created_at,
-      department_personnel(system_role, department_id)
+      department_personnel(system_role, department_id, active)
     `)
     .order('created_at', { ascending: false })
 

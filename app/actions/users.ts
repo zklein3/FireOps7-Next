@@ -7,6 +7,182 @@ import { revalidatePath } from 'next/cache'
 
 const TEMP_PASSWORD = 'Hello1!'
 
+// ─── Sys Admin Guard ──────────────────────────────────────────────────────────
+async function assertSysAdmin() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Session expired.')
+  const adminClient = createAdminClient()
+  const { data: me } = await adminClient
+    .from('personnel')
+    .select('is_sys_admin')
+    .eq('auth_user_id', user.id)
+    .single()
+  if (!me?.is_sys_admin) throw new Error('Unauthorized.')
+}
+
+// ─── Sys Admin: Update User Email ─────────────────────────────────────────────
+export async function sysAdminUpdateEmail(personnelId: string, newEmail: string) {
+  try {
+    await assertSysAdmin()
+    if (!newEmail.trim()) return { error: 'Email is required.' }
+    const adminClient = createAdminClient()
+
+    const { data: person, error: fetchErr } = await adminClient
+      .from('personnel')
+      .select('auth_user_id')
+      .eq('id', personnelId)
+      .single()
+    if (fetchErr || !person) return { error: 'User not found.' }
+
+    const { error: authErr } = await adminClient.auth.admin.updateUserById(
+      person.auth_user_id,
+      { email: newEmail.trim() }
+    )
+    if (authErr) return { error: authErr.message }
+
+    const { error: dbErr } = await adminClient
+      .from('personnel')
+      .update({ email: newEmail.trim() })
+      .eq('id', personnelId)
+    if (dbErr) return { error: dbErr.message }
+
+    revalidatePath('/admin/users')
+    return { success: true }
+  } catch (err) {
+    await logError(err, '/admin/users', { metadata: { personnelId } })
+    return { error: err instanceof Error ? err.message : 'Failed to update email.' }
+  }
+}
+
+// ─── Sys Admin: Force Password Reset ─────────────────────────────────────────
+export async function sysAdminForcePasswordReset(personnelId: string) {
+  try {
+    await assertSysAdmin()
+    const adminClient = createAdminClient()
+
+    const { data: person, error: fetchErr } = await adminClient
+      .from('personnel')
+      .select('auth_user_id')
+      .eq('id', personnelId)
+      .single()
+    if (fetchErr || !person) return { error: 'User not found.' }
+
+    const { error: authErr } = await adminClient.auth.admin.updateUserById(
+      person.auth_user_id,
+      { password: TEMP_PASSWORD }
+    )
+    if (authErr) return { error: authErr.message }
+
+    const { error: dbErr } = await adminClient
+      .from('personnel')
+      .update({ signup_status: 'temp_password' })
+      .eq('id', personnelId)
+    if (dbErr) return { error: dbErr.message }
+
+    revalidatePath('/admin/users')
+    return { success: true }
+  } catch (err) {
+    await logError(err, '/admin/users', { metadata: { personnelId } })
+    return { error: err instanceof Error ? err.message : 'Failed to reset password.' }
+  }
+}
+
+// ─── Sys Admin: Set Department Role ──────────────────────────────────────────
+export async function sysAdminSetRole(personnelId: string, newRole: string) {
+  try {
+    await assertSysAdmin()
+    const validRoles = ['admin', 'officer', 'member']
+    if (!validRoles.includes(newRole)) return { error: 'Invalid role.' }
+    const adminClient = createAdminClient()
+
+    const { error: dbErr } = await adminClient
+      .from('department_personnel')
+      .update({ system_role: newRole })
+      .eq('personnel_id', personnelId)
+    if (dbErr) return { error: dbErr.message }
+
+    revalidatePath('/admin/users')
+    return { success: true }
+  } catch (err) {
+    await logError(err, '/admin/users', { metadata: { personnelId } })
+    return { error: err instanceof Error ? err.message : 'Failed to update role.' }
+  }
+}
+
+// ─── Sys Admin: Move User to Different Department ─────────────────────────────
+export async function sysAdminMoveDepartment(personnelId: string, newDeptId: string) {
+  try {
+    await assertSysAdmin()
+    if (!newDeptId) return { error: 'Department is required.' }
+    const adminClient = createAdminClient()
+
+    const { error: dbErr } = await adminClient
+      .from('department_personnel')
+      .update({ department_id: newDeptId })
+      .eq('personnel_id', personnelId)
+    if (dbErr) return { error: dbErr.message }
+
+    revalidatePath('/admin/users')
+    return { success: true }
+  } catch (err) {
+    await logError(err, '/admin/users', { metadata: { personnelId } })
+    return { error: err instanceof Error ? err.message : 'Failed to move department.' }
+  }
+}
+
+// ─── Sys Admin: Deactivate User ───────────────────────────────────────────────
+export async function sysAdminDeactivateUser(personnelId: string) {
+  try {
+    await assertSysAdmin()
+    const adminClient = createAdminClient()
+
+    const { error: dpErr } = await adminClient
+      .from('department_personnel')
+      .update({ active: false })
+      .eq('personnel_id', personnelId)
+    if (dpErr) return { error: dpErr.message }
+
+    const { error: pErr } = await adminClient
+      .from('personnel')
+      .update({ signup_status: 'denied' })
+      .eq('id', personnelId)
+    if (pErr) return { error: pErr.message }
+
+    revalidatePath('/admin/users')
+    return { success: true }
+  } catch (err) {
+    await logError(err, '/admin/users', { metadata: { personnelId } })
+    return { error: err instanceof Error ? err.message : 'Failed to deactivate user.' }
+  }
+}
+
+// ─── Sys Admin: Reactivate User ───────────────────────────────────────────────
+export async function sysAdminReactivateUser(personnelId: string) {
+  try {
+    await assertSysAdmin()
+    const adminClient = createAdminClient()
+
+    const { error: dpErr } = await adminClient
+      .from('department_personnel')
+      .update({ active: true })
+      .eq('personnel_id', personnelId)
+    if (dpErr) return { error: dpErr.message }
+
+    const { error: pErr } = await adminClient
+      .from('personnel')
+      .update({ signup_status: 'active' })
+      .eq('id', personnelId)
+    if (pErr) return { error: pErr.message }
+
+    revalidatePath('/admin/users')
+    return { success: true }
+  } catch (err) {
+    await logError(err, '/admin/users', { metadata: { personnelId } })
+    return { error: err instanceof Error ? err.message : 'Failed to reactivate user.' }
+  }
+}
+
 // ─── Sys Admin: Create Dept Admin ─────────────────────────────────────────────
 export async function createDeptAdmin(formData: FormData) {
   const email = formData.get('email') as string
