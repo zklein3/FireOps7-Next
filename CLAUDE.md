@@ -184,13 +184,34 @@ CRITICAL PATTERNS:
 - Vercel deployed + fireops7.com DNS configured
 
 ## IMMEDIATE NEXT — Resume Here Next Session
-Equipment multi-asset inspection + move/edit built. Next up:
 
-1. **Member activity reports** — `/reports/my-activity` — member views own attendance, events, training in one place
-2. **Attendance reports** — officer/admin view of participation rates per member/event type
-3. **Training/cert reports** — expiring certs, completion rates
-4. **Asset roster view** — view all assets department-wide, filterable by item type/class
-5. **Flow & Presentation Polish** — onboarding/empty states, navigation dead ends, dashboard usefulness, mobile walkthrough, visual consistency
+### ASSET_LINK Sub-Inspection + Bottle Dedup (START HERE)
+
+**Goal:** When an ASSET_LINK step is encountered during an airpack inspection, instead of just recording which bottle was picked, the bottle's own inspection template should load inline and be completed. The bottle submits its own `item_asset_inspection_log` entry. A 30-minute dedup window then hides already-inspected bottles from all other dropdowns in the same run.
+
+**Why:** SCBA bottles need the same inspection regardless of context — whether on an airpack or stored spare in a compartment. The current ASSET_LINK step only picks which bottle is present; it never runs the bottle's checklist.
+
+**Files to change:**
+- `app/(dashboard)/inspections/run/page.tsx` — server fetch: load linked asset templates + steps; query recent inspection logs (last 30 min) to build `recentlyInspectedAssetIds` set
+- `app/(dashboard)/inspections/run/InspectionRunClient.tsx` — ASSET_LINK render block (line ~425): after asset selected, load that asset's template steps inline and collect responses; pass `recentlyInspectedAssetIds` to hide/grey those assets in all dropdowns
+- `app/actions/inspections.ts` — `submitInspection`: already accepts `asset_inspections[]`; ensure sub-inspections from ASSET_LINK steps submit as their own log rows
+
+**Dedup logic:**
+- Server fetches `item_asset_inspection_logs` for the department where `created_at > now() - 30 min`
+- Passes `recentlyInspectedAssetIds: string[]` to the client
+- Client filters these IDs out of all asset dropdowns (ASSET_LINK selects + standalone asset slot selects)
+- 30-min window — hardcoded for now, configurable later
+
+**State changes in InspectionRunClient:**
+- Add `subInspectionResponses: Record<string, Record<string, StepResponse>>` — keyed by linked_asset_id → step_id → response (separate from parent asset's stepResponses)
+- On submit, flatten sub-inspections into the same `asset_inspections[]` payload as standalone slots
+
+**After that — priority order:**
+1. Member activity reports (`/reports/my-activity`)
+2. Attendance + training/cert reports (officer/admin view)
+3. Training/cert reports — expiring certs, completion rates
+4. Asset roster view — dept-wide, filterable by item type/class
+5. Flow & Presentation Polish
 
 ## What's Placeholder / Not Yet Built
 - Member activity reports (`/reports/my-activity`)
@@ -227,6 +248,7 @@ Equipment multi-asset inspection + move/edit built. Next up:
 - `has_linked_asset = true` — this asset expects a linked asset during inspection
 - `linked_item_type_id` — what TYPE of asset to prompt for (e.g. Scott Air Pack Bottle)
 - Link is DYNAMIC — not hardwired. During inspection user selects which specific asset is present
+- **NOT YET BUILT:** ASSET_LINK step currently only records which linked asset was picked (dropdown → linked_asset_id stored as step response). It does NOT run the linked asset's own inspection template inline. This is the next build — see IMMEDIATE NEXT section above.
 
 ### Inspection Flow (BUILT)
 1. Member/officer goes to Inspections → selects apparatus → selects compartment
