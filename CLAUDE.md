@@ -140,33 +140,40 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 
 ## IMMEDIATE NEXT — Resume Here Next Session
 
-### ASSET_LINK Sub-Inspection + Bottle Dedup (START HERE)
+### 1. Member Activity Report (`/reports/my-activity`) ← START HERE
+Simple self-view — member sees their own record across three sections:
+- **Attendance** — events logged, present/excused/unexcused, date range filter
+- **Inspections** — inspections they ran, by apparatus/compartment, pass/fail
+- **Incidents** — calls they responded to
 
-**Goal:** When an ASSET_LINK step fires during airpack inspection, after the user picks the bottle, the bottle's own inspection template loads inline and they complete it. The bottle submits its own `item_asset_inspection_log` entry. A 30-minute dedup window hides already-inspected bottles from all other dropdowns in the same run.
+No print requirement for v1. Keep it simple — data display only.
 
-**Why:** SCBA bottles need the same inspection regardless of context — whether on an airpack or stored as a spare in a compartment. Current ASSET_LINK only picks which bottle is present; it never runs the bottle's checklist.
+### Priority Order After That
 
-**Files to change:**
-- `app/(dashboard)/inspections/run/page.tsx` — load linked asset templates + steps; query `item_asset_inspection_logs` where `created_at > now() - 30 min` to build `recentlyInspectedAssetIds`
-- `app/(dashboard)/inspections/run/InspectionRunClient.tsx` — ASSET_LINK block (~line 425): after asset selected, render that asset's template steps inline + collect responses; filter `recentlyInspectedAssetIds` from all asset dropdowns
-- `app/actions/inspections.ts` — `submitInspection` already accepts `asset_inspections[]`; sub-inspections from ASSET_LINK steps submit as their own log rows in the same payload
+**2. Inspection Report (officer/admin) — `/reports/inspections`**
+- Filter: apparatus, date range
+- Output: grouped by truck → compartment → item → each inspection with step responses
+- ISO audit ready: inspector name, date, pass/fail, all step responses visible
+- Print layout via `window.print()` (same pattern as inventory reports)
 
-**State to add in InspectionRunClient:**
-- `subInspectionResponses: Record<string, Record<string, StepResponse>>` — keyed by linked_asset_id → step_id → response
-- On submit, flatten sub-inspections into the same `asset_inspections[]` payload as standalone slots
+**3. Training/Cert Report (officer/admin) — `/reports/training`**
+- Filter: member, cert type, date range
+- Output: grouped by member → certifications + course completions
+- Flag certs expiring within configurable window
+- Printable
 
-**Dedup:**
-- 30-min window hardcoded for now
-- Server passes `recentlyInspectedAssetIds: string[]` to client
-- Client hides those IDs from all asset dropdowns (both ASSET_LINK selects and standalone slot selects)
+**4. Attendance Report (officer/admin) — `/reports/attendance`**
+- Filter: member, date range, event type
+- Participation rates, excused/unexcused breakdown
+- Printable
 
-### After That — Priority Order
-1. Member activity reports (`/reports/my-activity`)
-2. Attendance + training/cert reports (officer/admin view)
-3. Training/cert reports — expiring certs, completion rates
-4. Asset roster view — dept-wide, filterable by item type
-5. QR + Compartment + Inspection Session system (see REFERENCE.md for full design)
-6. Flow & Presentation Polish
+**5. Asset roster view** — dept-wide, filterable by item type/status
+
+**6. QR + Compartment page + Inspection Session** — see REFERENCE.md for full design
+
+**7. ISO Audit sections (future)** — see REFERENCE.md for full roadmap including hose logs, apparatus specs, hydrant flows, mutual aid
+
+**8. Flow & Presentation Polish**
 
 ## Dev Workflow
 - Start: `npm run dev` in project directory

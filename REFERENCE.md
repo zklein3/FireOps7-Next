@@ -17,6 +17,7 @@
 - Inspection template builder — create templates per item type, add/edit/delete steps, reassign to different item type
 - Inspection run UI — `/inspections` select apparatus+compartment → `/inspections/run` checklist with asset picker, presence checks, all step types, submit logs to DB (apparatus_id, compartment_id, presence checks all persisted)
 - Multi-asset inspection — `expected_quantity` on asset-tracked items drives N inspection slots per item type; each slot gets its own asset picker (cross-slot deduplication) + full checklist; each submits a separate inspection log row
+- ASSET_LINK sub-inspection — when ASSET_LINK step fires, linked asset's own template renders inline; submits its own inspection log row; 30-min dedup hides already-inspected assets from all dropdowns in the same apparatus sweep
 - Inventory Reports — `/reports/inventory` — apparatus cards, date range filter, flagged item reference cards, window.print() print view; linked from apparatus detail page
 - Equipment move — Move button on each item in equipment detail → modal to pick any apparatus + compartment, single-step reassign (cross-truck supported)
 - Equipment quantity edit — click quantity number inline to edit expected count; officers/admins only; asset items show "assets" label, quantity items show "expected"
@@ -33,12 +34,13 @@
 - Vercel deployed + fireops7.com DNS configured
 
 ## What's Placeholder / Not Yet Built
-- Member activity reports (`/reports/my-activity`)
-- Attendance + training/cert reports (officer/admin)
-- QR code system
-- ASSET_LINK sub-inspection (next build — see CLAUDE.md)
+- Member activity reports (`/reports/my-activity`) ← next build
+- Inspection report — officer/admin, filterable by apparatus + date range, printable
+- Training/cert report — officer/admin, filterable by member + cert type, expiring certs flagged, printable
+- Attendance report — officer/admin, participation rates, printable
+- QR code system (see QR design section below)
+- ISO audit sections — hose logs, apparatus specs, hydrant flows, mutual aid (see ISO section below)
 - Inspection schedule settings (daily/weekly/monthly per dept)
-- Sys admin user account management (change email, role, department, force password reset, deactivate/reactivate) — **built** in `/admin/users` Manage modal
 - Supabase auth allowed URLs for custom domain
 - Resend from address → custom domain
 
@@ -270,6 +272,56 @@ incident_fire_details — property_lost, dollar_loss, cause_of_fire, vehicle_mak
 - Uses BarcodeDetector Web API, rear camera via getUserMedia
 - Scan → extracts bottle ID → calls handleCheck() directly
 - Fire school IDs are generic (public, shared across depts) — separate from main app QR system
+
+## ISO Audit Reporting — Design & Roadmap
+
+### What's Reportable Today (covered by existing data)
+- **Apparatus inspections** — by truck, date range, inspector, pass/fail, step responses
+- **Training + certifications** — by member, cert type, expiration tracking, course completions
+- **Attendance** — participation rates by member and event type
+- **Incidents** — call volume, incident type breakdown, apparatus and personnel response
+
+### ISO Sections Still Needing Data + Logs
+
+**Hose inventory log**
+- Simple table: hose type (attack/supply/forestry), diameter, length, location (apparatus/station), last test date, test result
+- Admin entry form under Dept Admin
+- Report: all hose by location, last test date, pass/fail
+
+**Apparatus + pump specs**
+- Add fields to `apparatus` table: pump_gpm, tank_capacity_gallons, pump_manufacturer, pump_year, vehicle_vin, vehicle_year, vehicle_make, vehicle_model
+- Edit form already exists on apparatus detail — just add fields
+- Report: apparatus spec sheet per truck
+
+**Hydrant flow logs**
+- New table: hydrant ID/address, test date, static PSI, residual PSI, flow GPM, tester name
+- Admin entry form, map or list view
+- Report: all hydrant tests by date range
+
+### Mutual Aid — Three-Tier Design
+
+**Tier 1 — Manual entry (build first)**
+- Dept admin manually enters partner name, their apparatus list, pump GPM, tank capacity, hose inventory
+- New table: `mutual_aid_partners` + `mutual_aid_apparatus`
+- Simple admin form under Dept Admin
+
+**Tier 2 — Partner self-entry page (build second)**
+- Dept admin generates a share link for a mutual aid partner
+- Partner opens a public/token-gated page and enters their own equipment data directly
+- No FireOps7 account required — similar to fire school pattern
+- Data lands in requesting dept's mutual aid table, attributed to that partner
+
+**Tier 3 — Cross-department data pull (future, when multiple customers)**
+- If partner is already on FireOps7, their apparatus/equipment data already exists in the system
+- Partner dept enables a "share with mutual aid partners" toggle
+- Requesting dept sends a link request → partner approves → data populates automatically and stays current
+- Network effect: more FireOps7 customers = less manual data entry for everyone
+
+### ISO Report Format
+- ISO audits are a recognized format accepted by nearly all agencies
+- Build what data exists now, add sections as logs are built
+- Each section: filterable by date range, grouped appropriately, printable via `window.print()`
+- Print layout consistent with inventory reports pattern already established
 
 ## Reference Documents
 - Winslow Run Sheet (Excel) — uploaded April 16, 2026
