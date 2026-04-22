@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# FireOps7 — Project Guide & Session Summary
+# FireOps7 — Project Guide
 
 ## Stack
 - **Next.js 16.2.3** (App Router, TypeScript, Server Actions)
@@ -9,17 +9,15 @@
 - **@supabase/ssr** + **@supabase/supabase-js**
 - **Resend** — email notifications via Supabase Edge Function
 
-## GitHub
-- Repo: https://github.com/zklein3/FireOps7-Next
-- Branch: main
-- Local path: varies by machine (personal: `C:\Users\zklein3\Documents\FireOps7-Next`, shared: `C:\Users\zklei\Documents\FireOps7-Next`)
-
-## Machine Setup Note
-`.claude/settings.json` is gitignored — each machine maintains its own Claude Code settings. If you pull this repo on a new machine and `settings.json` is missing or reset, that is expected. Re-configure permissions locally as needed. Do NOT commit `.claude/settings.json`.
+## GitHub & Machines
+- Repo: https://github.com/zklein3/FireOps7-Next — branch: main
+- Personal machine: `C:\Users\zklein3\Documents\FireOps7-Next`
+- Shared machine: `C:\Users\zklei\Documents\FireOps7-Next`
+- `.claude/settings.json` is gitignored — each machine keeps its own. Do NOT commit it.
 
 ## Production
 - Vercel: https://fire-ops7-next.vercel.app
-- Primary domain: https://www.fireops7.com (DNS live — Vercel valid config)
+- Primary domain: https://www.fireops7.com (DNS live)
 - Every push to main auto-deploys to Vercel
 
 ## Environment Variables (.env.local — never commit)
@@ -33,7 +31,7 @@
 - `lib/supabase/server.ts` — server client (anon key, cookie-based session)
 - `lib/supabase/admin.ts` — admin client (service role key, bypasses RLS)
 
-CRITICAL PATTERNS:
+## CRITICAL PATTERNS
 - Always use admin client for fetching department-wide data
 - Never use nested Supabase joins — causes TypeScript build errors in production
 - Always fetch related data flat and join in JavaScript with maps
@@ -43,421 +41,57 @@ CRITICAL PATTERNS:
 ## App Route Structure
 
 ### Route Groups
-| Group | Routes | Auth | Purpose |
-|---|---|---|---|
-| `(auth)` | `/login`, `/change-password`, `/profile-setup`, `/pending`, `/denied` | Public | Auth flow |
-| `(dashboard)` | All dashboard routes | Required | Main app |
-| `(fire-school)` | `/fire-school`, `/fire-school/bottles`, `/fire-school/fill-log` | Public | Standalone tool |
-
-### Fire School Routes
-- `/fire-school` — PRIMARY workflow: manual entry + QR scan + bottle check + fill log
-- `/fire-school/bottles` — admin/list page only, NOT part of scan workflow
-- `/fire-school/fill-log` — history page: view past fill logs only
+| Group | Routes | Auth |
+|---|---|---|
+| `(auth)` | `/login`, `/change-password`, `/profile-setup`, `/pending`, `/denied` | Public |
+| `(dashboard)` | All dashboard routes | Required |
+| `(fire-school)` | `/fire-school`, `/fire-school/bottles`, `/fire-school/fill-log` | Public |
 
 ### Dashboard Routes
 - `/dashboard` — dept dashboard or sys admin overview
 - `/personnel`, `/personnel/[id]` — roster + profile
 - `/apparatus`, `/apparatus/[id]` — apparatus list + detail
 - `/stations`, `/stations/[id]` — stations list + detail
-- `/equipment`, `/equipment/[id]` — equipment by apparatus (quantity items)
+- `/equipment`, `/equipment/[id]` — equipment by apparatus
 - `/inspections` — select apparatus + compartment to inspect
 - `/inspections/run` — run inspection checklist
-- `/events` — events list, self-log attendance, officer manage panel, verification queue ✅
-- `/events/new` — create one-time or recurring event ✅
-- `/training` — my enrollments, certifications, training events (self-report + officer log) ✅
-- `/scan` — QR scan landing/redirect route (to build)
-- `/reports/inventory` — inventory inspection reports (officer/admin only) ✅
+- `/events`, `/events/new` — events + attendance
+- `/training` — enrollments, certifications, training events
+- `/reports/inventory` — inventory inspection reports (officer/admin only)
 - `/admin/departments`, `/admin/users`, `/admin/logs` — sys admin pages
-- `/admin/dept/[id]` — sys admin dept drill-in (tabbed: personnel, stations, apparatus, compartments)
-- `/dept-admin/personnel` — manage personnel
-- `/dept-admin/compartments` — manage compartment names
-- `/dept-admin/items` — manage item categories, item types, assets, inspection templates (3 tabs)
-- `/dept-admin/attendance` — excuse types + participation requirements ✅
-- `/dept-admin/training` — cert types, course units, enrollments, pending progress verification, direct cert entry, training events ✅
+- `/admin/dept/[id]` — sys admin dept drill-in (tabbed)
+- `/dept-admin/personnel`, `/dept-admin/compartments`, `/dept-admin/items` — dept admin
+- `/dept-admin/attendance`, `/dept-admin/training` — dept admin settings
+- `/scan` — QR scan landing/redirect (to build)
 
 ### Key Action Files
 - `app/actions/auth.ts` — signIn, changePassword, signOut
-- `app/actions/profile.ts` — saveProfile
-- `app/actions/departments.ts` — createDepartment, toggleDepartment
-- `app/actions/users.ts` — createDeptAdmin, createDeptMember
-- `app/actions/personnel.ts` — updateOwnProfile, updatePersonnelProfile, updateDeptPersonnel, changeOwnPassword, submitUserReport
+- `app/actions/personnel.ts` — updateOwnProfile, updatePersonnelProfile, updateDeptPersonnel, changeOwnPassword
 - `app/actions/apparatus.ts` — createApparatus, updateApparatus
 - `app/actions/stations.ts` — createStation, updateStation
-- `app/actions/compartments.ts` — createCompartmentName, updateCompartmentName, assignCompartmentToApparatus, removeCompartmentFromApparatus
-- `app/actions/equipment.ts` — createItemCategory, updateItemCategory, createItem, updateItem, createAsset, updateAsset, assignItemToCompartment, removeItemFromCompartment
-- `app/actions/inspections.ts` — createInspectionTemplate, updateInspectionTemplate, addTemplateStep, updateTemplateStep, deleteTemplateStep, submitInspection
-- `app/actions/attendance.ts` — createEventSeries, updateEventInstance, updateEventSeries, logAttendance, verifyAttendance, cancelEventInstance, createExcuseType, saveParticipationRequirement ✅
-- `app/actions/training.ts` — createCertificationType, updateCertificationType, createCourseUnit, updateCourseUnit, enrollMember, verifyProgress, logDirectCert, createTrainingEvent, logTrainingAttendance, verifyTrainingAttendance ✅
+- `app/actions/compartments.ts` — createCompartmentName, assignCompartmentToApparatus, removeCompartmentFromApparatus
+- `app/actions/equipment.ts` — createItemCategory, createItem, updateItem, createAsset, updateAsset, assignItemToCompartment, removeItemFromCompartment, moveItemToCompartment
+- `app/actions/inspections.ts` — createInspectionTemplate, addTemplateStep, updateTemplateStep, deleteTemplateStep, submitInspection
+- `app/actions/attendance.ts` — createEventSeries, updateEventInstance, logAttendance, verifyAttendance, createExcuseType, saveParticipationRequirement
+- `app/actions/training.ts` — createCertificationType, createCourseUnit, enrollMember, verifyProgress, logDirectCert, createTrainingEvent, logTrainingAttendance
 - `app/actions/fire-school.ts` — checkBottle, logFill, addFireSchoolBottle
 
-## Auth & Signup Flow
-
-### signup_status values
-| Status | Redirect |
-|---|---|
-| `temp_password` | /change-password |
-| `profile_setup` | /profile-setup |
-| `active` | /dashboard |
-| `awaiting_approval` | /pending |
-| `denied` | /denied |
-
-### User Roles
-| Field | Table | Purpose |
-|---|---|---|
-| `is_sys_admin` | `personnel` | Global — all departments, no dept record needed |
-| `system_role` | `department_personnel` | `admin / officer / member` within dept |
-| `department_id` | `department_personnel` | Scopes all data to their department |
-
-### Permission Matrix
-| Action | Member | Officer | Admin | Sys Admin |
-|---|---|---|---|---|
-| View roster/stations/apparatus/equipment | ✅ | ✅ | ✅ | ✅ |
-| Run inspections | ✅ | ✅ | ✅ | ✅ |
-| Submit training/certification progress | ✅ | ✅ | ✅ | ✅ |
-| Log own attendance (within window) | ✅ | ✅ | ✅ | ✅ |
-| Edit own profile | ✅ | ✅ | ✅ | ✅ |
-| Verify/approve attendance | ❌ | ✅ | ✅ | ✅ |
-| Create events / bulk log attendance | ❌ | ✅ | ✅ | ✅ |
-| Log retroactive attendance | ❌ | ✅ | ✅ | ✅ |
-| Create/log incidents | ❌ | ✅ | ✅ | ✅ |
-| Edit anyone's basic info | ❌ | ✅ | ✅ | ✅ |
-| Edit apparatus/station info | ❌ | ✅ | ✅ | ✅ |
-| Assign items to compartments | ❌ | ✅ | ✅ | ✅ |
-| Add/deactivate apparatus/stations | ❌ | ❌ | ✅ | ✅ |
-| Manage compartments/items/categories/assets | ❌ | ❌ | ✅ | ✅ |
-| Add/manage personnel | ❌ | ❌ | ✅ | ✅ |
-| Create certification types + courses | ❌ | ❌ | ✅ | ✅ |
-| Enroll members in certification courses | ❌ | ❌ | ✅ | ✅ |
-| Set participation requirements | ❌ | ❌ | ✅ | ✅ |
-| Define excuse types | ❌ | ❌ | ✅ | ✅ |
-| Generate/print QR labels | ❌ | ❌ | ✅ | ✅ |
-
-## Sys Admin Notes
-- Email: zklein3@outlook.com — no department_personnel record (intentional)
-- Always pass `department_id` explicitly in forms for sys admin actions
-- Sys admin dept drill-in: `/admin/dept/[id]` — tabbed management of any department
+## Auth
+- Roles: `is_sys_admin` (personnel table) | `system_role: admin/officer/member` (department_personnel)
+- Sys admin: zklein3@outlook.com — no department_personnel record (intentional), always pass department_id explicitly
+- signup_status flow: temp_password → change-password | profile_setup → profile-setup | active → dashboard | awaiting_approval → pending | denied → denied
 
 ## Mobile Layout
 - Desktop: fixed sidebar (w-64, red-800)
 - Mobile: top bar + hamburger → slide-out drawer (MobileSidebar.tsx)
-- Main content: `pt-20 px-4 pb-4 sm:pt-0 sm:p-6 lg:p-8` — pt-20 clears fixed mobile header
+- Main content: `pt-20 px-4 pb-4 sm:pt-0 sm:p-6 lg:p-8`
 - All pages responsive: grid-cols-1 sm:grid-cols-2 lg:grid-cols-3
-- Tables: overflow-x-auto + min-w
 - Input text fix: globals.css forces `color: #18181b` and `-webkit-text-fill-color` on all inputs
 
-## Error Logging & Notifications
+## Error Logging
 - Table: `system_logs` (log_type: error | user_report | info)
 - `lib/logger.ts` — logError() in all server actions
 - Edge Function `notify-on-log` → email to zklein3@gmail.com via Resend
-- FeedbackButton in sidebar → user_report to system_logs
-
-## What's Built & Working ✅
-- Full auth flow + middleware routing
-- Role-aware sidebar + mobile hamburger drawer
-- Sys admin dashboard — department cards with stats
-- Sys admin — Departments, Users, System Logs (full log viewer with resolve/resolve-all, tab filters, metadata expand, show-resolved toggle) ✅
-- Sys admin dept drill-in — `/admin/dept/[id]` tabbed
-- Dept Admin — Manage Personnel, Compartments, Items, Attendance Settings
-- Personnel roster + profile (role-based editing, change password)
-- Apparatus list + detail (edit, compartment assign/remove)
-- Stations list + detail
-- Compartment names management + assignment to apparatus
-- Equipment pages — `/equipment` + `/equipment/[id]` (quantity item view, assign/remove)
-- Item management — 3 tabs: Categories, Items (with asset expansion), Assets
-- Asset tracking — create/edit assets, linked asset flag, has_linked_asset + linked_item_type_id
-- Inspection template builder — create templates per item type, add/edit/delete steps, reassign to different item type
-- Inspection run UI — `/inspections` select apparatus+compartment → `/inspections/run` checklist with asset picker, presence checks, all step types, submit logs to DB (apparatus_id, compartment_id, presence checks all persisted)
-- **Multi-asset inspection — `expected_quantity` on asset-tracked items drives N inspection slots per item type; each slot gets its own asset picker (cross-slot deduplication) + full checklist; each submits a separate inspection log row**
-- **Inventory Reports — `/reports/inventory` — apparatus cards, date range filter, flagged item reference cards, window.print() print view; linked from apparatus detail page**
-- **Equipment move — Move button on each item in equipment detail → modal to pick any apparatus + compartment, single-step reassign (cross-truck supported)**
-- **Equipment quantity edit — click quantity number inline to edit expected count; officers/admins only; asset items show "assets" label, quantity items show "expected"**
-- **Attendance module — fully built including verification queue (approve/reject with reason, approve all)**
-- **Training module — DB migrated, cert types + course units, enrollments, member progress + verification, direct cert entry, training events with self-report + officer log + verification queue**
-- **Incident log module — DB migrated, manual entry, apparatus + per-unit times, personnel with POV support, fire details, officer verification + finalize flow**
-- Sys admin dept drill-in — mobile layout fixed (responsive grid forms)
-- Incident new form — paged/in-service times auto-fill from apparatus entries
-- Dashboard with real data + upcoming events/training this week with personal attendance status
-- Error logging + email notifications
-- FeedbackButton with React Portal
-- Mobile header overlap fixed, input text color fixed
-- Fire School — QR scanning fully working
-- Vercel deployed + fireops7.com DNS configured
-
-## IMMEDIATE NEXT — Resume Here Next Session
-
-### ASSET_LINK Sub-Inspection + Bottle Dedup (START HERE)
-
-**Goal:** When an ASSET_LINK step is encountered during an airpack inspection, instead of just recording which bottle was picked, the bottle's own inspection template should load inline and be completed. The bottle submits its own `item_asset_inspection_log` entry. A 30-minute dedup window then hides already-inspected bottles from all other dropdowns in the same run.
-
-**Why:** SCBA bottles need the same inspection regardless of context — whether on an airpack or stored spare in a compartment. The current ASSET_LINK step only picks which bottle is present; it never runs the bottle's checklist.
-
-**Files to change:**
-- `app/(dashboard)/inspections/run/page.tsx` — server fetch: load linked asset templates + steps; query recent inspection logs (last 30 min) to build `recentlyInspectedAssetIds` set
-- `app/(dashboard)/inspections/run/InspectionRunClient.tsx` — ASSET_LINK render block (line ~425): after asset selected, load that asset's template steps inline and collect responses; pass `recentlyInspectedAssetIds` to hide/grey those assets in all dropdowns
-- `app/actions/inspections.ts` — `submitInspection`: already accepts `asset_inspections[]`; ensure sub-inspections from ASSET_LINK steps submit as their own log rows
-
-**Dedup logic:**
-- Server fetches `item_asset_inspection_logs` for the department where `created_at > now() - 30 min`
-- Passes `recentlyInspectedAssetIds: string[]` to the client
-- Client filters these IDs out of all asset dropdowns (ASSET_LINK selects + standalone asset slot selects)
-- 30-min window — hardcoded for now, configurable later
-
-**State changes in InspectionRunClient:**
-- Add `subInspectionResponses: Record<string, Record<string, StepResponse>>` — keyed by linked_asset_id → step_id → response (separate from parent asset's stepResponses)
-- On submit, flatten sub-inspections into the same `asset_inspections[]` payload as standalone slots
-
-**After that — priority order:**
-1. Member activity reports (`/reports/my-activity`)
-2. Attendance + training/cert reports (officer/admin view)
-3. Training/cert reports — expiring certs, completion rates
-4. Asset roster view — dept-wide, filterable by item type/class
-5. Flow & Presentation Polish
-
-## What's Placeholder / Not Yet Built
-- Member activity reports (`/reports/my-activity`)
-- Attendance + training/cert reports (officer/admin)
-- QR code system (see section below)
-- Equipment page — asset assignment to compartments (currently quantity-only)
-- Equipment page — move item between compartments/apparatus ✅
-- Inspection schedule settings (daily/weekly/monthly per dept)
-- Supabase auth allowed URLs for custom domain
-- Resend from address → custom domain
-
-## Equipment / Item System
-
-### Item Categories (reporting/filter only)
-- category_name, sort_order, active — NO inspection logic at category level
-
-### Item Types — two behaviors:
-**Quantity-only** (requires_inspection = false): Axe, Halligan, Pike Pole
-**Asset-tracked** (requires_inspection = true): Chainsaw, TIC, Cardiac Monitor, Airpack
-
-### Item Flags
-- `tracks_quantity` — count based (auto false when requires_inspection = true)
-- `tracks_assets` — individual tracking (auto true when requires_inspection = true)
-- `requires_presence_check` — verified during apparatus check
-- `requires_inspection` — has inspection template + schedule
-- `tracks_expiration` — has expiry date
-
-### Asset Statuses (DB values — must match exactly)
-- `IN SERVICE` — active
-- `OUT OF SERVICE` — temporarily unavailable
-- `RETIRED` — permanently removed
-
-### Asset Linked Asset Pattern
-- `has_linked_asset = true` — this asset expects a linked asset during inspection
-- `linked_item_type_id` — what TYPE of asset to prompt for (e.g. Scott Air Pack Bottle)
-- Link is DYNAMIC — not hardwired. During inspection user selects which specific asset is present
-- **NOT YET BUILT:** ASSET_LINK step currently only records which linked asset was picked (dropdown → linked_asset_id stored as step response). It does NOT run the linked asset's own inspection template inline. This is the next build — see IMMEDIATE NEXT section above.
-
-### Inspection Flow (BUILT)
-1. Member/officer goes to Inspections → selects apparatus → selects compartment
-2. For quantity items → presence check (Present/Missing + actual qty)
-3. For asset-tracked items → dropdown to select which specific asset is present
-4. If multiple templates → user picks which one (Daily/Weekly/Monthly)
-5. ASSET_LINK steps → dropdown of available linked assets
-6. Submit → logs to item_asset_inspection_logs (with apparatus_id + compartment_id) + item_asset_inspection_log_steps + compartment_presence_check_logs
-7. Overall result = PASS/FAIL based on fail_if_negative steps
-
-### Compartment Assignment
-- Quantity items → assigned to compartment with expected_quantity via item_location_standards
-- Asset-tracked items → assigned to compartment by item TYPE (not specific asset)
-- During inspection user picks which specific asset is present (no pre-assignment needed)
-
-## Inspection Template Builder
-- Lives under: Dept Admin → Items → Items tab → [item] → Manage → Inspections tab
-- Admin creates templates per item type (multiple allowed: Daily, Weekly, Monthly)
-- Template edit includes "Assigned to Item Type" dropdown — admin can reassign to different item
-- Step types: BOOLEAN (Yes/No), NUMERIC, TEXT, LONG_TEXT, ASSET_LINK
-
-## Attendance Module (FULLY BUILT ✅)
-
-### DB Tables
-- `excuse_types` — department defined excuse reasons
-- `participation_requirements` — minimum % thresholds per event type
-- `event_series` — recurring event definitions
-- `event_instances` — individual occurrences generated from series
-- `event_attendance` — attendance records per member per instance
-
-### Pages Built
-- `/events` — upcoming/past events, self-log button, officer bulk logging + verification queue (approve/reject/approve all)
-- `/events/new` — create one-time or recurring event, verification toggle (defaults true)
-- `/dept-admin/attendance` — excuse types + participation requirements
-
-### Key Rules
-- `requires_verification` defaults to TRUE on all events — admin consciously opts out
-- Self-report window: 12 hours from event start time (members only)
-- Officer/admin can log retroactively at any time, no restriction
-- Warning banner shown when editing past events with existing attendance records
-- Members see only own attendance; dept-level aggregates on dashboard
-
-## QR Code System — DESIGN (to build)
-
-### Core Principles
-- Scanning is ADDITIVE — never required. Every page works fully without it
-- Manual navigation always available everywhere
-- Two scan modes: phone camera outside app, in-app scanner
-- QR codes use human-readable codes, not UUIDs — app looks up UUID internally
-
-### Human-Readable Code Format
-- Apparatus: unit number (e.g. `ENGINE-32`, `TANKER-1`)
-- Compartment: apparatus + code (e.g. `ENGINE-32-D1`, `ENGINE-32-P1`)
-- Asset: asset tag (e.g. `CHAINSAW-1`, `SAP-1`)
-- SCBA bottle: bottle ID (e.g. `B-0001`) — already in use
-
-### DB Changes Needed
-- Add `qr_code` field to `apparatus`, `apparatus_compartments`, `item_assets`
-- Admin can set custom code OR scan existing manufacturer QR to associate
-
-### Two Scan Modes
-**Mode 1 — Phone camera outside app:**
-- QR encodes URL: `https://www.fireops7.com/scan?type=compartment&code=ENGINE-32-D1`
-- Not logged in → redirected to login → after auth → back to `/scan` → resolves → destination
-- Logged in → `/scan` looks up code → redirects to final destination
-
-**Mode 2 — In-app scanner:**
-- User already logged in, taps scan button on relevant pages
-- App calls camera via BarcodeDetector/getUserMedia
-- Reads QR, extracts code, navigates internally — no redirect needed
-- Reusable `QRScanner` component shared across pages
-
-### QR Label Generation & Printing
-- No third-party service needed — use `qrcode` or `qrcode.react` npm package
-- Generates QR as SVG/canvas entirely in browser, print via browser dialog
-- Admin can also scan existing manufacturer QR to associate with asset record
-
-### Implementation Steps (when building)
-1. Add `qr_code` field to apparatus, apparatus_compartments, item_assets tables
-2. Build `/scan` route with type+code lookup and auth redirect logic
-3. Build reusable `QRScanner` component (extract from fire school page)
-4. Install `qrcode.react` npm package
-5. Add "Generate QR Label" button + print layout to apparatus, compartment, asset pages
-6. Add scan buttons (optional shortcut) to inspections landing, equipment pages
-7. Add scan-to-associate flow in asset edit form
-
-## Training Module (FULLY BUILT ✅)
-
-### Three Training Scenarios
-
-**1. Certification Course Logging (structured)**
-- Admin creates course, defines chapters with titles + hours
-- Admin enrolls specific members (enrollment = gate to submit)
-- Member submits completed chapter → pending
-- Officer/admin verifies → all verified → eligible to test
-- Admin logs test result → pass creates certification record
-
-**2. Direct Certification Entry (standalone)**
-- Admin logs cert directly — no course history required
-- Fields: cert name, issuing body, cert number, issue date, expiration date
-
-**3. Regular Training Event (non-certification)**
-- Officer/admin creates event: date, topic, hours, location
-- Logs attendance — no cert attached
-
-### Data Model
-```
-certification_types
-  ├── cert_name, issuing_body
-  ├── does_expire (boolean)
-  ├── expiration_interval_months (null if no expiration — e.g. FF1 Nebraska)
-  └── is_structured_course (boolean)
-
-certification_course_units
-  └── unit_title, unit_description, required_hours, sort_order
-
-course_enrollments (admin assigns — gate to submit)
-  └── personnel_id, certification_type_id, status: active/withdrawn/completed
-
-member_course_progress (member submits)
-  ├── enrollment_id, unit_id, hours_submitted, completed_date, notes
-  └── status: pending/verified/rejected + verified_by, verified_at, rejection_reason
-
-member_certifications (actual cert records)
-  ├── personnel_id, certification_type_id, cert_number, issued_by, issued_date
-  ├── expiration_date (auto-calc from issue_date + interval, manual override allowed)
-  └── source: course_completion | direct_entry
-
-training_events + training_event_attendance
-```
-
-### Key Rules
-- Expiration: FF1 Nebraska = no expiration. EMT-B/CPR = 24 months (configurable per type)
-- Renewals create new cert record — old records kept for history
-- Dashboard flags certs expiring within configurable window
-
-### Pages Built
-- `/training` — my enrollments (course progress, submit units), my certifications, training events (self-report)
-- `/dept-admin/training` — cert types + course units, enrollments, pending progress verification, direct cert entry, training events + attendance log + verification queue
-
-## Incident Log Module (BUILT ✅ — manual entry)
-
-### Background
-- CAD email (CFS PDF) received after each call — currently transcribed manually into NERIS
-- Goal: bring incident logging into FireOps7, eventually replace NERIS workflow
-- EMS reporting NOT in scope
-
-### Source Documents Analyzed
-- Winslow Run Sheet (Excel) — paper form covering Fire, Rescue, Standby, Mutual Aid, Meeting, Training
-- CAD CFS Report (PDF) — Dodge County 9-1-1, contains CFS#, times, responders, unit activity log
-
-### Build Order
-1. Manual entry (build first)
-2. CAD email parsing via Edge Function (future)
-3. CAD API/webhook (future)
-
-### Data Model
-```
-incidents
-  ├── department_id, incident_number (internal), cad_number
-  ├── incident_date, call_time, completed_time, address
-  ├── incident_type (fire/rescue/standby/mutual_aid/special/other)
-  ├── mutual_aid_direction (to/from) + mutual_aid_department
-  ├── disposition, narrative, neris_reported (boolean)
-  └── created_by
-
-incident_times — paged, page_acknowledged, enroute, on_scene, leaving_scene, back_at_station
-
-incident_apparatus — apparatus_id, role (primary/support/staging)
-
-incident_personnel — personnel_id, apparatus_id, status (pending/verified/rejected)
-
-incident_fire_details — property_lost, dollar_loss, cause_of_fire, vehicle_make, insurance_info
-```
-
-## Fire School — QR Scanning
-- Uses BarcodeDetector Web API, rear camera via getUserMedia
-- Scan → extracts bottle ID → calls handleCheck() directly
-- Fire school IDs are generic (public, shared across depts) — separate from main app QR system
-
-## Database Tables
-
-### Fire Department (auth-protected, RLS)
-- `departments`, `stations`, `apparatus`, `apparatus_types`
-- `apparatus_compartments`, `compartment_names`
-- `personnel`, `department_personnel`, `personnel_roles`
-- `items`, `item_categories`, `item_assets`, `item_location_standards`
-- `item_inspection_templates`, `item_inspection_template_steps`
-- `item_asset_inspection_logs` (+ apparatus_id, compartment_id columns), `item_asset_inspection_log_steps`
-- `compartment_presence_check_logs`
-- `excuse_types`, `participation_requirements`
-- `event_series`, `event_instances`, `event_attendance`
-- `certification_types`, `certification_course_units`, `course_enrollments`
-- `member_course_progress`, `member_certifications`
-- `training_events`, `training_event_attendance`
-- `incidents`, `incident_apparatus`, `incident_personnel`, `incident_fire_details`
-- `scba_bottles`, `scba_fill_logs`, `scba_maintenance_logs`, `scba_cylinder_specs`
-- `system_logs`
-
-### DB Migrations Applied
-- `item_assets`: added `has_linked_asset`, `linked_item_type_id`
-- `item_inspection_template_steps`: added `step_type`, `linked_item_type_id`
-- Attendance module: `excuse_types`, `participation_requirements`, `event_series`, `event_instances`, `event_attendance`
-- Training module: `certification_types`, `certification_course_units`, `course_enrollments`, `member_course_progress`, `member_certifications`, `training_events`, `training_event_attendance`
-- Incident module: `incidents`, `incident_apparatus`, `incident_personnel`, `incident_fire_details`
-- Inspection logs: added `apparatus_id`, `compartment_id` to `item_asset_inspection_logs`; new `compartment_presence_check_logs` table
-
-### Fire School (public, no auth)
-- `fire_school_bottles`, `fire_school_fill_logs`
 
 ## RLS Notes
 - All dept-wide queries MUST use admin client
@@ -474,23 +108,70 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 }
 ```
 
-## Next Steps (priority order)
-1. **Member activity reports** (`/reports/my-activity`) ← START HERE
+## Equipment / Item System
+
+### Item Type Flags
+- `tracks_quantity` — count based (auto false when requires_inspection = true)
+- `tracks_assets` — individual tracking (auto true when requires_inspection = true)
+- `requires_presence_check` — verified during apparatus check
+- `requires_inspection` — has inspection template + schedule
+- `tracks_expiration` — has expiry date
+
+### Asset Statuses (DB values — must match exactly)
+- `IN SERVICE` | `OUT OF SERVICE` | `RETIRED`
+
+### Asset Linked Asset Pattern
+- `has_linked_asset = true` on an asset type — expects a linked asset during inspection
+- `linked_item_type_id` — what TYPE to prompt for (e.g. Scott Air Pack → Scott Air Pack Bottle)
+- Link is DYNAMIC — user selects which specific asset is present during inspection
+- **NOT YET BUILT:** ASSET_LINK step currently only records which linked asset was picked. It does NOT run the linked asset's own inspection template inline. Next build — see IMMEDIATE NEXT below.
+
+### Inspection Flow
+1. Select apparatus → select compartment
+2. Quantity items → presence check (Present/Missing + actual qty)
+3. Asset-tracked items → N slots driven by `expected_quantity`; each slot: pick asset → run checklist
+4. ASSET_LINK steps → pick linked asset (sub-inspection NOT YET running inline)
+5. Submit → `item_asset_inspection_logs` + `item_asset_inspection_log_steps` + `compartment_presence_check_logs`
+
+### Inspection Template Builder
+- Dept Admin → Items → Items tab → [item] → Manage → Inspections tab
+- Step types: BOOLEAN, NUMERIC, TEXT, LONG_TEXT, ASSET_LINK
+- Multiple templates per item type allowed (Daily/Weekly/Monthly)
+
+## IMMEDIATE NEXT — Resume Here Next Session
+
+### ASSET_LINK Sub-Inspection + Bottle Dedup (START HERE)
+
+**Goal:** When an ASSET_LINK step fires during airpack inspection, after the user picks the bottle, the bottle's own inspection template loads inline and they complete it. The bottle submits its own `item_asset_inspection_log` entry. A 30-minute dedup window hides already-inspected bottles from all other dropdowns in the same run.
+
+**Why:** SCBA bottles need the same inspection regardless of context — whether on an airpack or stored as a spare in a compartment. Current ASSET_LINK only picks which bottle is present; it never runs the bottle's checklist.
+
+**Files to change:**
+- `app/(dashboard)/inspections/run/page.tsx` — load linked asset templates + steps; query `item_asset_inspection_logs` where `created_at > now() - 30 min` to build `recentlyInspectedAssetIds`
+- `app/(dashboard)/inspections/run/InspectionRunClient.tsx` — ASSET_LINK block (~line 425): after asset selected, render that asset's template steps inline + collect responses; filter `recentlyInspectedAssetIds` from all asset dropdowns
+- `app/actions/inspections.ts` — `submitInspection` already accepts `asset_inspections[]`; sub-inspections from ASSET_LINK steps submit as their own log rows in the same payload
+
+**State to add in InspectionRunClient:**
+- `subInspectionResponses: Record<string, Record<string, StepResponse>>` — keyed by linked_asset_id → step_id → response
+- On submit, flatten sub-inspections into the same `asset_inspections[]` payload as standalone slots
+
+**Dedup:**
+- 30-min window hardcoded for now
+- Server passes `recentlyInspectedAssetIds: string[]` to client
+- Client hides those IDs from all asset dropdowns (both ASSET_LINK selects and standalone slot selects)
+
+### After That — Priority Order
+1. Member activity reports (`/reports/my-activity`)
 2. Attendance + training/cert reports (officer/admin view)
-3. Incident log — test + any follow-up tweaks
-4. QR code system
-5. Equipment — asset assignment to compartments
-6. Supabase auth allowed URLs for custom domain
+3. Training/cert reports — expiring certs, completion rates
+4. Asset roster view — dept-wide, filterable by item type
+5. Flow & Presentation Polish
 
 ## Dev Workflow
-- Start: `npm run dev` in C:\Users\zklein3\Documents\FireOps7-Next
-- Stop: Ctrl+C in VS Code terminal
+- Start: `npm run dev` in project directory
 - Build: `npm run build` (always before pushing)
-- **Push policy: always git push after a successful build — troubleshooting on live site (Vercel)**
-- Git push:
-  git add .
-  git commit -m "message"
-  git push
+- Push policy: always git push after a successful build — troubleshoot on live Vercel site
+- Git: `git add . && git commit -m "message" && git push`
 
 ## Test Accounts
 - `zklein3@outlook.com` — sys admin, no department
@@ -504,7 +185,5 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 - Assets: Chainsaw 1, Scott Air Pack 1 (linked → Scott Air Pack Bottle), B-0001, B-0002
 - Templates: Weekly Chainsaw Inspection (3 steps), Weekly Airpack Inspection (4 steps, on Scott Air Pack)
 
-## Reference Documents
-- Winslow Run Sheet (Excel) — uploaded April 16, 2026
-- CAD CFS Report (PDF) — uploaded April 16, 2026 (Dodge County 9-1-1)
-  - Current workflow: received via email after call → manually transcribed into NERIS
+## Historical Reference
+Full module detail (attendance, training, incident, QR system design, DB table list, permission matrix, what's built) → read `REFERENCE.md`
