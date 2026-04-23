@@ -45,6 +45,7 @@ export type PresenceCheckRow = {
   present: boolean
   actual_quantity: number | null
   notes: string | null
+  asset_tag?: string  // set for linked-asset rows that have no inspection template
 }
 
 export default async function InspectionReportPage({
@@ -298,6 +299,34 @@ export default async function InspectionReportPage({
     actual_quantity: p.actual_quantity ?? null,
     notes: p.notes ?? null,
   }))
+
+  // Synthesize "Present" rows for ASSET_LINK picks that have no own inspection log
+  // (i.e. the linked asset — e.g. a bottle — has no template and was never submitted as its own log)
+  const inspectedAssetIds = new Set(inspectionLogs.map(l => l.asset_id))
+  for (const log of inspectionLogs) {
+    for (const step of log.steps) {
+      if (step.step_type !== 'ASSET_LINK' || !step.text_value) continue
+      const linkedAssetId = step.text_value
+      if (inspectedAssetIds.has(linkedAssetId)) continue // already has its own inspection row
+      const linkedAsset = assetMap[linkedAssetId]
+      if (!linkedAsset) continue
+      presenceChecks.push({
+        id: `${log.id}-link-${linkedAssetId}`,
+        inspected_at: log.inspected_at,
+        apparatus_id: log.apparatus_id,
+        apparatus_name: log.apparatus_name,
+        compartment: log.compartment,
+        item_name: itemMap[linkedAsset.item_id] ?? '—',
+        item_id: linkedAsset.item_id,
+        inspector_name: log.inspector_name,
+        inspector_personnel_id: log.inspector_personnel_id,
+        present: true,
+        actual_quantity: null,
+        notes: null,
+        asset_tag: linkedAsset.asset_tag,
+      })
+    }
+  }
 
   const personnelDropdown = (personnelData ?? []).map(p => ({
     id: p.id,

@@ -445,7 +445,7 @@ export default function InspectionReportClient({
                         <td className="px-4 py-2.5 text-zinc-700">{row.apparatus_name}</td>
                         <td className="px-4 py-2.5 text-zinc-500">{row.compartment}</td>
                         <td className="px-4 py-2.5 text-zinc-700">{row.item_name}</td>
-                        <td className="px-4 py-2.5 text-zinc-400 text-xs">—</td>
+                        <td className="px-4 py-2.5 text-zinc-500 font-mono text-xs">{row.asset_tag ?? '—'}</td>
                         <td className="px-4 py-2.5 text-zinc-500">{row.inspector_name}</td>
                         <td className="px-4 py-2.5"><PresenceBadge present={row.present} /></td>
                         <td className="px-4 py-2.5 text-zinc-400 text-xs text-right print:hidden">
