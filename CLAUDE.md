@@ -123,8 +123,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 - `IN SERVICE` | `OUT OF SERVICE` | `RETIRED`
 
 ### Inspection Design — Two Check Modes
-- **Daily presence check** — lightweight, per compartment: "are there 2 airpacks? 2 bottles?" → `compartment_presence_check_logs`. Planned route: `Verify Present` on the compartment page (QR system, not yet built).
-- **Weekly/monthly asset inspection** — full checklist per individual asset. Each item type (airpack, bottle, chainsaw) is inspected independently in its own slot.
+- **Daily Check** — presence-only, available now from `/inspections` → select apparatus + compartment → "Daily Check" button. Shows present/missing + qty for every item, no asset picking or checklist. Logs to `compartment_presence_check_logs`. When QR system is built, scanning a compartment will land here via `?mode=presence`.
+- **Full Inspection** — full checklist per individual asset. Each item type (airpack, bottle, chainsaw) is inspected independently in its own slot.
 
 ### Independent Asset Model
 - Each asset type is inspected on its own — airpacks and bottles are separate items in the same compartment, each with their own checklist and slots. No linking between assets.
@@ -178,8 +178,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 - Temp password for new accounts: `Hello1!`
 
 ## Test Data (Winslow Fire)
-- Engine 32 → D1 (Halligan ×1) + P1 (Chainsaw)
-- Assets: Chainsaw 1, Scott Air Pack 1 (linked → Scott Air Pack Bottle), B-0001, B-0002
+- Engine 32 → D1 (Scott Air Pack ×2, Scott Air Pack Bottle ×2, Halligan ×1) + P1 (Chainsaw ×1)
+- Assets: Chainsaw 1, Scott Air Pack 1, Scott Air Pack 2, B-0001, B-0002
 - Templates: Weekly Chainsaw Inspection (3 steps), Weekly Airpack Inspection (4 steps, on Scott Air Pack)
 
 ## Historical Reference

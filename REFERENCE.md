@@ -17,8 +17,9 @@
 - Inspection template builder — create templates per item type, add/edit/delete steps, reassign to different item type
 - Inspection run UI — `/inspections` select apparatus+compartment → `/inspections/run` checklist with asset picker, presence checks, all step types, submit logs to DB (apparatus_id, compartment_id, presence checks all persisted)
 - Multi-asset inspection — `expected_quantity` on asset-tracked items drives N inspection slots per item type; each slot gets its own asset picker (cross-slot deduplication) + full checklist; each submits a separate inspection log row
-- ASSET_LINK sub-inspection — when ASSET_LINK step fires, linked asset's own template renders inline; submits its own inspection log row; 30-min dedup hides already-inspected assets from all dropdowns in the same apparatus sweep
+- Daily Check mode — `/inspections` → compartment → "Daily Check" button → presence-only run (present/missing + qty for all items, no checklist); `?mode=presence` param; QR-ready for future scan landing
 - Member activity report (`/reports/my-activity`) — self-view: attendance (present/excused/absent/pending counts + table), inspections (pass/fail counts + table), incidents (count + table); date range filter; all roles
+- Inspection report (`/reports/inspections`) — flat table with asset inspection rows (PASS/FAIL + step detail) and presence check rows (Present/Missing); filters: date range, apparatus, inspector, pass/fail toggle; expandable rows show all step responses; asset tag click drills into per-asset history; printable
 - Inventory Reports — `/reports/inventory` — apparatus cards, date range filter, flagged item reference cards, window.print() print view; linked from apparatus detail page
 - Equipment move — Move button on each item in equipment detail → modal to pick any apparatus + compartment, single-step reassign (cross-truck supported)
 - Equipment quantity edit — click quantity number inline to edit expected count; officers/admins only; asset items show "assets" label, quantity items show "expected"
@@ -35,10 +36,7 @@
 - Vercel deployed + fireops7.com DNS configured
 
 ## What's Placeholder / Not Yet Built
-- Inspection report (`/reports/inspections`) — flat table: date, apparatus, compartment, item, asset, inspector, result; filters: date range, apparatus, inspector, pass/fail toggle; expandable rows show all step responses; asset tag click drills into per-asset history within same filter context; printable ← built
 - Training/cert report — officer/admin, filterable by member + cert type + date range, printable ← next build
-- Inspection report — officer/admin, filterable by apparatus + date range, printable
-- Training/cert report — officer/admin, filterable by member + cert type, expiring certs flagged, printable
 - Attendance report — officer/admin, participation rates, printable
 - QR code system (see QR design section below)
 - ISO audit sections — hose logs, apparatus specs, hydrant flows, mutual aid (see ISO section below)
@@ -146,7 +144,7 @@
 - Header: apparatus name + compartment name/code
 - Item list: each item with expected quantity, current asset status
 - Three action buttons:
-  - **Verify Present** — lightweight presence-check-only flow (no asset checklists); logs to `compartment_presence_check_logs`; designed for daily shift checks
+  - **Verify Present** — lightweight presence-check-only flow (no asset checklists); logs to `compartment_presence_check_logs`; designed for daily shift checks. Already available from `/inspections` → "Daily Check" button; QR scan will pre-fill apparatus + compartment via `?mode=presence`
   - **Start Inspection** — launches existing inspection run pre-filled with apparatus + compartment (skips selection screen)
   - **View History** — recent inspection logs for this compartment
 - Accessible via QR scan or manual nav from apparatus detail page
