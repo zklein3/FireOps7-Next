@@ -32,6 +32,21 @@ export type InspectionLogRow = {
   steps: StepRow[]
 }
 
+export type PresenceCheckRow = {
+  id: string
+  inspected_at: string
+  apparatus_id: string
+  apparatus_name: string
+  compartment: string
+  item_name: string
+  item_id: string
+  inspector_name: string
+  inspector_personnel_id: string | null
+  present: boolean
+  actual_quantity: number | null
+  notes: string | null
+}
+
 export default async function InspectionReportPage({
   searchParams,
 }: {
@@ -232,6 +247,58 @@ export default async function InspectionReportPage({
     }
   })
 
+  // Presence check logs — same apparatus scope, date range, optional filters
+  let presenceQuery = adminClient
+    .from('compartment_presence_check_logs')
+    .select('id, apparatus_id, compartment_id, item_id, inspected_at, inspected_by_name, inspected_by_personnel_id, present, actual_quantity, notes')
+    .in('apparatus_id', scopeIds)
+    .gte('inspected_at', fromTs)
+    .lte('inspected_at', toTs)
+    .order('inspected_at', { ascending: false })
+
+  if (personnelId) presenceQuery = presenceQuery.eq('inspected_by_personnel_id', personnelId)
+
+  const { data: presenceRaw } = await presenceQuery
+
+  // Fetch item names for presence check items not already in itemMap
+  const presenceItemIds = [...new Set((presenceRaw ?? []).map(p => p.item_id as string))]
+  const missingItemIds = presenceItemIds.filter(id => !itemMap[id])
+  const { data: extraItems } = missingItemIds.length > 0
+    ? await adminClient.from('items').select('id, item_name').in('id', missingItemIds)
+    : { data: [] as { id: string; item_name: string }[] }
+  for (const item of extraItems ?? []) itemMap[item.id] = item.item_name
+
+  // Fetch compartments for presence checks not already in compMap
+  const presenceCompIds = [...new Set((presenceRaw ?? []).filter(p => p.compartment_id).map(p => p.compartment_id as string))]
+  const missingCompIds = presenceCompIds.filter(id => !compMap[id])
+  if (missingCompIds.length > 0) {
+    const { data: extraComps } = await adminClient
+      .from('apparatus_compartments')
+      .select('id, compartment_name_id')
+      .in('id', missingCompIds)
+    const extraCompNameIds = [...new Set((extraComps ?? []).map(c => c.compartment_name_id))]
+    const { data: extraCompNames } = extraCompNameIds.length > 0
+      ? await adminClient.from('compartment_names').select('id, compartment_code').in('id', extraCompNameIds)
+      : { data: [] as { id: string; compartment_code: string }[] }
+    const extraCodeMap = Object.fromEntries((extraCompNames ?? []).map(c => [c.id, c.compartment_code]))
+    for (const c of extraComps ?? []) compMap[c.id] = extraCodeMap[c.compartment_name_id] ?? '—'
+  }
+
+  const presenceChecks: PresenceCheckRow[] = (presenceRaw ?? []).map(p => ({
+    id: p.id,
+    inspected_at: p.inspected_at,
+    apparatus_id: p.apparatus_id,
+    apparatus_name: apparatusMap[p.apparatus_id] ?? '—',
+    compartment: p.compartment_id ? (compMap[p.compartment_id] ?? '—') : '—',
+    item_name: itemMap[p.item_id] ?? '—',
+    item_id: p.item_id,
+    inspector_name: p.inspected_by_name ?? '—',
+    inspector_personnel_id: p.inspected_by_personnel_id ?? null,
+    present: p.present,
+    actual_quantity: p.actual_quantity ?? null,
+    notes: p.notes ?? null,
+  }))
+
   const personnelDropdown = (personnelData ?? []).map(p => ({
     id: p.id,
     name: `${p.last_name}, ${p.first_name}`,
@@ -240,6 +307,7 @@ export default async function InspectionReportPage({
   return (
     <InspectionReportClient
       logs={inspectionLogs}
+      presenceChecks={presenceChecks}
       apparatusList={(apparatusList ?? []).map(a => ({ id: a.id, name: `${a.unit_number} ${a.apparatus_name ?? ''}`.trim() }))}
       personnelList={personnelDropdown}
       dateFrom={dateFrom}

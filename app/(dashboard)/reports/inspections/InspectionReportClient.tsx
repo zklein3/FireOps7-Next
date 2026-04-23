@@ -2,11 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import type { InspectionLogRow, StepRow } from './page'
+import type { InspectionLogRow, PresenceCheckRow, StepRow } from './page'
 
 type ApparatusOption = { id: string; name: string }
 type PersonnelOption = { id: string; name: string }
 type ResultFilter = 'all' | 'pass' | 'fail'
+
+type DisplayRow =
+  | (InspectionLogRow & { kind: 'inspection' })
+  | (PresenceCheckRow & { kind: 'presence' })
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -26,6 +30,14 @@ function ResultBadge({ result }: { result: string }) {
   return (
     <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${isPASS ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
       {result}
+    </span>
+  )
+}
+
+function PresenceBadge({ present }: { present: boolean }) {
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${present ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+      {present ? 'Present' : 'Missing'}
     </span>
   )
 }
@@ -187,6 +199,7 @@ function AssetDrillIn({
 
 export default function InspectionReportClient({
   logs,
+  presenceChecks,
   apparatusList,
   personnelList,
   dateFrom,
@@ -195,6 +208,7 @@ export default function InspectionReportClient({
   selectedPersonnelId,
 }: {
   logs: InspectionLogRow[]
+  presenceChecks: PresenceCheckRow[]
   apparatusList: ApparatusOption[]
   personnelList: PersonnelOption[]
   dateFrom: string
@@ -235,23 +249,26 @@ export default function InspectionReportClient({
     })
   }
 
-  function handlePrint() {
-    setExpandedIds(new Set(filteredLogs.map(l => l.id)))
-    setPrintMode(true)
-    setTimeout(() => {
-      window.print()
-      setPrintMode(false)
-    }, 100)
-  }
-
-  // Apply result filter client-side
+  // Apply result filter client-side — maps consistently across both types
   const filteredLogs = logs.filter(l => {
     if (resultFilter === 'pass') return l.overall_result === 'PASS'
     if (resultFilter === 'fail') return l.overall_result === 'FAIL'
     return true
   })
 
-  // Asset drill-in logs
+  const filteredPresence = presenceChecks.filter(p => {
+    if (resultFilter === 'pass') return p.present === true
+    if (resultFilter === 'fail') return p.present === false
+    return true
+  })
+
+  // Merge and sort by date descending
+  const displayRows: DisplayRow[] = [
+    ...filteredLogs.map(l => ({ ...l, kind: 'inspection' as const })),
+    ...filteredPresence.map(p => ({ ...p, kind: 'presence' as const })),
+  ].sort((a, b) => b.inspected_at.localeCompare(a.inspected_at))
+
+  // Asset drill-in — inspection logs only
   const drillLogs = selectedAsset
     ? filteredLogs.filter(l => l.asset_id === selectedAsset.id)
     : []
@@ -259,6 +276,17 @@ export default function InspectionReportClient({
   const passCount = filteredLogs.filter(l => l.overall_result === 'PASS').length
   const failCount = filteredLogs.filter(l => l.overall_result === 'FAIL').length
   const passRate = filteredLogs.length > 0 ? Math.round(passCount / filteredLogs.length * 100) : 0
+  const presentCount = filteredPresence.filter(p => p.present).length
+  const missingCount = filteredPresence.filter(p => !p.present).length
+
+  function handlePrint() {
+    setExpandedIds(new Set(displayRows.map(r => r.id)))
+    setPrintMode(true)
+    setTimeout(() => {
+      window.print()
+      setPrintMode(false)
+    }, 100)
+  }
 
   // If asset drill-in is active, render Level 2
   if (selectedAsset) {
@@ -373,16 +401,18 @@ export default function InspectionReportClient({
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <StatCard label="Inspections" value={filteredLogs.length} />
-        <StatCard label="Pass" value={passCount} />
-        <StatCard label="Fail" value={failCount} />
+        <StatCard label="Insp. Pass" value={passCount} />
+        <StatCard label="Insp. Fail" value={failCount} />
         <StatCard label="Pass Rate" value={`${passRate}%`} />
+        <StatCard label="Present" value={presentCount} />
+        <StatCard label="Missing" value={missingCount} />
       </div>
 
       {/* Table */}
-      {filteredLogs.length === 0 ? (
-        <p className="text-sm text-zinc-500 py-8 text-center">No inspections match the current filters.</p>
+      {displayRows.length === 0 ? (
+        <p className="text-sm text-zinc-500 py-8 text-center">No records match the current filters.</p>
       ) : (
         <div className="bg-white rounded-lg border border-zinc-200 overflow-hidden">
           <table className="w-full text-sm">
@@ -399,41 +429,75 @@ export default function InspectionReportClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {filteredLogs.map(log => {
-                const isExpanded = printMode || expandedIds.has(log.id)
+              {displayRows.map(row => {
+                const isExpanded = printMode || expandedIds.has(row.id)
+
+                if (row.kind === 'presence') {
+                  const hasDetail = row.actual_quantity !== null || row.notes
+                  return (
+                    <>
+                      <tr
+                        key={row.id}
+                        className={`hover:bg-zinc-50 print:cursor-default ${hasDetail ? 'cursor-pointer' : ''}`}
+                        onClick={() => hasDetail && toggleExpand(row.id)}
+                      >
+                        <td className="px-4 py-2.5 text-zinc-700 whitespace-nowrap">{formatDate(row.inspected_at)}</td>
+                        <td className="px-4 py-2.5 text-zinc-700">{row.apparatus_name}</td>
+                        <td className="px-4 py-2.5 text-zinc-500">{row.compartment}</td>
+                        <td className="px-4 py-2.5 text-zinc-700">{row.item_name}</td>
+                        <td className="px-4 py-2.5 text-zinc-400 text-xs">—</td>
+                        <td className="px-4 py-2.5 text-zinc-500">{row.inspector_name}</td>
+                        <td className="px-4 py-2.5"><PresenceBadge present={row.present} /></td>
+                        <td className="px-4 py-2.5 text-zinc-400 text-xs text-right print:hidden">
+                          {hasDetail ? (isExpanded ? '▲' : '▼') : ''}
+                        </td>
+                      </tr>
+                      {isExpanded && hasDetail && (
+                        <tr key={`${row.id}-detail`} className="bg-zinc-50 print:bg-white">
+                          <td colSpan={8} className="px-6 py-2 text-xs text-zinc-600">
+                            {row.actual_quantity !== null && <span className="mr-4">Qty reported: <strong>{row.actual_quantity}</strong></span>}
+                            {row.notes && <span>Notes: {row.notes}</span>}
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )
+                }
+
+                // kind === 'inspection'
                 return (
                   <>
                     <tr
-                      key={log.id}
+                      key={row.id}
                       className="hover:bg-zinc-50 cursor-pointer print:cursor-default"
-                      onClick={() => toggleExpand(log.id)}
+                      onClick={() => toggleExpand(row.id)}
                     >
-                      <td className="px-4 py-2.5 text-zinc-700 whitespace-nowrap">{formatDate(log.inspected_at)}</td>
-                      <td className="px-4 py-2.5 text-zinc-700">{log.apparatus_name}</td>
-                      <td className="px-4 py-2.5 text-zinc-500">{log.compartment}</td>
-                      <td className="px-4 py-2.5 text-zinc-700">{log.item_name}</td>
+                      <td className="px-4 py-2.5 text-zinc-700 whitespace-nowrap">{formatDate(row.inspected_at)}</td>
+                      <td className="px-4 py-2.5 text-zinc-700">{row.apparatus_name}</td>
+                      <td className="px-4 py-2.5 text-zinc-500">{row.compartment}</td>
+                      <td className="px-4 py-2.5 text-zinc-700">{row.item_name}</td>
                       <td className="px-4 py-2.5">
                         <button
                           className="font-mono text-red-700 hover:underline text-xs print:text-zinc-700 print:no-underline"
                           onClick={e => {
                             e.stopPropagation()
-                            setSelectedAsset({ id: log.asset_id, tag: log.asset_tag, item_name: log.item_name })
+                            setSelectedAsset({ id: row.asset_id, tag: row.asset_tag, item_name: row.item_name })
                           }}
                         >
-                          {log.asset_tag}
+                          {row.asset_tag}
                         </button>
                       </td>
-                      <td className="px-4 py-2.5 text-zinc-500">{log.inspector_name}</td>
-                      <td className="px-4 py-2.5"><ResultBadge result={log.overall_result} /></td>
+                      <td className="px-4 py-2.5 text-zinc-500">{row.inspector_name}</td>
+                      <td className="px-4 py-2.5"><ResultBadge result={row.overall_result} /></td>
                       <td className="px-4 py-2.5 text-zinc-400 text-xs text-right print:hidden">
                         {isExpanded ? '▲' : '▼'}
                       </td>
                     </tr>
                     {isExpanded && (
-                      <tr key={`${log.id}-steps`} className="bg-zinc-50 print:bg-white">
+                      <tr key={`${row.id}-steps`} className="bg-zinc-50 print:bg-white">
                         <td colSpan={8} className="px-4 py-0">
                           <div className="my-2 rounded border border-zinc-200 overflow-hidden">
-                            <StepList steps={log.steps} />
+                            <StepList steps={row.steps} />
                           </div>
                         </td>
                       </tr>
