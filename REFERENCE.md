@@ -18,6 +18,7 @@
 - Inspection run UI — `/inspections` select apparatus+compartment → `/inspections/run` checklist with asset picker, presence checks, all step types, submit logs to DB (apparatus_id, compartment_id, presence checks all persisted)
 - Multi-asset inspection — `expected_quantity` on asset-tracked items drives N inspection slots per item type; each slot gets its own asset picker (cross-slot deduplication) + full checklist; each submits a separate inspection log row
 - ASSET_LINK sub-inspection — when ASSET_LINK step fires, linked asset's own template renders inline; submits its own inspection log row; 30-min dedup hides already-inspected assets from all dropdowns in the same apparatus sweep
+- Member activity report (`/reports/my-activity`) — self-view: attendance (present/excused/absent/pending counts + table), inspections (pass/fail counts + table), incidents (count + table); date range filter; all roles
 - Inventory Reports — `/reports/inventory` — apparatus cards, date range filter, flagged item reference cards, window.print() print view; linked from apparatus detail page
 - Equipment move — Move button on each item in equipment detail → modal to pick any apparatus + compartment, single-step reassign (cross-truck supported)
 - Equipment quantity edit — click quantity number inline to edit expected count; officers/admins only; asset items show "assets" label, quantity items show "expected"
@@ -34,7 +35,7 @@
 - Vercel deployed + fireops7.com DNS configured
 
 ## What's Placeholder / Not Yet Built
-- Member activity reports (`/reports/my-activity`) ← next build
+- Inspection report — officer/admin, filterable by apparatus + date range, printable ← next build
 - Inspection report — officer/admin, filterable by apparatus + date range, printable
 - Training/cert report — officer/admin, filterable by member + cert type, expiring certs flagged, printable
 - Attendance report — officer/admin, participation rates, printable

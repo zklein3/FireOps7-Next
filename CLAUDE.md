@@ -58,6 +58,7 @@
 - `/events`, `/events/new` — events + attendance
 - `/training` — enrollments, certifications, training events
 - `/reports/inventory` — inventory inspection reports (officer/admin only)
+- `/reports/my-activity` — member self-view: attendance, inspections, incidents (all roles)
 - `/admin/departments`, `/admin/users`, `/admin/logs` — sys admin pages
 - `/admin/dept/[id]` — sys admin dept drill-in (tabbed)
 - `/dept-admin/personnel`, `/dept-admin/compartments`, `/dept-admin/items` — dept admin
@@ -124,13 +125,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 - `has_linked_asset = true` on an asset type — expects a linked asset during inspection
 - `linked_item_type_id` — what TYPE to prompt for (e.g. Scott Air Pack → Scott Air Pack Bottle)
 - Link is DYNAMIC — user selects which specific asset is present during inspection
-- **NOT YET BUILT:** ASSET_LINK step currently only records which linked asset was picked. It does NOT run the linked asset's own inspection template inline. Next build — see IMMEDIATE NEXT below.
+- ASSET_LINK step fires during inspection → linked asset's own template renders inline → submits its own inspection log row
+- 30-min dedup window hides already-inspected assets from all dropdowns in the same apparatus sweep
 
 ### Inspection Flow
 1. Select apparatus → select compartment
 2. Quantity items → presence check (Present/Missing + actual qty)
 3. Asset-tracked items → N slots driven by `expected_quantity`; each slot: pick asset → run checklist
-4. ASSET_LINK steps → pick linked asset (sub-inspection NOT YET running inline)
+4. ASSET_LINK steps → pick linked asset → linked asset's template runs inline, submits separate log row
 5. Submit → `item_asset_inspection_logs` + `item_asset_inspection_log_steps` + `compartment_presence_check_logs`
 
 ### Inspection Template Builder
@@ -140,40 +142,32 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 
 ## IMMEDIATE NEXT — Resume Here Next Session
 
-### 1. Member Activity Report (`/reports/my-activity`) ← START HERE
-Simple self-view — member sees their own record across three sections:
-- **Attendance** — events logged, present/excused/unexcused, date range filter
-- **Inspections** — inspections they ran, by apparatus/compartment, pass/fail
-- **Incidents** — calls they responded to
-
-No print requirement for v1. Keep it simple — data display only.
-
-### Priority Order After That
-
-**2. Inspection Report (officer/admin) — `/reports/inspections`**
+### 1. Inspection Report (officer/admin) — `/reports/inspections` ← START HERE
 - Filter: apparatus, date range
 - Output: grouped by truck → compartment → item → each inspection with step responses
 - ISO audit ready: inspector name, date, pass/fail, all step responses visible
 - Print layout via `window.print()` (same pattern as inventory reports)
 
-**3. Training/Cert Report (officer/admin) — `/reports/training`**
+### Priority Order After That
+
+**2. Training/Cert Report (officer/admin) — `/reports/training`**
 - Filter: member, cert type, date range
 - Output: grouped by member → certifications + course completions
 - Flag certs expiring within configurable window
 - Printable
 
-**4. Attendance Report (officer/admin) — `/reports/attendance`**
+**3. Attendance Report (officer/admin) — `/reports/attendance`**
 - Filter: member, date range, event type
 - Participation rates, excused/unexcused breakdown
 - Printable
 
-**5. Asset roster view** — dept-wide, filterable by item type/status
+**4. Asset roster view** — dept-wide, filterable by item type/status
 
-**6. QR + Compartment page + Inspection Session** — see REFERENCE.md for full design
+**5. QR + Compartment page + Inspection Session** — see REFERENCE.md for full design
 
-**7. ISO Audit sections (future)** — see REFERENCE.md for full roadmap including hose logs, apparatus specs, hydrant flows, mutual aid
+**6. ISO Audit sections (future)** — see REFERENCE.md for full roadmap including hose logs, apparatus specs, hydrant flows, mutual aid
 
-**8. Flow & Presentation Polish**
+**7. Flow & Presentation Polish**
 
 ## Dev Workflow
 - Start: `npm run dev` in project directory
