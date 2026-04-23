@@ -355,7 +355,6 @@ export default function InspectionRunClient({
                     .filter(Boolean)
                   const availableAssets = item.assets
                     .filter(a => !otherSelectedIds.includes(a.id))
-                    .filter(a => !recentlyInspectedAssetIds.includes(a.id))
 
                   return (
                     <div key={slotIndex} className={slotIndex > 0 ? 'border-t border-zinc-100 pt-5' : ''}>
