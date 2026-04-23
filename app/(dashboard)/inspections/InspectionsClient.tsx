@@ -68,32 +68,42 @@ export default function InspectionsClient({ apparatus }: { apparatus: Apparatus[
           ) : (
             <div className="flex flex-col gap-2">
               {selected.compartments.map(c => (
-                <button
+                <div
                   key={c.id}
-                  onClick={() => {
-                    if (c.item_count > 0) {
-                      router.push(`/inspections/run?apparatus_id=${selected.id}&compartment_id=${c.id}`)
-                    }
-                  }}
-                  disabled={c.item_count === 0}
-                  className={`flex items-center justify-between rounded-xl border px-5 py-4 text-left transition-all ${
+                  className={`rounded-xl border px-5 py-4 ${
                     c.item_count > 0
-                      ? 'border-zinc-200 bg-white hover:border-red-300 hover:shadow-sm cursor-pointer'
-                      : 'border-zinc-100 bg-zinc-50 cursor-not-allowed opacity-50'
+                      ? 'border-zinc-200 bg-white'
+                      : 'border-zinc-100 bg-zinc-50 opacity-50'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center rounded-lg bg-red-50 border border-red-100 px-2.5 py-1 text-sm font-mono font-bold text-red-700">
-                      {c.compartment_code}
-                    </span>
-                    {c.compartment_name && <span className="text-sm text-zinc-700">{c.compartment_name}</span>}
-                  </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center rounded-lg bg-red-50 border border-red-100 px-2.5 py-1 text-sm font-mono font-bold text-red-700">
+                        {c.compartment_code}
+                      </span>
+                      {c.compartment_name && <span className="text-sm text-zinc-700">{c.compartment_name}</span>}
+                    </div>
                     <span className="text-xs text-zinc-400">{c.item_count} item{c.item_count !== 1 ? 's' : ''}</span>
-                    {c.item_count > 0 && <span className="text-xs font-semibold text-red-600">Inspect →</span>}
-                    {c.item_count === 0 && <span className="text-xs text-zinc-400">No items</span>}
                   </div>
-                </button>
+                  {c.item_count > 0 ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => router.push(`/inspections/run?apparatus_id=${selected.id}&compartment_id=${c.id}`)}
+                        className="flex-1 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600 transition-colors"
+                      >
+                        Full Inspection
+                      </button>
+                      <button
+                        onClick={() => router.push(`/inspections/run?apparatus_id=${selected.id}&compartment_id=${c.id}&mode=presence`)}
+                        className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors"
+                      >
+                        Daily Check
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-400">No items</p>
+                  )}
+                </div>
               ))}
             </div>
           )}

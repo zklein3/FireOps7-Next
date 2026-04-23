@@ -6,10 +6,11 @@ import InspectionRunClient from './InspectionRunClient'
 export default async function InspectionRunPage({
   searchParams,
 }: {
-  searchParams: Promise<{ apparatus_id?: string; compartment_id?: string }>
+  searchParams: Promise<{ apparatus_id?: string; compartment_id?: string; mode?: string }>
 }) {
-  const { apparatus_id, compartment_id } = await searchParams
+  const { apparatus_id, compartment_id, mode } = await searchParams
   if (!apparatus_id || !compartment_id) redirect('/inspections')
+  const presenceOnly = mode === 'presence'
 
   const supabase = await createClient()
   const adminClient = createAdminClient()
@@ -149,6 +150,7 @@ export default async function InspectionRunPage({
       inspectorName={`${me.first_name} ${me.last_name}`}
       personnelId={me.id}
       departmentId={myDept.department_id}
+      presenceOnly={presenceOnly}
     />
   )
 }

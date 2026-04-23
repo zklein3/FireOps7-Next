@@ -55,7 +55,7 @@ type PresenceResponse = {
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 
 export default function InspectionRunClient({
-  apparatus, compartment, compartmentId, checklistItems, inspectorName, personnelId, departmentId,
+  apparatus, compartment, compartmentId, checklistItems, inspectorName, personnelId, departmentId, presenceOnly,
 }: {
   apparatus: { id: string; unit_number: string; apparatus_name: string | null }
   compartment: { code: string; name: string | null }
@@ -64,6 +64,7 @@ export default function InspectionRunClient({
   inspectorName: string
   personnelId: string
   departmentId: string
+  presenceOnly: boolean
 }) {
   const router = useRouter()
 
@@ -122,7 +123,7 @@ export default function InspectionRunClient({
 
   function isComplete(): boolean {
     for (const item of checklistItems) {
-      if (!item.requires_inspection) {
+      if (presenceOnly || !item.requires_inspection) {
         const resp = presenceResponses[item.location_standard_id]
         if (resp?.present === undefined) return false
       } else {
@@ -151,15 +152,17 @@ export default function InspectionRunClient({
     const assetInspections: { asset_id: string; template_id: string; responses: StepResponse[] }[] = []
     const presenceChecks: PresenceResponse[] = Object.values(presenceResponses)
 
-    for (const item of checklistItems) {
-      if (item.requires_inspection) {
-        for (let i = 0; i < item.expected_quantity; i++) {
-          const asset = getAssetForSlot(item, i)
-          if (!asset) continue
-          const template = getTemplate(item, asset.id)
-          if (!template) continue
-          const responses = Object.values(stepResponses[asset.id] ?? {})
-          assetInspections.push({ asset_id: asset.id, template_id: template.id, responses })
+    if (!presenceOnly) {
+      for (const item of checklistItems) {
+        if (item.requires_inspection) {
+          for (let i = 0; i < item.expected_quantity; i++) {
+            const asset = getAssetForSlot(item, i)
+            if (!asset) continue
+            const template = getTemplate(item, asset.id)
+            if (!template) continue
+            const responses = Object.values(stepResponses[asset.id] ?? {})
+            assetInspections.push({ asset_id: asset.id, template_id: template.id, responses })
+          }
         }
       }
     }
@@ -187,9 +190,9 @@ export default function InspectionRunClient({
       <div className="max-w-lg mx-auto">
         <div className="rounded-xl bg-white border border-green-200 p-8 text-center shadow-sm">
           <div className="text-5xl mb-4">✅</div>
-          <h2 className="text-xl font-bold text-zinc-900 mb-1">Inspection Complete!</h2>
+          <h2 className="text-xl font-bold text-zinc-900 mb-1">{presenceOnly ? 'Daily Check Complete!' : 'Inspection Complete!'}</h2>
           <p className="text-sm text-zinc-500 mb-6">
-            Compartment {compartment.code} on Unit {apparatus.unit_number} has been inspected.
+            Compartment {compartment.code} on Unit {apparatus.unit_number} has been {presenceOnly ? 'checked' : 'inspected'}.
           </p>
           <div className="flex gap-3">
             <button onClick={() => router.push('/inspections')}
@@ -216,7 +219,12 @@ export default function InspectionRunClient({
             Unit {apparatus.unit_number} — {compartment.code}
             {compartment.name ? ` · ${compartment.name}` : ''}
           </h1>
-          <p className="text-sm text-zinc-500">Inspector: {inspectorName}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-sm text-zinc-500">Inspector: {inspectorName}</p>
+            {presenceOnly && (
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">Daily Check</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -245,7 +253,7 @@ export default function InspectionRunClient({
             </div>
 
             {/* ── PRESENCE CHECK ─────────────────────────────────────── */}
-            {!item.requires_inspection && (
+            {(presenceOnly || !item.requires_inspection) && (
               <div className="px-5 py-4">
                 <p className="text-sm text-zinc-700 mb-3">
                   Is {item.item_name} present? (Expected: {item.expected_quantity})
@@ -285,7 +293,7 @@ export default function InspectionRunClient({
             )}
 
             {/* ── ASSET INSPECTION ───────────────────────────────────── */}
-            {item.requires_inspection && (
+            {!presenceOnly && item.requires_inspection && (
               <div className="px-5 py-4 flex flex-col gap-5">
                 {Array.from({ length: item.expected_quantity }).map((_, slotIndex) => {
                   const asset = getAssetForSlot(item, slotIndex)
@@ -440,7 +448,7 @@ export default function InspectionRunClient({
           onClick={handleSubmit}
           disabled={submitting || !isComplete()}
           className="w-full rounded-xl bg-red-700 px-4 py-3 text-base font-bold text-white hover:bg-red-800 disabled:opacity-50 transition-colors">
-          {submitting ? 'Submitting...' : isComplete() ? 'Submit Inspection' : 'Complete All Required Steps to Submit'}
+          {submitting ? 'Submitting...' : isComplete() ? (presenceOnly ? 'Submit Daily Check' : 'Submit Inspection') : 'Complete All Items to Submit'}
         </button>
       </div>
     </div>
