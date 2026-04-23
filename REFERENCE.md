@@ -35,7 +35,8 @@
 - Vercel deployed + fireops7.com DNS configured
 
 ## What's Placeholder / Not Yet Built
-- Inspection report — officer/admin, filterable by apparatus + date range, printable ← next build
+- Inspection report (`/reports/inspections`) — flat table: date, apparatus, compartment, item, asset, inspector, result; filters: date range, apparatus, inspector, pass/fail toggle; expandable rows show all step responses; asset tag click drills into per-asset history within same filter context; printable ← built
+- Training/cert report — officer/admin, filterable by member + cert type + date range, printable ← next build
 - Inspection report — officer/admin, filterable by apparatus + date range, printable
 - Training/cert report — officer/admin, filterable by member + cert type, expiring certs flagged, printable
 - Attendance report — officer/admin, participation rates, printable

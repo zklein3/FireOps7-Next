@@ -57,6 +57,7 @@
 - `/inspections/run` — run inspection checklist
 - `/events`, `/events/new` — events + attendance
 - `/training` — enrollments, certifications, training events
+- `/reports/inspections` — inspection report: filters, flat table, asset drill-in, print (officer/admin only)
 - `/reports/inventory` — inventory inspection reports (officer/admin only)
 - `/reports/my-activity` — member self-view: attendance, inspections, incidents (all roles)
 - `/admin/departments`, `/admin/users`, `/admin/logs` — sys admin pages
@@ -142,32 +143,26 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 
 ## IMMEDIATE NEXT — Resume Here Next Session
 
-### 1. Inspection Report (officer/admin) — `/reports/inspections` ← START HERE
-- Filter: apparatus, date range
-- Output: grouped by truck → compartment → item → each inspection with step responses
-- ISO audit ready: inspector name, date, pass/fail, all step responses visible
-- Print layout via `window.print()` (same pattern as inventory reports)
-
-### Priority Order After That
-
-**2. Training/Cert Report (officer/admin) — `/reports/training`**
+### 1. Training/Cert Report (officer/admin) — `/reports/training` ← START HERE
 - Filter: member, cert type, date range
 - Output: grouped by member → certifications + course completions
 - Flag certs expiring within configurable window
 - Printable
 
-**3. Attendance Report (officer/admin) — `/reports/attendance`**
+### Priority Order After That
+
+**2. Attendance Report (officer/admin) — `/reports/attendance`**
 - Filter: member, date range, event type
 - Participation rates, excused/unexcused breakdown
 - Printable
 
-**4. Asset roster view** — dept-wide, filterable by item type/status
+**3. Asset roster view** — dept-wide, filterable by item type/status
 
-**5. QR + Compartment page + Inspection Session** — see REFERENCE.md for full design
+**4. QR + Compartment page + Inspection Session** — see REFERENCE.md for full design
 
-**6. ISO Audit sections (future)** — see REFERENCE.md for full roadmap including hose logs, apparatus specs, hydrant flows, mutual aid
+**5. ISO Audit sections (future)** — see REFERENCE.md for full roadmap including hose logs, apparatus specs, hydrant flows, mutual aid
 
-**7. Flow & Presentation Polish**
+**6. Flow & Presentation Polish**
 
 ## Dev Workflow
 - Start: `npm run dev` in project directory

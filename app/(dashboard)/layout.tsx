@@ -46,7 +46,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/training', label: 'Training' },
     { href: '/incidents', label: 'Incidents' },
     { href: '/reports/my-activity', label: 'My Activity' },
-    ...(isOfficerOrAbove ? [{ href: '/reports/inventory', label: 'Reports' }] : []),
+    ...(isOfficerOrAbove ? [
+      { href: '/reports/inspections', label: 'Inspection Report' },
+      { href: '/reports/inventory', label: 'Inventory Report' },
+    ] : []),
   ]
 
   const adminNavItems = isSysAdmin ? [
