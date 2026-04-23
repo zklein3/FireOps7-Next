@@ -487,13 +487,26 @@ export default function InspectionRunClient({
                                       onChange={e => setStepResponse(asset.id, step.id, 'linked_asset_id', e.target.value)}
                                       className={inputCls}>
                                       <option value="">Select {step.linked_item_type_name ?? 'asset'}...</option>
-                                      {step.linked_asset_options
-                                        .filter(a => !recentlyInspectedAssetIds.includes(a.id))
-                                        .map(a => (
-                                          <option key={a.id} value={a.id}>
-                                            {a.asset_tag}{a.serial_number ? ` (S/N: ${a.serial_number})` : ''}
-                                          </option>
-                                        ))}
+                                      {(() => {
+                                        const takenLinkedIds = new Set(
+                                          Object.entries(stepResponses).flatMap(([otherAssetId, otherSteps]) =>
+                                            Object.entries(otherSteps)
+                                              .filter(([otherStepId, r]) =>
+                                                r.linked_asset_id &&
+                                                !(otherAssetId === asset.id && otherStepId === step.id)
+                                              )
+                                              .map(([, r]) => r.linked_asset_id!)
+                                          )
+                                        )
+                                        return step.linked_asset_options
+                                          .filter(a => !recentlyInspectedAssetIds.includes(a.id))
+                                          .filter(a => a.id === (resp.linked_asset_id ?? '') || !takenLinkedIds.has(a.id))
+                                          .map(a => (
+                                            <option key={a.id} value={a.id}>
+                                              {a.asset_tag}{a.serial_number ? ` (S/N: ${a.serial_number})` : ''}
+                                            </option>
+                                          ))
+                                      })()}
                                     </select>
 
                                     {/* Sub-inspection: linked asset's own template inline */}
