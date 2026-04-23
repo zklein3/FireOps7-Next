@@ -122,23 +122,24 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 ### Asset Statuses (DB values — must match exactly)
 - `IN SERVICE` | `OUT OF SERVICE` | `RETIRED`
 
-### Asset Linked Asset Pattern
-- `has_linked_asset = true` on an asset type — expects a linked asset during inspection
-- `linked_item_type_id` — what TYPE to prompt for (e.g. Scott Air Pack → Scott Air Pack Bottle)
-- Link is DYNAMIC — user selects which specific asset is present during inspection
-- ASSET_LINK step fires during inspection → linked asset's own template renders inline → submits its own inspection log row
-- 30-min dedup window hides already-inspected assets from all dropdowns in the same apparatus sweep
+### Inspection Design — Two Check Modes
+- **Daily presence check** — lightweight, per compartment: "are there 2 airpacks? 2 bottles?" → `compartment_presence_check_logs`. Planned route: `Verify Present` on the compartment page (QR system, not yet built).
+- **Weekly/monthly asset inspection** — full checklist per individual asset. Each item type (airpack, bottle, chainsaw) has independent slots. Assets in the same compartment are inspected separately, not linked.
+
+### Independent Asset Model (decided)
+- Each asset type is inspected on its own — airpacks and bottles are separate items in the compartment, each with their own checklist and slots
+- **ASSET_LINK step type exists but is NOT used** for standard equipment. Bottles on airpacks are NOT linked to the airpack inspection — they are independent assets inspected separately.
+- ASSET_LINK step type is available in the template builder for future edge cases but should not be added to standard equipment templates
 
 ### Inspection Flow
 1. Select apparatus → select compartment
 2. Quantity items → presence check (Present/Missing + actual qty)
 3. Asset-tracked items → N slots driven by `expected_quantity`; each slot: pick asset → run checklist
-4. ASSET_LINK steps → pick linked asset → linked asset's template runs inline, submits separate log row
-5. Submit → `item_asset_inspection_logs` + `item_asset_inspection_log_steps` + `compartment_presence_check_logs`
+4. Submit → `item_asset_inspection_logs` + `item_asset_inspection_log_steps` + `compartment_presence_check_logs`
 
 ### Inspection Template Builder
 - Dept Admin → Items → Items tab → [item] → Manage → Inspections tab
-- Step types: BOOLEAN, NUMERIC, TEXT, LONG_TEXT, ASSET_LINK
+- Step types: BOOLEAN, NUMERIC, TEXT, LONG_TEXT, ASSET_LINK (avoid ASSET_LINK for standard equipment)
 - Multiple templates per item type allowed (Daily/Weekly/Monthly)
 
 ## IMMEDIATE NEXT — Resume Here Next Session
