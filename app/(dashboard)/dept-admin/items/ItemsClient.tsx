@@ -34,7 +34,6 @@ const STEP_TYPES = [
   { value: 'NUMERIC', label: 'Number' },
   { value: 'TEXT', label: 'Short Text' },
   { value: 'LONG_TEXT', label: 'Long Text / Notes' },
-  { value: 'ASSET_LINK', label: 'Linked Asset Check' },
 ]
 
 function statusBadge(status: string) {
@@ -602,16 +601,6 @@ export default function ItemsClient({
                                                           {STEP_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                                                         </select>
                                                       </div>
-                                                      {newStepType === 'ASSET_LINK' && (
-                                                        <div className="flex-1">
-                                                          <select name="linked_item_type_id" className={inputCls}>
-                                                            <option value="">Select linked item type...</option>
-                                                            {items.filter(i => i.tracks_assets).map(i => (
-                                                              <option key={i.id} value={i.id}>{i.item_name}</option>
-                                                            ))}
-                                                          </select>
-                                                        </div>
-                                                      )}
                                                     </div>
                                                     <div className="flex gap-4">
                                                       <label className="flex items-center gap-2 cursor-pointer">
@@ -651,12 +640,6 @@ export default function ItemsClient({
                                                                 <option value="false">Inactive</option>
                                                               </select>
                                                             </div>
-                                                            {step.step_type === 'ASSET_LINK' && (
-                                                              <select name="linked_item_type_id" defaultValue={step.linked_item_type_id ?? ''} className={inputCls}>
-                                                                <option value="">Select linked item type...</option>
-                                                                {items.filter(i => i.tracks_assets).map(i => <option key={i.id} value={i.id}>{i.item_name}</option>)}
-                                                              </select>
-                                                            )}
                                                             <div className="flex gap-4">
                                                               <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="required" value="true" defaultChecked={step.required} className={checkCls} /><span className="text-xs text-zinc-700">Required</span></label>
                                                               <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="fail_if_negative" value="true" defaultChecked={step.fail_if_negative} className={checkCls} /><span className="text-xs text-zinc-700">Fail if No</span></label>
@@ -675,7 +658,6 @@ export default function ItemsClient({
                                                                 <span className="text-xs text-zinc-400">{STEP_TYPES.find(t => t.value === step.step_type)?.label ?? step.step_type}</span>
                                                                 {step.fail_if_negative && <span className="text-xs text-red-500">Fail if No</span>}
                                                                 {step.required && <span className="text-xs text-zinc-400">Required</span>}
-                                                                {step.step_type === 'ASSET_LINK' && <span className="text-xs text-blue-500">🔗 {items.find(i => i.id === step.linked_item_type_id)?.item_name ?? 'Linked asset'}</span>}
                                                               </div>
                                                             </div>
                                                             <div className="flex gap-2 shrink-0">

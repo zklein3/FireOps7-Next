@@ -124,12 +124,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 
 ### Inspection Design — Two Check Modes
 - **Daily presence check** — lightweight, per compartment: "are there 2 airpacks? 2 bottles?" → `compartment_presence_check_logs`. Planned route: `Verify Present` on the compartment page (QR system, not yet built).
-- **Weekly/monthly asset inspection** — full checklist per individual asset. Each item type (airpack, bottle, chainsaw) has independent slots. Assets in the same compartment are inspected separately, not linked.
+- **Weekly/monthly asset inspection** — full checklist per individual asset. Each item type (airpack, bottle, chainsaw) is inspected independently in its own slot.
 
-### Independent Asset Model (decided)
-- Each asset type is inspected on its own — airpacks and bottles are separate items in the compartment, each with their own checklist and slots
-- **ASSET_LINK step type exists but is NOT used** for standard equipment. Bottles on airpacks are NOT linked to the airpack inspection — they are independent assets inspected separately.
-- ASSET_LINK step type is available in the template builder for future edge cases but should not be added to standard equipment templates
+### Independent Asset Model
+- Each asset type is inspected on its own — airpacks and bottles are separate items in the same compartment, each with their own checklist and slots. No linking between assets.
+- ASSET_LINK step type has been fully removed from the codebase and DB. Do not re-introduce it.
 
 ### Inspection Flow
 1. Select apparatus → select compartment
@@ -139,7 +138,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 
 ### Inspection Template Builder
 - Dept Admin → Items → Items tab → [item] → Manage → Inspections tab
-- Step types: BOOLEAN, NUMERIC, TEXT, LONG_TEXT, ASSET_LINK (avoid ASSET_LINK for standard equipment)
+- Step types: BOOLEAN, NUMERIC, TEXT, LONG_TEXT
 - Multiple templates per item type allowed (Daily/Weekly/Monthly)
 
 ## IMMEDIATE NEXT — Resume Here Next Session

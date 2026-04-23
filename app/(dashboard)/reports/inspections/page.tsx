@@ -13,7 +13,6 @@ export type StepRow = {
   fail_if_negative: boolean
   required: boolean
   sort_order: number
-  linked_asset_tag: string | null
 }
 
 export type InspectionLogRow = {
@@ -154,19 +153,7 @@ export default async function InspectionReportPage({
   const templateStepMap = Object.fromEntries((templateSteps ?? []).map(s => [s.id, s]))
 
   // Assets (from logs)
-  const logAssetIds = [...new Set(logs.filter(l => l.asset_id).map(l => l.asset_id as string))]
-
-  // Also collect linked asset ids from ASSET_LINK step responses
-  const linkedAssetIds = [...new Set(
-    (stepResponses ?? [])
-      .filter(sr => {
-        const ts = templateStepMap[sr.template_step_id]
-        return ts?.step_type === 'ASSET_LINK' && sr.text_value
-      })
-      .map(sr => sr.text_value as string)
-  )]
-
-  const allAssetIds = [...new Set([...logAssetIds, ...linkedAssetIds])]
+  const allAssetIds = [...new Set(logs.filter(l => l.asset_id).map(l => l.asset_id as string))]
   const { data: assetsData } = allAssetIds.length > 0
     ? await adminClient.from('item_assets').select('id, asset_tag, item_id').in('id', allAssetIds)
     : { data: [] as { id: string; asset_tag: string; item_id: string }[] }
@@ -214,9 +201,6 @@ export default async function InspectionReportPage({
 
     const steps: StepRow[] = rawSteps.map(sr => {
       const ts = templateStepMap[sr.template_step_id]
-      const linkedTag = ts?.step_type === 'ASSET_LINK' && sr.text_value
-        ? (assetMap[sr.text_value]?.asset_tag ?? null)
-        : null
       return {
         template_step_id: sr.template_step_id,
         step_text: ts?.step_text ?? '—',
@@ -227,7 +211,6 @@ export default async function InspectionReportPage({
         fail_if_negative: ts?.fail_if_negative ?? false,
         required: ts?.required ?? false,
         sort_order: ts?.sort_order ?? 0,
-        linked_asset_tag: linkedTag,
       }
     })
 
@@ -299,34 +282,6 @@ export default async function InspectionReportPage({
     actual_quantity: p.actual_quantity ?? null,
     notes: p.notes ?? null,
   }))
-
-  // Synthesize "Present" rows for ASSET_LINK picks that have no own inspection log
-  // (i.e. the linked asset — e.g. a bottle — has no template and was never submitted as its own log)
-  const inspectedAssetIds = new Set(inspectionLogs.map(l => l.asset_id))
-  for (const log of inspectionLogs) {
-    for (const step of log.steps) {
-      if (step.step_type !== 'ASSET_LINK' || !step.text_value) continue
-      const linkedAssetId = step.text_value
-      if (inspectedAssetIds.has(linkedAssetId)) continue // already has its own inspection row
-      const linkedAsset = assetMap[linkedAssetId]
-      if (!linkedAsset) continue
-      presenceChecks.push({
-        id: `${log.id}-link-${linkedAssetId}`,
-        inspected_at: log.inspected_at,
-        apparatus_id: log.apparatus_id,
-        apparatus_name: log.apparatus_name,
-        compartment: log.compartment,
-        item_name: itemMap[linkedAsset.item_id] ?? '—',
-        item_id: linkedAsset.item_id,
-        inspector_name: log.inspector_name,
-        inspector_personnel_id: log.inspector_personnel_id,
-        present: true,
-        actual_quantity: null,
-        notes: null,
-        asset_tag: linkedAsset.asset_tag,
-      })
-    }
-  }
 
   const personnelDropdown = (personnelData ?? []).map(p => ({
     id: p.id,

@@ -55,9 +55,7 @@ function StepValue({ step }: { step: StepRow }) {
   if (step.step_type === 'NUMERIC') {
     return <span className="font-medium text-zinc-700">{step.numeric_value ?? '—'}</span>
   }
-  if (step.step_type === 'ASSET_LINK') {
-    return <span className="font-medium text-zinc-700">{step.linked_asset_tag ?? step.text_value ?? '—'}</span>
-  }
+
   return <span className="text-zinc-600">{step.text_value ?? '—'}</span>
 }
 

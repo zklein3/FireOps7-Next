@@ -10,15 +10,6 @@ interface Step {
   step_type: string
   required: boolean
   fail_if_negative: boolean
-  linked_item_type_id: string | null
-  linked_item_type_name: string | null
-  linked_asset_options: { id: string; item_id: string; asset_tag: string; serial_number: string | null }[]
-}
-
-interface LinkedAssetTemplate {
-  template_id: string
-  template_name: string
-  steps: Step[]
 }
 
 interface Template {
@@ -32,8 +23,6 @@ interface Asset {
   asset_tag: string
   serial_number: string | null
   status: string
-  has_linked_asset: boolean
-  linked_item_type_id: string | null
 }
 
 interface ChecklistItem {
@@ -53,7 +42,6 @@ type StepResponse = {
   boolean_value?: boolean
   numeric_value?: number
   text_value?: string
-  linked_asset_id?: string
 }
 
 type PresenceResponse = {
@@ -68,7 +56,6 @@ const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm tex
 
 export default function InspectionRunClient({
   apparatus, compartment, compartmentId, checklistItems, inspectorName, personnelId, departmentId,
-  linkedAssetTemplatesByItemType, recentlyInspectedAssetIds,
 }: {
   apparatus: { id: string; unit_number: string; apparatus_name: string | null }
   compartment: { code: string; name: string | null }
@@ -77,8 +64,6 @@ export default function InspectionRunClient({
   inspectorName: string
   personnelId: string
   departmentId: string
-  linkedAssetTemplatesByItemType: Record<string, LinkedAssetTemplate>
-  recentlyInspectedAssetIds: string[]
 }) {
   const router = useRouter()
 
@@ -93,9 +78,6 @@ export default function InspectionRunClient({
   // stepResponses: asset_id -> step_id -> StepResponse
   const [stepResponses, setStepResponses] = useState<Record<string, Record<string, StepResponse>>>({})
 
-  // subInspectionResponses: linked_asset_id -> step_id -> StepResponse
-  const [subInspectionResponses, setSubInspectionResponses] = useState<Record<string, Record<string, StepResponse>>>({})
-
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -105,21 +87,6 @@ export default function InspectionRunClient({
       ...prev,
       [location_standard_id]: { ...prev[location_standard_id], location_standard_id, item_id, [field]: value },
     }))
-  }
-
-  function setSubStepResponse(linked_asset_id: string, step_id: string, field: keyof StepResponse, value: unknown) {
-    setSubInspectionResponses(prev => ({
-      ...prev,
-      [linked_asset_id]: {
-        ...(prev[linked_asset_id] ?? {}),
-        [step_id]: { ...(prev[linked_asset_id]?.[step_id] ?? { step_id }), [field]: value },
-      },
-    }))
-  }
-
-  function getSubTemplate(linkedAssetId: string, options: Step['linked_asset_options']): LinkedAssetTemplate | null {
-    const opt = options.find(a => a.id === linkedAssetId)
-    return opt ? (linkedAssetTemplatesByItemType[opt.item_id] ?? null) : null
   }
 
   function setStepResponse(asset_id: string, step_id: string, field: keyof StepResponse, value: unknown) {
@@ -170,19 +137,6 @@ export default function InspectionRunClient({
             if (!resp) return false
             if (step.step_type === 'BOOLEAN' && resp.boolean_value === undefined) return false
             if (step.step_type === 'NUMERIC' && resp.numeric_value === undefined) return false
-            if (step.step_type === 'ASSET_LINK' && !resp.linked_asset_id) return false
-            if (step.step_type === 'ASSET_LINK' && resp.linked_asset_id) {
-              const subTemplate = getSubTemplate(resp.linked_asset_id, step.linked_asset_options)
-              if (subTemplate) {
-                for (const subStep of subTemplate.steps) {
-                  if (!subStep.required) continue
-                  const subResp = subInspectionResponses[resp.linked_asset_id]?.[subStep.id]
-                  if (!subResp) return false
-                  if (subStep.step_type === 'BOOLEAN' && subResp.boolean_value === undefined) return false
-                  if (subStep.step_type === 'NUMERIC' && subResp.numeric_value === undefined) return false
-                }
-              }
-            }
           }
         }
       }
@@ -206,20 +160,6 @@ export default function InspectionRunClient({
           if (!template) continue
           const responses = Object.values(stepResponses[asset.id] ?? {})
           assetInspections.push({ asset_id: asset.id, template_id: template.id, responses })
-
-          // Collect sub-inspections from ASSET_LINK steps
-          for (const step of template.steps) {
-            if (step.step_type !== 'ASSET_LINK') continue
-            const resp = stepResponses[asset.id]?.[step.id]
-            if (!resp?.linked_asset_id) continue
-            const subTemplate = getSubTemplate(resp.linked_asset_id, step.linked_asset_options)
-            if (!subTemplate) continue
-            assetInspections.push({
-              asset_id: resp.linked_asset_id,
-              template_id: subTemplate.template_id,
-              responses: Object.values(subInspectionResponses[resp.linked_asset_id] ?? {}),
-            })
-          }
         }
       }
     }
@@ -476,94 +416,6 @@ export default function InspectionRunClient({
                                   </div>
                                 )}
 
-                                {/* ASSET_LINK */}
-                                {step.step_type === 'ASSET_LINK' && (
-                                  <div className="ml-7">
-                                    <p className="text-xs text-blue-600 mb-1.5">
-                                      🔗 Which {step.linked_item_type_name ?? 'asset'} is present?
-                                    </p>
-                                    <select
-                                      value={resp.linked_asset_id ?? ''}
-                                      onChange={e => setStepResponse(asset.id, step.id, 'linked_asset_id', e.target.value)}
-                                      className={inputCls}>
-                                      <option value="">Select {step.linked_item_type_name ?? 'asset'}...</option>
-                                      {(() => {
-                                        const takenLinkedIds = new Set(
-                                          Object.entries(stepResponses).flatMap(([otherAssetId, otherSteps]) =>
-                                            Object.entries(otherSteps)
-                                              .filter(([otherStepId, r]) =>
-                                                r.linked_asset_id &&
-                                                !(otherAssetId === asset.id && otherStepId === step.id)
-                                              )
-                                              .map(([, r]) => r.linked_asset_id!)
-                                          )
-                                        )
-                                        return step.linked_asset_options
-                                          .filter(a => !recentlyInspectedAssetIds.includes(a.id))
-                                          .filter(a => a.id === (resp.linked_asset_id ?? '') || !takenLinkedIds.has(a.id))
-                                          .map(a => (
-                                            <option key={a.id} value={a.id}>
-                                              {a.asset_tag}{a.serial_number ? ` (S/N: ${a.serial_number})` : ''}
-                                            </option>
-                                          ))
-                                      })()}
-                                    </select>
-
-                                    {/* Sub-inspection: linked asset's own template inline */}
-                                    {resp.linked_asset_id && (() => {
-                                      const subTemplate = getSubTemplate(resp.linked_asset_id, step.linked_asset_options)
-                                      if (!subTemplate) return null
-                                      return (
-                                        <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
-                                          <div className="px-3 py-2 bg-blue-50 border-b border-blue-200">
-                                            <p className="text-xs font-semibold text-blue-700">{subTemplate.template_name}</p>
-                                          </div>
-                                          <div className="flex flex-col">
-                                            {subTemplate.steps.map((subStep, subIdx) => {
-                                              const subResp = subInspectionResponses[resp.linked_asset_id!]?.[subStep.id] ?? {}
-                                              return (
-                                                <div key={subStep.id} className={`px-4 py-3 ${subIdx > 0 ? 'border-t border-zinc-100' : ''}`}>
-                                                  <div className="flex items-start gap-2 mb-2">
-                                                    <span className="text-xs font-mono text-zinc-400 mt-0.5 w-5 shrink-0">{subIdx + 1}.</span>
-                                                    <div className="flex-1">
-                                                      <p className="text-sm text-zinc-800">{subStep.step_text}</p>
-                                                      {subStep.fail_if_negative && <p className="text-xs text-red-500 mt-0.5">⚠ Fail if No</p>}
-                                                    </div>
-                                                  </div>
-                                                  {subStep.step_type === 'BOOLEAN' && (
-                                                    <div className="flex gap-3 ml-7">
-                                                      <button
-                                                        onClick={() => setSubStepResponse(resp.linked_asset_id!, subStep.id, 'boolean_value', true)}
-                                                        className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${subResp.boolean_value === true ? 'bg-green-600 border-green-600 text-white' : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'}`}>Yes</button>
-                                                      <button
-                                                        onClick={() => setSubStepResponse(resp.linked_asset_id!, subStep.id, 'boolean_value', false)}
-                                                        className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${subResp.boolean_value === false ? (subStep.fail_if_negative ? 'bg-red-600 border-red-600 text-white' : 'bg-zinc-600 border-zinc-600 text-white') : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'}`}>No</button>
-                                                    </div>
-                                                  )}
-                                                  {subStep.step_type === 'NUMERIC' && (
-                                                    <div className="ml-7">
-                                                      <input type="number" value={subResp.numeric_value ?? ''} onChange={e => setSubStepResponse(resp.linked_asset_id!, subStep.id, 'numeric_value', parseFloat(e.target.value))} placeholder="Enter value..." className={inputCls} />
-                                                    </div>
-                                                  )}
-                                                  {subStep.step_type === 'TEXT' && (
-                                                    <div className="ml-7">
-                                                      <input type="text" value={subResp.text_value ?? ''} onChange={e => setSubStepResponse(resp.linked_asset_id!, subStep.id, 'text_value', e.target.value)} placeholder="Enter text..." className={inputCls} />
-                                                    </div>
-                                                  )}
-                                                  {subStep.step_type === 'LONG_TEXT' && (
-                                                    <div className="ml-7">
-                                                      <textarea rows={2} value={subResp.text_value ?? ''} onChange={e => setSubStepResponse(resp.linked_asset_id!, subStep.id, 'text_value', e.target.value)} placeholder="Enter notes..." className={`${inputCls} resize-none`} />
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              )
-                                            })}
-                                          </div>
-                                        </div>
-                                      )
-                                    })()}
-                                  </div>
-                                )}
                               </div>
                             )
                           })}

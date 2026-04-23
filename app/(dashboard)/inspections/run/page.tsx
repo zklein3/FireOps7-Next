@@ -102,82 +102,6 @@ export default async function InspectionRunPage({
         .order('sort_order')
     : { data: [] }
 
-  // Fetch available linked assets for any ASSET_LINK steps
-  const linkedItemTypeIds = (steps ?? [])
-    .filter(s => s.step_type === 'ASSET_LINK' && s.linked_item_type_id)
-    .map(s => s.linked_item_type_id)
-  const { data: linkedAssets } = linkedItemTypeIds.length > 0
-    ? await adminClient
-        .from('item_assets')
-        .select('id, item_id, asset_tag, serial_number')
-        .eq('department_id', myDept.department_id)
-        .in('item_id', linkedItemTypeIds)
-        .eq('active', true)
-        .eq('status', 'IN SERVICE')
-    : { data: [] }
-
-  // Fetch linked item type names
-  const { data: linkedItemTypes } = linkedItemTypeIds.length > 0
-    ? await adminClient.from('items').select('id, item_name').in('id', linkedItemTypeIds)
-    : { data: [] }
-  const linkedItemTypeMap = Object.fromEntries((linkedItemTypes ?? []).map(i => [i.id, i.item_name]))
-
-  // Fetch inspection templates + steps for linked asset types (sub-inspections)
-  const { data: linkedTemplates } = linkedItemTypeIds.length > 0
-    ? await adminClient
-        .from('item_inspection_templates')
-        .select('id, item_id, template_name')
-        .eq('department_id', myDept.department_id)
-        .in('item_id', linkedItemTypeIds)
-        .eq('active', true)
-    : { data: [] }
-
-  const linkedTemplateIds = (linkedTemplates ?? []).map(t => t.id)
-  const { data: linkedSteps } = linkedTemplateIds.length > 0
-    ? await adminClient
-        .from('item_inspection_template_steps')
-        .select('id, template_id, step_text, step_type, required, fail_if_negative, linked_item_type_id, sort_order')
-        .in('template_id', linkedTemplateIds)
-        .eq('active', true)
-        .order('sort_order')
-    : { data: [] }
-
-  const linkedAssetTemplatesByItemType: Record<string, { template_id: string; template_name: string; steps: any[] }> = {}
-  for (const t of linkedTemplates ?? []) {
-    linkedAssetTemplatesByItemType[t.item_id] = {
-      template_id: t.id,
-      template_name: t.template_name,
-      steps: (linkedSteps ?? [])
-        .filter(s => s.template_id === t.id)
-        .map(s => ({
-          id: s.id,
-          step_text: s.step_text,
-          step_type: s.step_type,
-          required: s.required,
-          fail_if_negative: s.fail_if_negative,
-          linked_item_type_id: s.linked_item_type_id ?? null,
-          linked_item_type_name: null,
-          linked_asset_options: [],
-        })),
-    }
-  }
-
-  // 30-minute dedup: assets already inspected on this apparatus this session
-  const allAssetIds = [
-    ...(assets ?? []).map(a => a.id),
-    ...(linkedAssets ?? []).map(a => a.id),
-  ]
-  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
-  const { data: recentLogs } = allAssetIds.length > 0
-    ? await adminClient
-        .from('item_asset_inspection_logs')
-        .select('asset_id')
-        .eq('apparatus_id', apparatus_id)
-        .in('asset_id', allAssetIds)
-        .gt('inspected_at', thirtyMinAgo)
-    : { data: [] }
-  const recentlyInspectedAssetIds = [...new Set((recentLogs ?? []).map(l => l.asset_id as string))]
-
   // Build checklist items
   const checklistItems = (locationStandards ?? []).map(ls => {
     const item = itemMap[ls.item_id]
@@ -199,25 +123,18 @@ export default async function InspectionRunPage({
         asset_tag: a.asset_tag,
         serial_number: a.serial_number,
         status: a.status,
-        has_linked_asset: a.has_linked_asset,
-        linked_item_type_id: a.linked_item_type_id,
       })),
       templates: itemTemplates.map(t => ({
         id: t.id,
         template_name: t.template_name,
         steps: (steps ?? [])
-          .filter(s => s.template_id === t.id)
+          .filter(s => s.template_id === t.id && s.step_type !== 'ASSET_LINK')
           .map(s => ({
             id: s.id,
             step_text: s.step_text,
             step_type: s.step_type,
             required: s.required,
             fail_if_negative: s.fail_if_negative,
-            linked_item_type_id: s.linked_item_type_id,
-            linked_item_type_name: s.linked_item_type_id ? linkedItemTypeMap[s.linked_item_type_id] ?? null : null,
-            linked_asset_options: s.linked_item_type_id
-              ? (linkedAssets ?? []).filter(a => a.item_id === s.linked_item_type_id).map(a => ({ id: a.id, item_id: a.item_id, asset_tag: a.asset_tag, serial_number: a.serial_number }))
-              : [],
           })),
       })),
     }
@@ -232,8 +149,6 @@ export default async function InspectionRunPage({
       inspectorName={`${me.first_name} ${me.last_name}`}
       personnelId={me.id}
       departmentId={myDept.department_id}
-      linkedAssetTemplatesByItemType={linkedAssetTemplatesByItemType}
-      recentlyInspectedAssetIds={recentlyInspectedAssetIds}
     />
   )
 }
