@@ -152,7 +152,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 ## IMMEDIATE NEXT — Resume Here Next Session
 
 ### Data Setup (User Task — No Code)
-Bottles (B-0001, B-0002, etc.) and any other individually-tracked assets need to be assigned directly as location standards on their compartment (Dept Admin → Compartments → assign item with expected qty). Once added they appear in the run as a presence check; add a template for that item type to auto-upgrade to full inspection.
+Bottles (B-0001, B-0002, etc.) and any other individually-tracked assets need to be assigned directly as location standards on their compartment. Path: `/equipment` → select apparatus → find compartment → **+ Add Item** → select item type → set quantity → Add. Each item type can only be added once per compartment; to adjust count later, tap the quantity number to edit inline. Once added they appear in the run as a presence check; add a template for that item type to auto-upgrade to full inspection. Individual asset records (B-0001, B-0002) are created separately at Dept Admin → Items → item type → Manage → Assets tab.
 
 ### 1. Training/Cert Report (officer/admin) — `/reports/training` ← START HERE
 - Filter: member, cert type, date range

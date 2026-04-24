@@ -187,6 +187,12 @@ export default function EquipmentDetailClient({
         <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>
       )}
 
+      {isOfficerOrAbove && compartments.length > 0 && (
+        <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-xs text-blue-700 leading-relaxed">
+          <span className="font-semibold">Managing equipment:</span> Tap <span className="font-semibold">+ Add Item</span> on a compartment to assign an item type — each type can only be added once per compartment. To adjust the expected count of an item already assigned, tap the quantity number to edit it inline.
+        </div>
+      )}
+
       {compartments.length === 0 ? (
         <div className="rounded-xl bg-white border border-zinc-200 px-6 py-12 text-center text-sm text-zinc-400">
           No compartments assigned to this apparatus yet.
