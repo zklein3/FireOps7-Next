@@ -1,5 +1,10 @@
 @AGENTS.md
 
+## Session Start Checklist
+1. Verify Git is installed: `git --version`. If not found, download from https://git-scm.com/download/win and install before proceeding.
+2. Run `git pull` to sync latest changes from remote before starting any work.
+3. Run `npm run build` to confirm the current branch compiles clean before making changes.
+
 # FireOps7 — Project Guide
 
 ## Stack
