@@ -76,7 +76,7 @@ export default async function InspectionRunPage({
   const { data: assets } = assetItemIds.length > 0
     ? await adminClient
         .from('item_assets')
-        .select('id, item_id, asset_tag, serial_number, status, has_linked_asset, linked_item_type_id')
+        .select('id, item_id, asset_tag, serial_number, status')
         .eq('department_id', myDept.department_id)
         .in('item_id', assetItemIds)
         .eq('active', true)
@@ -97,7 +97,7 @@ export default async function InspectionRunPage({
   const { data: steps } = templateIds.length > 0
     ? await adminClient
         .from('item_inspection_template_steps')
-        .select('id, template_id, step_text, step_type, required, fail_if_negative, linked_item_type_id, sort_order')
+        .select('id, template_id, step_text, step_type, required, fail_if_negative, sort_order')
         .in('template_id', templateIds)
         .eq('active', true)
         .order('sort_order')

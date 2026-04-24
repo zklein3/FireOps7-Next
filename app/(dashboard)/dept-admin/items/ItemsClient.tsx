@@ -13,9 +13,9 @@ import {
 
 interface Category { id: string; category_name: string; active: boolean; sort_order: number | null }
 interface Item { id: string; item_name: string; item_description: string | null; category_id: string; tracks_quantity: boolean; tracks_assets: boolean; requires_presence_check: boolean; requires_inspection: boolean; tracks_expiration: boolean; active: boolean }
-interface Asset { id: string; item_id: string; asset_tag: string; serial_number: string | null; in_service_date: string | null; out_of_service_date: string | null; status: string; active: boolean; notes: string | null; has_linked_asset: boolean; linked_item_type_id: string | null }
+interface Asset { id: string; item_id: string; asset_tag: string; serial_number: string | null; in_service_date: string | null; out_of_service_date: string | null; status: string; active: boolean; notes: string | null }
 interface Template { id: string; item_id: string; template_name: string; template_description: string | null; active: boolean }
-interface Step { id: string; template_id: string; step_text: string; step_description: string | null; step_type: string; required: boolean; fail_if_negative: boolean; linked_item_type_id: string | null; sort_order: number; active: boolean }
+interface Step { id: string; template_id: string; step_text: string; step_description: string | null; step_type: string; required: boolean; fail_if_negative: boolean; sort_order: number; active: boolean }
 
 type ActiveTab = 'categories' | 'items' | 'assets'
 type ItemSection = 'assets' | 'inspections'
@@ -412,25 +412,6 @@ export default function ItemsClient({
                                           <input name="notes" type="text" className={inputCls} />
                                         </div>
                                       </div>
-                                      <div className="pt-2 border-t border-zinc-100">
-                                        <label className="flex items-center gap-2 cursor-pointer mb-2">
-                                          <input type="checkbox" name="has_linked_asset" value="true" className={checkCls}
-                                            onChange={e => {
-                                              const el = document.getElementById(`linked_type_${item.id}`) as HTMLElement
-                                              if (el) el.style.display = e.target.checked ? 'block' : 'none'
-                                            }} />
-                                          <span className="text-sm text-zinc-700">Has a linked asset (e.g. bottle on airpack)</span>
-                                        </label>
-                                        <div id={`linked_type_${item.id}`} style={{ display: 'none' }}>
-                                          <label className="mb-1 block text-xs font-medium text-zinc-700">Linked Asset Type</label>
-                                          <select name="linked_item_type_id" className={inputCls}>
-                                            <option value="">Select item type...</option>
-                                            {items.filter(i => i.tracks_assets && i.id !== item.id).map(i => (
-                                              <option key={i.id} value={i.id}>{i.item_name}</option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                      </div>
                                       <button type="submit" disabled={loading} className="w-full rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
                                         {loading ? 'Adding...' : 'Add Asset'}
                                       </button>
@@ -456,18 +437,6 @@ export default function ItemsClient({
                                                 <div className="w-36"><select name="status" defaultValue={asset.status} className={inputCls}>{STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
                                               </div>
                                               <input name="notes" type="text" defaultValue={asset.notes ?? ''} placeholder="Notes" className={inputCls} />
-                                              <div className="pt-2 border-t border-zinc-100">
-                                                <label className="flex items-center gap-2 cursor-pointer mb-2">
-                                                  <input type="checkbox" name="has_linked_asset" value="true" defaultChecked={asset.has_linked_asset} className={checkCls} />
-                                                  <span className="text-sm text-zinc-700">Has a linked asset</span>
-                                                </label>
-                                                <select name="linked_item_type_id" defaultValue={asset.linked_item_type_id ?? ''} className={inputCls}>
-                                                  <option value="">Select item type...</option>
-                                                  {items.filter(i => i.tracks_assets && i.id !== item.id).map(i => (
-                                                    <option key={i.id} value={i.id}>{i.item_name}</option>
-                                                  ))}
-                                                </select>
-                                              </div>
                                               <div className="flex gap-2">
                                                 <button type="submit" disabled={loading} className="flex-1 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">{loading ? 'Saving...' : 'Save'}</button>
                                                 <button type="button" onClick={() => setEditingAssetId(null)} className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">Cancel</button>
@@ -479,7 +448,6 @@ export default function ItemsClient({
                                                 <p className="text-sm font-semibold text-zinc-900">{asset.asset_tag}</p>
                                                 <div className="flex gap-3 text-xs text-zinc-400 mt-0.5">
                                                   {asset.serial_number && <span>S/N: {asset.serial_number}</span>}
-                                                  {asset.has_linked_asset && <span className="text-blue-500">🔗 Linked asset</span>}
                                                 </div>
                                               </div>
                                               <div className="flex items-center gap-3">
@@ -707,7 +675,6 @@ export default function ItemsClient({
                       <p className="text-sm font-semibold text-zinc-900">{asset.asset_tag}</p>
                       <p className="text-xs text-zinc-400">{item?.item_name ?? '—'} · {categoryMap[item?.category_id ?? ''] ?? '—'}</p>
                       {asset.serial_number && <p className="text-xs text-zinc-400">S/N: {asset.serial_number}</p>}
-                      {asset.has_linked_asset && <p className="text-xs text-blue-500">🔗 Linked asset</p>}
                     </div>
                     <div className="flex items-center gap-3 ml-3">
                       <span className={`text-xs rounded-full px-2 py-0.5 ${statusBadge(asset.status)}`}>{statusLabel(asset.status)}</span>

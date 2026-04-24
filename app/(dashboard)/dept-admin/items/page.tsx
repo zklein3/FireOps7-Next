@@ -48,7 +48,7 @@ export default async function ItemsPage({
   const { data: assets } = assetItemIds.length > 0
     ? await adminClient
         .from('item_assets')
-        .select('id, item_id, asset_tag, serial_number, in_service_date, out_of_service_date, status, active, notes, has_linked_asset, linked_item_type_id')
+        .select('id, item_id, asset_tag, serial_number, in_service_date, out_of_service_date, status, active, notes')
         .eq('department_id', department_id)
         .in('item_id', assetItemIds)
         .order('asset_tag')
@@ -70,7 +70,7 @@ export default async function ItemsPage({
   const { data: steps } = templateIds.length > 0
     ? await adminClient
         .from('item_inspection_template_steps')
-        .select('id, template_id, step_text, step_description, step_type, response_type, required, fail_if_negative, linked_item_type_id, sort_order, active')
+        .select('id, template_id, step_text, step_description, step_type, response_type, required, fail_if_negative, sort_order, active')
         .in('template_id', templateIds)
         .order('sort_order')
     : { data: [] }

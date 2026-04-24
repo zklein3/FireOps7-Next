@@ -123,7 +123,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 - `IN SERVICE` | `OUT OF SERVICE` | `RETIRED`
 
 ### Inspection Design — Two Check Modes
-- **Daily Check** — presence-only, available now from `/inspections` → select apparatus + compartment → "Daily Check" button. Shows present/missing + qty for every item, no asset picking or checklist. Logs to `compartment_presence_check_logs`. When QR system is built, scanning a compartment will land here via `?mode=presence`.
+- **Daily Check** — presence-only (`?mode=presence`), available from `/inspections` → "Daily Check" button. Shows present/missing + qty for every item, no asset picking or checklist. Logs to `compartment_presence_check_logs`. When QR system is built, scanning a compartment lands here.
 - **Full Inspection** — full checklist per individual asset. Each item type (airpack, bottle, chainsaw) is inspected independently in its own slot.
 
 ### Independent Asset Model
@@ -132,16 +132,22 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 
 ### Inspection Flow
 1. Select apparatus → select compartment
-2. Quantity items → presence check (Present/Missing + actual qty)
-3. Asset-tracked items → N slots driven by `expected_quantity`; each slot: pick asset → run checklist
+2. In Daily Check mode OR any item with no template → presence check (Present/Missing + actual qty)
+3. Full Inspection: asset-tracked items WITH a template → N slots driven by `expected_quantity`; each slot: pick asset → run checklist
 4. Submit → `item_asset_inspection_logs` + `item_asset_inspection_log_steps` + `compartment_presence_check_logs`
+
+**Key rule:** `presenceOnly || !(requires_inspection && templates.length > 0)` → presence check. Otherwise → full asset inspection.
 
 ### Inspection Template Builder
 - Dept Admin → Items → Items tab → [item] → Manage → Inspections tab
 - Step types: BOOLEAN, NUMERIC, TEXT, LONG_TEXT
 - Multiple templates per item type allowed (Daily/Weekly/Monthly)
+- ASSET_LINK step type removed — bottles are now standalone location standard items
 
 ## IMMEDIATE NEXT — Resume Here Next Session
+
+### Data Setup (User Task — No Code)
+Bottles (B-0001, B-0002, etc.) and any other individually-tracked assets need to be assigned directly as location standards on their compartment (Dept Admin → Compartments → assign item with expected qty). Once added they appear in the run as a presence check; add a template for that item type to auto-upgrade to full inspection.
 
 ### 1. Training/Cert Report (officer/admin) — `/reports/training` ← START HERE
 - Filter: member, cert type, date range
@@ -150,19 +156,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 - Printable
 
 ### Priority Order After That
-
-**2. Attendance Report (officer/admin) — `/reports/attendance`**
-- Filter: member, date range, event type
-- Participation rates, excused/unexcused breakdown
-- Printable
-
-**3. Asset roster view** — dept-wide, filterable by item type/status
-
-**4. QR + Compartment page + Inspection Session** — see REFERENCE.md for full design
-
-**5. ISO Audit sections (future)** — see REFERENCE.md for full roadmap including hose logs, apparatus specs, hydrant flows, mutual aid
-
-**6. Flow & Presentation Polish**
+2. Attendance Report (officer/admin) — `/reports/attendance` — participation rates, excused/unexcused, printable
+3. Asset roster view — dept-wide, filterable by item type/status
+4. QR + Compartment page + Inspection Session — see REFERENCE.md for full design
+5. ISO Audit sections (future) — hose logs, apparatus specs, hydrant flows, mutual aid
+6. Flow & Presentation Polish
 
 ## Dev Workflow
 - Start: `npm run dev` in project directory
@@ -179,7 +177,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 
 ## Test Data (Winslow Fire)
 - Engine 32 → D1 (Scott Air Pack ×2, Scott Air Pack Bottle ×2, Halligan ×1) + P1 (Chainsaw ×1)
-- Assets: Chainsaw 1, Scott Air Pack 1, Scott Air Pack 2, B-0001, B-0002
+- Assets: Chainsaw 1, Scott Air Pack 1, Scott Air Pack 2, B-0001, B-0002 (bottles are standalone location standards, not linked to airpacks)
 - Templates: Weekly Chainsaw Inspection (3 steps), Weekly Airpack Inspection (4 steps, on Scott Air Pack)
 
 ## Historical Reference
