@@ -57,9 +57,9 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
-  verified: 'bg-green-100 text-green-700',
-  rejected: 'bg-red-100 text-red-700',
-  excused: 'bg-zinc-100 text-zinc-500',
+  present: 'bg-green-100 text-green-700',
+  absent: 'bg-red-100 text-red-700',
+  excused: 'bg-blue-100 text-blue-700',
 }
 
 function formatDate(dateStr: string) {
@@ -145,7 +145,7 @@ export default function EventsClient({
   async function handleApprove(attendance_id: string) {
     reset()
     setLoading(true)
-    const result = await verifyAttendance(attendance_id, 'verified')
+    const result = await verifyAttendance(attendance_id, 'present')
     if (result?.error) setError(result.error)
     else { setSuccess('Attendance approved.'); router.refresh() }
     setLoading(false)
@@ -154,7 +154,7 @@ export default function EventsClient({
   async function handleReject(attendance_id: string) {
     reset()
     setLoading(true)
-    const result = await verifyAttendance(attendance_id, 'rejected', rejectionReason || undefined)
+    const result = await verifyAttendance(attendance_id, 'absent', rejectionReason || undefined)
     if (result?.error) setError(result.error)
     else { setSuccess('Attendance rejected.'); setRejectingId(null); setRejectionReason(''); router.refresh() }
     setLoading(false)
@@ -164,7 +164,7 @@ export default function EventsClient({
     reset()
     setLoading(true)
     for (const s of submissions) {
-      await verifyAttendance(s.id, 'verified')
+      await verifyAttendance(s.id, 'present')
     }
     setSuccess(`Approved ${submissions.length} submissions.`)
     router.refresh()

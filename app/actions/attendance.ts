@@ -262,7 +262,7 @@ export async function logAttendance(instance_id: string, personnel_ids: string[]
     }
   }
 
-  const status = instance.requires_verification ? 'pending' : 'verified'
+  const status = instance.requires_verification ? 'pending' : 'present'
   const now = new Date().toISOString()
 
   const records = personnel_ids.map(pid => ({
@@ -272,7 +272,7 @@ export async function logAttendance(instance_id: string, personnel_ids: string[]
     submitted_by: ctx.me.id,
     submitted_at: now,
     notes: notes || null,
-    ...(status === 'verified' ? { verified_by: ctx.me.id, verified_at: now } : {}),
+    ...(status === 'present' ? { verified_by: ctx.me.id, verified_at: now } : {}),
   }))
 
   // Upsert — don't error if already logged
@@ -286,7 +286,7 @@ export async function logAttendance(instance_id: string, personnel_ids: string[]
 }
 
 // ─── Verify / Reject Attendance ───────────────────────────────────────────────
-export async function verifyAttendance(attendance_id: string, action: 'verified' | 'rejected', rejection_reason?: string) {
+export async function verifyAttendance(attendance_id: string, action: 'present' | 'absent' | 'excused', rejection_reason?: string) {
   const ctx = await getContext()
   if (!ctx?.isOfficerOrAbove) return { error: 'Only officers and admins can verify attendance.' }
 
@@ -297,7 +297,7 @@ export async function verifyAttendance(attendance_id: string, action: 'verified'
     status: action,
     verified_by: ctx.me.id,
     verified_at: now,
-    rejection_reason: action === 'rejected' ? (rejection_reason || null) : null,
+    rejection_reason: action === 'absent' ? (rejection_reason || null) : null,
   }).eq('id', attendance_id)
 
   if (error) { await logError(error.message, '/events'); return { error: error.message } }
