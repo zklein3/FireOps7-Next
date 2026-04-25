@@ -155,21 +155,33 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 
 ## IMMEDIATE NEXT — Resume Here Next Session
 
-### Data Setup (User Task — No Code)
-Bottles (B-0001, B-0002, etc.) and any other individually-tracked assets need to be assigned directly as location standards on their compartment. Path: `/equipment` → select apparatus → find compartment → **+ Add Item** → select item type → set quantity → Add. Each item type can only be added once per compartment; to adjust count later, tap the quantity number to edit inline. Once added they appear in the run as a presence check; add a template for that item type to auto-upgrade to full inspection. Individual asset records (B-0001, B-0002) are created separately at Dept Admin → Items → item type → Manage → Assets tab.
+### 1. Incident Attendance — Member Self-Log + Officer Verification ← START HERE
+Currently `incident_personnel` is officer-managed only. Need to add member self-log flow matching the event attendance pattern:
+- Incident created (by anyone) → visible to all dept members as "active"
+- Members can log themselves onto an active incident → `incident_personnel` record with `status: pending`
+- Officer/admin reviews → verifies or rejects (same verification queue pattern as event attendance)
+- Member can see their own incident participation in My Activity report (already shows incidents)
 
-### 1. Training/Cert Report (officer/admin) — `/reports/training` ← START HERE
-- Filter: member, cert type, date range
-- Output: grouped by member → certifications + course completions
-- Flag certs expiring within configurable window
-- Printable
+**Touches:**
+- `app/(dashboard)/incidents/[id]` — add self-log button for members + verification queue for officers
+- `app/actions/incidents.ts` — add `logIncidentAttendance`, `verifyIncidentAttendance` actions
+- Incident list page — surface "active" incidents members can log onto
 
 ### Priority Order After That
-2. Attendance Report (officer/admin) — `/reports/attendance` — participation rates, excused/unexcused, printable
-3. Asset roster view — dept-wide, filterable by item type/status
-4. QR + Compartment page + Inspection Session — see REFERENCE.md for full design
-5. ISO Audit sections (future) — hose logs, apparatus specs, hydrant flows, mutual aid
-6. Flow & Presentation Polish
+2. Asset roster view — dept-wide, filterable by item type/status
+3. QR + Compartment page + Inspection Session — see REFERENCE.md for full design
+4. ISO Audit sections (future) — hose logs, apparatus specs, hydrant flows, mutual aid
+5. Flow & Presentation Polish
+
+### Completed This Session
+- Training/Cert Report (`/reports/training`) — officer/admin, filters by member/cert type/date range, expiry flagging, printable
+- Attendance Report (`/reports/attendance`) — officer/admin, participation rates, threshold flagging, printable
+- Collapsible grouped sidebar nav (Personnel / Apparatus / Reports)
+- Mobile header — hamburger left, title centered
+- Inspection step notes required on fail
+- Soft-delete inspection template steps (no more FK constraint error)
+- Step reorder (▲▼) in template builder
+- Apparatus detail — equipment manifest inline in compartments (item + qty, read-only all roles)
 
 ## Dev Workflow
 - Start: `npm run dev` in project directory
