@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   createItemCategory, updateItemCategory,
   createItem, updateItem,
@@ -59,6 +60,7 @@ export default function ItemsClient({
   departmentName: string; departmentId: string
   initialTab: ActiveTab; focusItemId: string | null
 }) {
+  const router = useRouter()
   const [tab, setTab] = useState<ActiveTab>(initialTab)
   const [showForm, setShowForm] = useState(false)
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
@@ -179,10 +181,10 @@ export default function ItemsClient({
     if (direction === 'up' && idx === 0) return
     if (direction === 'down' && idx === sorted.length - 1) return
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    await wrap(() => reorderTemplateSteps([
-      { id: sorted[idx]!.id, sort_order: sorted[swapIdx]!.sort_order },
-      { id: sorted[swapIdx]!.id, sort_order: sorted[idx]!.sort_order },
-    ]))
+    const a = sorted[idx]!
+    const b = sorted[swapIdx]!
+    const result = await wrap(() => reorderTemplateSteps(a.id, a.sort_order, b.id, b.sort_order))
+    if (!result?.error) router.refresh()
   }
 
   function getSectionForItem(item_id: string): ItemSection {

@@ -127,15 +127,18 @@ export async function updateTemplateStep(formData: FormData) {
 }
 
 // ─── Reorder Template Steps ───────────────────────────────────────────────────
-export async function reorderTemplateSteps(steps: { id: string; sort_order: number }[]) {
+export async function reorderTemplateSteps(idA: string, sortA: number, idB: string, sortB: number) {
   const ctx = await getContext()
   if (!ctx?.isAdmin) return { error: 'Only admins can manage inspection steps.' }
   const adminClient = createAdminClient()
-  for (const step of steps) {
+  // Three-step swap to avoid unique constraint collision on (template_id, sort_order)
+  const temp = 999999
+  const ops: [string, number][] = [[idA, temp], [idB, sortA], [idA, sortB]]
+  for (const [id, sort_order] of ops) {
     const { error } = await adminClient
       .from('item_inspection_template_steps')
-      .update({ sort_order: step.sort_order })
-      .eq('id', step.id)
+      .update({ sort_order })
+      .eq('id', id)
     if (error) { await logError(error.message, '/dept-admin/items'); return { error: error.message } }
   }
   revalidatePath('/dept-admin/items')
