@@ -136,6 +136,7 @@ export default function InspectionRunClient({
             const resp = stepResponses[asset.id]?.[step.id]
             if (!resp) return false
             if (step.step_type === 'BOOLEAN' && resp.boolean_value === undefined) return false
+            if (step.step_type === 'BOOLEAN' && resp.boolean_value === false && step.fail_if_negative && !resp.text_value?.trim()) return false
             if (step.step_type === 'NUMERIC' && resp.numeric_value === undefined) return false
           }
         }
@@ -364,21 +365,37 @@ export default function InspectionRunClient({
                                   </div>
 
                                   {step.step_type === 'BOOLEAN' && (
-                                    <div className="flex gap-3 ml-7">
-                                      <button
-                                        onClick={() => setStepResponse(asset.id, step.id, 'boolean_value', true)}
-                                        className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
-                                          resp.boolean_value === true
-                                            ? 'bg-green-600 border-green-600 text-white'
-                                            : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'
-                                        }`}>Yes</button>
-                                      <button
-                                        onClick={() => setStepResponse(asset.id, step.id, 'boolean_value', false)}
-                                        className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
-                                          resp.boolean_value === false
-                                            ? step.fail_if_negative ? 'bg-red-600 border-red-600 text-white' : 'bg-zinc-600 border-zinc-600 text-white'
-                                            : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'
-                                        }`}>No</button>
+                                    <div className="ml-7">
+                                      <div className="flex gap-3">
+                                        <button
+                                          onClick={() => setStepResponse(asset.id, step.id, 'boolean_value', true)}
+                                          className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                                            resp.boolean_value === true
+                                              ? 'bg-green-600 border-green-600 text-white'
+                                              : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                                          }`}>Yes</button>
+                                        <button
+                                          onClick={() => setStepResponse(asset.id, step.id, 'boolean_value', false)}
+                                          className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                                            resp.boolean_value === false
+                                              ? step.fail_if_negative ? 'bg-red-600 border-red-600 text-white' : 'bg-zinc-600 border-zinc-600 text-white'
+                                              : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                                          }`}>No</button>
+                                      </div>
+                                      {resp.boolean_value === false && (
+                                        <div className="mt-2">
+                                          <textarea
+                                            rows={2}
+                                            value={resp.text_value ?? ''}
+                                            onChange={e => setStepResponse(asset.id, step.id, 'text_value', e.target.value)}
+                                            placeholder={step.fail_if_negative ? 'Required — describe the issue...' : 'Notes (optional)...'}
+                                            className={`${inputCls} resize-none ${step.fail_if_negative && !resp.text_value?.trim() ? 'border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`}
+                                          />
+                                          {step.fail_if_negative && !resp.text_value?.trim() && (
+                                            <p className="text-xs text-red-500 mt-1">Notes required for failed steps.</p>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
 
