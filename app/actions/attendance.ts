@@ -302,6 +302,8 @@ export async function verifyAttendance(attendance_id: string, action: 'verified'
 
   if (error) { await logError(error.message, '/events'); return { error: error.message } }
   revalidatePath('/events')
+  revalidatePath('/reports/my-activity')
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
