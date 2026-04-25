@@ -49,6 +49,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ...(isOfficerOrAbove ? [
       { href: '/reports/inspections', label: 'Inspection Report' },
       { href: '/reports/inventory', label: 'Inventory Report' },
+      { href: '/reports/training', label: 'Training Report' },
     ] : []),
   ]
 
