@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { logAttendance, verifyAttendance, cancelEventInstance } from '@/app/actions/attendance'
+import { logAttendance, verifyAttendance, cancelEventInstance, requestExcuse } from '@/app/actions/attendance'
 
 interface AttendanceRecord {
   id: string
@@ -16,6 +16,20 @@ interface PendingSubmission {
   personnel_id: string
   name: string
   submitted_at: string
+}
+
+interface ExcuseSubmission {
+  id: string
+  personnel_id: string
+  name: string
+  submitted_at: string
+  excuse_type: string
+  notes: string | null
+}
+
+interface ExcuseType {
+  id: string
+  name: string
 }
 
 interface Event {
@@ -34,6 +48,7 @@ interface Event {
   my_attendance: AttendanceRecord | null
   pending_count: number
   pending_submissions: PendingSubmission[]
+  excuse_submissions: ExcuseSubmission[]
 }
 
 interface Personnel {
@@ -57,9 +72,18 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
+  excused_pending: 'bg-blue-50 text-blue-600',
   present: 'bg-green-100 text-green-700',
   absent: 'bg-red-100 text-red-700',
   excused: 'bg-blue-100 text-blue-700',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending',
+  excused_pending: 'Excuse Requested',
+  present: 'Present',
+  absent: 'Absent',
+  excused: 'Excused',
 }
 
 function formatDate(dateStr: string) {
@@ -90,11 +114,17 @@ function isPast(event_date: string): boolean {
   return new Date(event_date + 'T23:59:59') < new Date()
 }
 
+function isExcuseWindowOpen(event_date: string): boolean {
+  const windowClose = new Date(new Date(event_date + 'T23:59:59').getTime() + 7 * 24 * 60 * 60 * 1000)
+  return new Date() <= windowClose
+}
+
 export default function EventsClient({
-  events, personnelList, myPersonnelId, myName, isOfficerOrAbove, isAdmin,
+  events, personnelList, excuseTypes, myPersonnelId, myName, isOfficerOrAbove, isAdmin,
 }: {
   events: Event[]
   personnelList: Personnel[]
+  excuseTypes: ExcuseType[]
   myPersonnelId: string
   myName: string
   isOfficerOrAbove: boolean
@@ -109,9 +139,13 @@ export default function EventsClient({
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('all')
   const [typeFilter, setTypeFilter] = useState<string>('all')
 
-  // Rejection state: attendanceId -> reason string being typed
+  // Rejection state
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
+
+  // Excuse request state (member)
+  const [selectedExcuseType, setSelectedExcuseType] = useState('')
+  const [excuseNotes, setExcuseNotes] = useState('')
 
   function reset() { setError(null); setSuccess(null) }
 
@@ -168,6 +202,34 @@ export default function EventsClient({
     }
     setSuccess(`Approved ${submissions.length} submissions.`)
     router.refresh()
+    setLoading(false)
+  }
+
+  async function handleRequestExcuse(instance_id: string) {
+    if (!selectedExcuseType) { setError('Please select an excuse type.'); return }
+    reset()
+    setLoading(true)
+    const result = await requestExcuse(instance_id, selectedExcuseType, excuseNotes || undefined)
+    if (result?.error) setError(result.error)
+    else { setSuccess('Excuse request submitted.'); setSelectedExcuseType(''); setExcuseNotes(''); router.refresh() }
+    setLoading(false)
+  }
+
+  async function handleApproveExcuse(attendance_id: string) {
+    reset()
+    setLoading(true)
+    const result = await verifyAttendance(attendance_id, 'excused')
+    if (result?.error) setError(result.error)
+    else { setSuccess('Excuse approved.'); router.refresh() }
+    setLoading(false)
+  }
+
+  async function handleDenyExcuse(attendance_id: string) {
+    reset()
+    setLoading(true)
+    const result = await verifyAttendance(attendance_id, 'absent')
+    if (result?.error) setError(result.error)
+    else { setSuccess('Excuse denied.'); router.refresh() }
     setLoading(false)
   }
 
@@ -251,6 +313,7 @@ export default function EventsClient({
             const cancelled = event.status === 'cancelled'
             const allIds = personnelList.map(p => p.id)
             const hasPending = event.pending_submissions.length > 0
+            const hasExcuseRequests = event.excuse_submissions.length > 0
 
             return (
               <div key={event.id} className={`rounded-xl bg-white shadow-sm border overflow-hidden ${cancelled ? 'border-zinc-100 opacity-60' : 'border-zinc-200'}`}>
@@ -295,8 +358,8 @@ export default function EventsClient({
                     {/* Right side actions */}
                     <div className="flex flex-col items-end gap-2 shrink-0">
                       {event.my_attendance && (
-                        <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${STATUS_COLORS[event.my_attendance.status]}`}>
-                          {event.my_attendance.status.charAt(0).toUpperCase() + event.my_attendance.status.slice(1)}
+                        <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${STATUS_COLORS[event.my_attendance.status] ?? 'bg-zinc-100 text-zinc-600'}`}>
+                          {STATUS_LABELS[event.my_attendance.status] ?? event.my_attendance.status}
                         </span>
                       )}
                       {!cancelled && !event.my_attendance && canSelfLog && (
@@ -308,7 +371,13 @@ export default function EventsClient({
                         </button>
                       )}
                       {!cancelled && !event.my_attendance && past && !windowOpen && !isOfficerOrAbove && (
-                        <span className="text-xs text-zinc-400">Window closed</span>
+                        isExcuseWindowOpen(event.event_date)
+                          ? <button
+                              onClick={() => setExpandedId(isExpanded ? null : event.id)}
+                              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                              Request Excuse
+                            </button>
+                          : <span className="text-xs text-zinc-400">Window closed</span>
                       )}
                       {!cancelled && (
                         <button
@@ -412,6 +481,43 @@ export default function EventsClient({
                           </div>
                         )}
 
+                        {/* ── EXCUSE REQUESTS ──────────────────────────── */}
+                        {hasExcuseRequests && (
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-2">
+                              Excuse Requests ({event.excuse_submissions.length})
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              {event.excuse_submissions.map(sub => (
+                                <div key={sub.id} className="rounded-lg bg-white border border-zinc-200 px-4 py-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-semibold text-zinc-900">{sub.name}</p>
+                                      <p className="text-xs text-blue-700 font-medium mt-0.5">{sub.excuse_type}</p>
+                                      {sub.notes && <p className="text-xs text-zinc-500 mt-1">{sub.notes}</p>}
+                                      <p className="text-xs text-zinc-400 mt-1">Submitted {formatDateTime(sub.submitted_at)}</p>
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                      <button
+                                        onClick={() => handleApproveExcuse(sub.id)}
+                                        disabled={loading}
+                                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                                        Approve
+                                      </button>
+                                      <button
+                                        onClick={() => handleDenyExcuse(sub.id)}
+                                        disabled={loading}
+                                        className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">
+                                        Deny
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {/* ── BULK LOG ATTENDANCE ───────────────────────── */}
                         <div>
                           <div className="flex items-center justify-between mb-2">
@@ -444,9 +550,46 @@ export default function EventsClient({
                         </div>
                       </>
                     ) : (
-                      <div>
+                      <div className="flex flex-col gap-4">
                         {event.notes && <p className="text-sm text-zinc-600">{event.notes}</p>}
-                        {!event.notes && <p className="text-xs text-zinc-400">No additional details.</p>}
+                        {!event.notes && !(!event.my_attendance && past && !windowOpen && isExcuseWindowOpen(event.event_date)) && (
+                          <p className="text-xs text-zinc-400">No additional details.</p>
+                        )}
+
+                        {/* ── MEMBER EXCUSE REQUEST FORM ─────────────────── */}
+                        {!event.my_attendance && past && !windowOpen && isExcuseWindowOpen(event.event_date) && (
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-2">Request an Excuse</p>
+                            {excuseTypes.length === 0 ? (
+                              <p className="text-xs text-zinc-400">No excuse types configured. Contact your officer.</p>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                <select
+                                  value={selectedExcuseType}
+                                  onChange={e => setSelectedExcuseType(e.target.value)}
+                                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                  <option value="">Select excuse type...</option>
+                                  {excuseTypes.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                  ))}
+                                </select>
+                                <textarea
+                                  value={excuseNotes}
+                                  onChange={e => setExcuseNotes(e.target.value)}
+                                  placeholder="Additional notes (optional)"
+                                  rows={2}
+                                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                                />
+                                <button
+                                  onClick={() => handleRequestExcuse(event.id)}
+                                  disabled={loading || !selectedExcuseType}
+                                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                                  {loading ? 'Submitting...' : 'Submit Excuse Request'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

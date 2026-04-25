@@ -26,6 +26,14 @@ export default async function EventsPage() {
   const isAdmin = myDept.system_role === 'admin'
   const department_id = myDept.department_id
 
+  // Excuse types for this dept
+  const { data: excuseTypesRaw } = await adminClient
+    .from('excuse_types')
+    .select('id, excuse_name')
+    .eq('department_id', department_id)
+    .eq('active', true)
+    .order('excuse_name')
+
   // Fetch instances: next 60 days + last 30 days
   const past30 = new Date()
   past30.setDate(past30.getDate() - 30)
@@ -67,18 +75,21 @@ export default async function EventsPage() {
 
   const myAttendanceMap = Object.fromEntries((myAttendance ?? []).map(a => [a.instance_id, a]))
 
-  // For officers — fetch ALL pending submissions with submitter name
+  // For officers — fetch pending attendance + pending excuse requests
   let pendingByInstance: Record<string, { id: string; personnel_id: string; name: string; submitted_at: string }[]> = {}
-  if (isOfficerOrAbove && instanceIds.length > 0) {
-    const { data: pendingRaw } = await adminClient
-      .from('event_attendance')
-      .select('id, instance_id, personnel_id, submitted_at')
-      .in('instance_id', instanceIds)
-      .eq('status', 'pending')
+  let excuseByInstance: Record<string, { id: string; personnel_id: string; name: string; submitted_at: string; excuse_type: string; notes: string | null }[]> = {}
 
-    if (pendingRaw && pendingRaw.length > 0) {
-      // Fetch personnel names for pending submissions
-      const personnelIds = [...new Set(pendingRaw.map(p => p.personnel_id))]
+  const excuseTypeMap = Object.fromEntries((excuseTypesRaw ?? []).map(e => [e.id, e.excuse_name]))
+
+  if (isOfficerOrAbove && instanceIds.length > 0) {
+    const { data: allPendingRaw } = await adminClient
+      .from('event_attendance')
+      .select('id, instance_id, personnel_id, submitted_at, status, excuse_type_id, notes')
+      .in('instance_id', instanceIds)
+      .in('status', ['pending', 'excused_pending'])
+
+    if (allPendingRaw && allPendingRaw.length > 0) {
+      const personnelIds = [...new Set(allPendingRaw.map(p => p.personnel_id))]
       const { data: pendingPersonnel } = await adminClient
         .from('personnel')
         .select('id, first_name, last_name')
@@ -88,22 +99,24 @@ export default async function EventsPage() {
         (pendingPersonnel ?? []).map(p => [p.id, `${p.first_name} ${p.last_name}`])
       )
 
-      for (const p of pendingRaw) {
-        if (!pendingByInstance[p.instance_id]) pendingByInstance[p.instance_id] = []
-        pendingByInstance[p.instance_id].push({
-          id: p.id,
-          personnel_id: p.personnel_id,
-          name: nameMap[p.personnel_id] ?? 'Unknown',
-          submitted_at: p.submitted_at,
-        })
+      for (const p of allPendingRaw) {
+        const name = nameMap[p.personnel_id] ?? 'Unknown'
+        if (p.status === 'pending') {
+          if (!pendingByInstance[p.instance_id]) pendingByInstance[p.instance_id] = []
+          pendingByInstance[p.instance_id].push({ id: p.id, personnel_id: p.personnel_id, name, submitted_at: p.submitted_at })
+        } else {
+          if (!excuseByInstance[p.instance_id]) excuseByInstance[p.instance_id] = []
+          excuseByInstance[p.instance_id].push({
+            id: p.id,
+            personnel_id: p.personnel_id,
+            name,
+            submitted_at: p.submitted_at,
+            excuse_type: p.excuse_type_id ? (excuseTypeMap[p.excuse_type_id] ?? '—') : '—',
+            notes: p.notes ?? null,
+          })
+        }
       }
     }
-  }
-
-  // Pending counts (for badge display)
-  const pendingCounts: Record<string, number> = {}
-  for (const [instanceId, submissions] of Object.entries(pendingByInstance)) {
-    pendingCounts[instanceId] = submissions.length
   }
 
   const events = deptInstances.map(i => ({
@@ -120,8 +133,9 @@ export default async function EventsPage() {
     notes: i.notes,
     requires_verification: i.requires_verification,
     my_attendance: myAttendanceMap[i.id] ?? null,
-    pending_count: pendingCounts[i.id] ?? 0,
+    pending_count: (pendingByInstance[i.id]?.length ?? 0) + (excuseByInstance[i.id]?.length ?? 0),
     pending_submissions: pendingByInstance[i.id] ?? [],
+    excuse_submissions: excuseByInstance[i.id] ?? [],
   }))
 
   // All personnel for bulk logging (officers only)
@@ -138,10 +152,13 @@ export default async function EventsPage() {
     name: [(p.personnel as any)?.first_name, (p.personnel as any)?.last_name].filter(Boolean).join(' '),
   })).sort((a, b) => a.name.localeCompare(b.name))
 
+  const excuseTypes = (excuseTypesRaw ?? []).map(e => ({ id: e.id, name: e.excuse_name }))
+
   return (
     <EventsClient
       events={events}
       personnelList={personnelList}
+      excuseTypes={excuseTypes}
       myPersonnelId={me.id}
       myName={`${me.first_name} ${me.last_name}`}
       isOfficerOrAbove={isOfficerOrAbove}

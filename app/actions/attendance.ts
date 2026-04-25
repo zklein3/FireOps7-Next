@@ -307,6 +307,56 @@ export async function verifyAttendance(attendance_id: string, action: 'present' 
   return { success: true }
 }
 
+// ─── Request Excuse (member self-submit) ─────────────────────────────────────
+export async function requestExcuse(instance_id: string, excuse_type_id: string, notes?: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (ctx.isOfficerOrAbove) return { error: 'Officers use the attendance log directly.' }
+
+  const adminClient = createAdminClient()
+
+  const { data: instanceList } = await adminClient
+    .from('event_instances')
+    .select('id, event_date')
+    .eq('id', instance_id)
+  const instance = instanceList?.[0]
+  if (!instance) return { error: 'Event not found.' }
+
+  if (new Date(instance.event_date + 'T23:59:59') >= new Date()) {
+    return { error: 'Cannot request an excuse for a future event.' }
+  }
+
+  const windowClose = new Date(new Date(instance.event_date + 'T23:59:59').getTime() + 7 * 24 * 60 * 60 * 1000)
+  if (new Date() > windowClose) {
+    return { error: 'Excuse request window has closed (7 days after the event).' }
+  }
+
+  const { data: existing } = await adminClient
+    .from('event_attendance')
+    .select('id')
+    .eq('instance_id', instance_id)
+    .eq('personnel_id', ctx.me.id)
+
+  if (existing && existing.length > 0) {
+    return { error: 'You already have an attendance record for this event.' }
+  }
+
+  const { error } = await adminClient.from('event_attendance').insert({
+    instance_id,
+    personnel_id: ctx.me.id,
+    status: 'excused_pending',
+    excuse_type_id,
+    notes: notes || null,
+    submitted_by: ctx.me.id,
+    submitted_at: new Date().toISOString(),
+  })
+
+  if (error) { await logError(error.message, '/events'); return { error: error.message } }
+  revalidatePath('/events')
+  revalidatePath('/reports/my-activity')
+  return { success: true }
+}
+
 // ─── Cancel Event Instance ─────────────────────────────────────────────────────
 export async function cancelEventInstance(instance_id: string) {
   const ctx = await getContext()

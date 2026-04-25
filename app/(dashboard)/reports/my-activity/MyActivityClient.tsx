@@ -46,12 +46,16 @@ function StatusBadge({ status }: { status: string }) {
     excused: 'bg-blue-100 text-blue-800',
     absent: 'bg-red-100 text-red-800',
     pending: 'bg-yellow-100 text-yellow-800',
+    excused_pending: 'bg-blue-50 text-blue-600',
     PASS: 'bg-green-100 text-green-800',
     FAIL: 'bg-red-100 text-red-800',
   }
+  const labels: Record<string, string> = {
+    excused_pending: 'Excuse Requested',
+  }
   return (
     <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium capitalize ${map[status] ?? 'bg-zinc-100 text-zinc-600'}`}>
-      {status.toLowerCase()}
+      {labels[status] ?? status.toLowerCase()}
     </span>
   )
 }
@@ -93,7 +97,7 @@ export default function MyActivityClient({
     present: attendance.filter(a => a.status === 'present').length,
     excused: attendance.filter(a => a.status === 'excused').length,
     absent: attendance.filter(a => a.status === 'absent').length,
-    pending: attendance.filter(a => a.status === 'pending').length,
+    pending: attendance.filter(a => a.status === 'pending' || a.status === 'excused_pending').length,
   }
 
   const inspectionCounts = {
