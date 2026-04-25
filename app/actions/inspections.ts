@@ -126,6 +126,22 @@ export async function updateTemplateStep(formData: FormData) {
   return { success: true }
 }
 
+// ─── Reorder Template Steps ───────────────────────────────────────────────────
+export async function reorderTemplateSteps(steps: { id: string; sort_order: number }[]) {
+  const ctx = await getContext()
+  if (!ctx?.isAdmin) return { error: 'Only admins can manage inspection steps.' }
+  const adminClient = createAdminClient()
+  for (const step of steps) {
+    const { error } = await adminClient
+      .from('item_inspection_template_steps')
+      .update({ sort_order: step.sort_order })
+      .eq('id', step.id)
+    if (error) { await logError(error.message, '/dept-admin/items'); return { error: error.message } }
+  }
+  revalidatePath('/dept-admin/items')
+  return { success: true }
+}
+
 // ─── Delete Template Step ─────────────────────────────────────────────────────
 export async function deleteTemplateStep(step_id: string) {
   const ctx = await getContext()

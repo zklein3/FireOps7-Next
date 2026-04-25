@@ -8,7 +8,7 @@ import {
 } from '@/app/actions/equipment'
 import {
   createInspectionTemplate, updateInspectionTemplate,
-  addTemplateStep, updateTemplateStep, deleteTemplateStep,
+  addTemplateStep, updateTemplateStep, deleteTemplateStep, reorderTemplateSteps,
 } from '@/app/actions/inspections'
 
 interface Category { id: string; category_name: string; active: boolean; sort_order: number | null }
@@ -171,6 +171,18 @@ export default function ItemsClient({
   }
   async function handleDeleteStep(step_id: string) {
     await wrap(() => deleteTemplateStep(step_id))
+  }
+
+  async function handleMoveStep(templateId: string, stepId: string, direction: 'up' | 'down') {
+    const sorted = [...(stepsByTemplate[templateId] ?? [])].sort((a, b) => a.sort_order - b.sort_order)
+    const idx = sorted.findIndex(s => s.id === stepId)
+    if (direction === 'up' && idx === 0) return
+    if (direction === 'down' && idx === sorted.length - 1) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    await wrap(() => reorderTemplateSteps([
+      { id: sorted[idx]!.id, sort_order: sorted[swapIdx]!.sort_order },
+      { id: sorted[swapIdx]!.id, sort_order: sorted[idx]!.sort_order },
+    ]))
   }
 
   function getSectionForItem(item_id: string): ItemSection {
@@ -592,7 +604,7 @@ export default function ItemsClient({
                                                   <p className="text-xs text-zinc-400">No steps yet. Add one above.</p>
                                                 ) : (
                                                   <div className="flex flex-col gap-2">
-                                                    {[...templateSteps].sort((a, b) => a.sort_order - b.sort_order).map((step, idx) => (
+                                                    {[...templateSteps].sort((a, b) => a.sort_order - b.sort_order).map((step, idx, sortedSteps) => (
                                                       <div key={step.id}>
                                                         {editingStepId === step.id ? (
                                                           <form action={handleUpdateStep} className="bg-white rounded-lg border border-zinc-200 p-3 flex flex-col gap-2">
@@ -628,7 +640,21 @@ export default function ItemsClient({
                                                                 {step.required && <span className="text-xs text-zinc-400">Required</span>}
                                                               </div>
                                                             </div>
-                                                            <div className="flex gap-2 shrink-0">
+                                                            <div className="flex items-center gap-1 shrink-0">
+                                                              <div className="flex flex-col">
+                                                                <button
+                                                                  onClick={() => handleMoveStep(template.id, step.id, 'up')}
+                                                                  disabled={loading || idx === 0}
+                                                                  className="px-1 text-zinc-300 hover:text-zinc-600 disabled:opacity-30 leading-none text-xs"
+                                                                  title="Move up"
+                                                                >▲</button>
+                                                                <button
+                                                                  onClick={() => handleMoveStep(template.id, step.id, 'down')}
+                                                                  disabled={loading || idx === sortedSteps.length - 1}
+                                                                  className="px-1 text-zinc-300 hover:text-zinc-600 disabled:opacity-30 leading-none text-xs"
+                                                                  title="Move down"
+                                                                >▼</button>
+                                                              </div>
                                                               <button onClick={() => { setEditingStepId(step.id); reset() }} className="text-xs font-semibold text-red-600 hover:text-red-800">Edit</button>
                                                               <button onClick={() => handleDeleteStep(step.id)} className="text-xs text-zinc-400 hover:text-red-600">✕</button>
                                                             </div>
