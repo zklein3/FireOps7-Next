@@ -106,7 +106,7 @@ export default function EventsClient({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming')
+  const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('all')
   const [typeFilter, setTypeFilter] = useState<string>('all')
 
   // Rejection state: attendanceId -> reason string being typed
