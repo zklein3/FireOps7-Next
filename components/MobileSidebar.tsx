@@ -1,28 +1,27 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { signOut } from '@/app/actions/auth'
 import FeedbackButton from './FeedbackButton'
+import NavGroups from './NavGroups'
+import type { NavGroup } from './NavGroups'
 
 export default function MobileSidebar({
-  navItems,
+  navGroups,
   adminNavItems,
   adminLabel,
   userInfo,
-  isSysAdmin,
 }: {
-  navItems: { href: string; label: string }[]
+  navGroups: NavGroup[]
   adminNavItems: { href: string; label: string }[]
   adminLabel: string
   userInfo: { name: string; role: string; departmentName: string | null }
-  isSysAdmin: boolean
 }) {
   const [open, setOpen] = useState(false)
 
   return (
     <>
-      {/* Mobile Top Bar — fixed at top, z-40 */}
+      {/* Mobile Top Bar */}
       <div id="mobile-header" className="md:hidden fixed top-0 left-0 right-0 z-40 bg-red-800 text-white shadow">
         <div className="flex items-center px-4 py-3 relative">
           <button
@@ -72,34 +71,13 @@ export default function MobileSidebar({
           </button>
         </div>
 
-        <nav className="flex-1 px-3 py-4 flex flex-col gap-1 text-sm overflow-y-auto">
-          {navItems.map(item => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setOpen(false)}
-              className="flex items-center rounded-lg px-3 py-3 text-red-100 hover:bg-red-700 hover:text-white transition-colors"
-            >
-              {item.label}
-            </Link>
-          ))}
-
+        <nav className="flex-1 px-3 py-4 overflow-y-auto">
+          <NavGroups groups={navGroups} onNavigate={() => setOpen(false)} />
           {adminNavItems.length > 0 && (
-            <>
-              <div className="mt-4 mb-1 px-3 text-xs font-semibold text-red-300 uppercase tracking-wider">
-                {adminLabel}
-              </div>
-              {adminNavItems.map(item => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className="flex items-center rounded-lg px-3 py-3 text-red-100 hover:bg-red-700 hover:text-white transition-colors"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </>
+            <div className="mt-4">
+              <div className="mb-1 px-3 text-xs font-semibold text-red-300 uppercase tracking-wider">{adminLabel}</div>
+              <NavGroups groups={[{ items: adminNavItems }]} onNavigate={() => setOpen(false)} />
+            </div>
           )}
         </nav>
 

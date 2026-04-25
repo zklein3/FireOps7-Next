@@ -1,9 +1,10 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/app/actions/auth'
-import Link from 'next/link'
 import FeedbackButton from '@/components/FeedbackButton'
 import MobileSidebar from '@/components/MobileSidebar'
+import NavGroups from '@/components/NavGroups'
+import type { NavGroup } from '@/components/NavGroups'
 
 async function getUserContext() {
   const supabase = await createClient()
@@ -33,25 +34,40 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const isDeptAdmin = systemRole === 'admin'
   const isOfficerOrAbove = isDeptAdmin || systemRole === 'officer'
 
-  const navItems = isSysAdmin ? [
-    { href: '/dashboard', label: 'Overview' },
+  const navGroups: NavGroup[] = isSysAdmin ? [
+    { items: [{ href: '/dashboard', label: 'Overview' }] },
   ] : [
-    { href: '/dashboard', label: 'Dashboard' },
-    { href: '/personnel', label: 'Personnel' },
-    { href: '/apparatus', label: 'Apparatus' },
-    { href: '/stations', label: 'Stations' },
-    { href: '/equipment', label: 'Equipment' },
-    { href: '/inspections', label: 'Inspections' },
-    { href: '/events', label: 'Events' },
-    { href: '/training', label: 'Training' },
-    { href: '/incidents', label: 'Incidents' },
-    { href: '/reports/my-activity', label: 'My Activity' },
-    ...(isOfficerOrAbove ? [
-      { href: '/reports/inspections', label: 'Inspection Report' },
-      { href: '/reports/inventory', label: 'Inventory Report' },
-      { href: '/reports/training', label: 'Training Report' },
-      { href: '/reports/attendance', label: 'Attendance Report' },
-    ] : []),
+    { items: [{ href: '/dashboard', label: 'Dashboard' }] },
+    {
+      label: 'Personnel',
+      items: [
+        { href: '/personnel', label: 'Personnel' },
+        { href: '/events', label: 'Events' },
+        { href: '/training', label: 'Training' },
+        { href: '/incidents', label: 'Incidents' },
+      ],
+    },
+    {
+      label: 'Apparatus',
+      items: [
+        { href: '/apparatus', label: 'Apparatus' },
+        { href: '/stations', label: 'Stations' },
+        { href: '/equipment', label: 'Equipment' },
+        { href: '/inspections', label: 'Inspections' },
+      ],
+    },
+    {
+      label: 'Reports',
+      items: [
+        { href: '/reports/my-activity', label: 'My Activity' },
+        ...(isOfficerOrAbove ? [
+          { href: '/reports/inspections', label: 'Inspection Report' },
+          { href: '/reports/inventory', label: 'Inventory Report' },
+          { href: '/reports/training', label: 'Training Report' },
+          { href: '/reports/attendance', label: 'Attendance Report' },
+        ] : []),
+      ],
+    },
   ]
 
   const adminNavItems = isSysAdmin ? [
@@ -77,9 +93,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-screen bg-zinc-100">
       <aside className="hidden md:flex w-64 bg-red-800 text-white flex-col shrink-0">
-        <SidebarContent navItems={navItems} adminNavItems={adminNavItems} adminLabel={adminLabel} userInfo={userInfo} isSysAdmin={isSysAdmin} isDeptAdmin={isDeptAdmin} />
+        <SidebarContent navGroups={navGroups} adminNavItems={adminNavItems} adminLabel={adminLabel} userInfo={userInfo} />
       </aside>
-      <MobileSidebar navItems={navItems} adminNavItems={adminNavItems} adminLabel={adminLabel} userInfo={userInfo} isSysAdmin={isSysAdmin} />
+      <MobileSidebar navGroups={navGroups} adminNavItems={adminNavItems} adminLabel={adminLabel} userInfo={userInfo} />
       <main className="flex-1 pt-20 px-4 pb-4 sm:pt-0 sm:p-6 lg:p-8 overflow-y-auto">
         {children}
       </main>
@@ -87,13 +103,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   )
 }
 
-function SidebarContent({ navItems, adminNavItems, adminLabel, userInfo, isSysAdmin, isDeptAdmin }: {
-  navItems: { href: string; label: string }[]
+function SidebarContent({ navGroups, adminNavItems, adminLabel, userInfo }: {
+  navGroups: NavGroup[]
   adminNavItems: { href: string; label: string }[]
   adminLabel: string
   userInfo: { name: string; role: string; departmentName: string | null }
-  isSysAdmin: boolean
-  isDeptAdmin: boolean
 }) {
   return (
     <>
@@ -101,13 +115,13 @@ function SidebarContent({ navItems, adminNavItems, adminLabel, userInfo, isSysAd
         <h1 className="text-xl font-bold tracking-tight">FireOps7</h1>
         {userInfo.departmentName && <p className="text-xs text-red-300 mt-0.5 truncate">{userInfo.departmentName}</p>}
       </div>
-      <nav className="flex-1 px-3 py-4 flex flex-col gap-1 text-sm overflow-y-auto">
-        {navItems.map(item => <NavItem key={item.href} href={item.href} label={item.label} />)}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        <NavGroups groups={navGroups} />
         {adminNavItems.length > 0 && (
-          <>
-            <div className="mt-4 mb-1 px-3 text-xs font-semibold text-red-300 uppercase tracking-wider">{adminLabel}</div>
-            {adminNavItems.map(item => <NavItem key={item.href} href={item.href} label={item.label} />)}
-          </>
+          <div className="mt-4">
+            <div className="mb-1 px-3 text-xs font-semibold text-red-300 uppercase tracking-wider">{adminLabel}</div>
+            <NavGroups groups={[{ items: adminNavItems }]} />
+          </div>
         )}
       </nav>
       <div className="px-4 py-4 border-t border-red-700 flex flex-col gap-2">
@@ -123,14 +137,6 @@ function SidebarContent({ navItems, adminNavItems, adminLabel, userInfo, isSysAd
         </form>
       </div>
     </>
-  )
-}
-
-function NavItem({ href, label }: { href: string; label: string }) {
-  return (
-    <Link href={href} className="flex items-center rounded-lg px-3 py-2 text-red-100 hover:bg-red-700 hover:text-white transition-colors">
-      {label}
-    </Link>
   )
 }
 
