@@ -3,7 +3,12 @@
 ## Session Start Checklist
 1. Verify Git is installed: `git --version`. If not found, download from https://git-scm.com/download/win and install before proceeding.
 2. Run `git pull` to sync latest changes from remote before starting any work.
-3. Run `npm run build` to confirm the current branch compiles clean before making changes.
+3. Run `git status` and `git log --oneline -5` to review what changed since the last session.
+4. Run `npm run build` to confirm the current branch compiles clean before making changes.
+
+## Local-Only Files — Never Commit
+- `.env.local` — Supabase keys + Resend API key
+- `.claude/settings.json` — Claude Code permissions, machine-specific paths. Each machine maintains its own. There is ONE settings file per machine (settings.local.json was merged into settings.json and removed). Do NOT commit.
 
 # FireOps7 — Project Guide
 
@@ -18,7 +23,6 @@
 - Repo: https://github.com/zklein3/FireOps7-Next — branch: main
 - Personal machine: `C:\Users\zklein3\Documents\FireOps7-Next`
 - Shared machine: `C:\Users\zklei\Documents\FireOps7-Next`
-- `.claude/settings.json` is gitignored — each machine keeps its own. Do NOT commit it.
 
 ## Production
 - Vercel: https://fire-ops7-next.vercel.app
