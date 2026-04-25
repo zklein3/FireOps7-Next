@@ -17,6 +17,13 @@ interface ApparatusType {
   sort_order: number
 }
 
+interface CompartmentItem {
+  item_name: string
+  expected_quantity: number
+  tracks_assets: boolean
+  assets: { id: string; asset_tag: string }[]
+}
+
 interface Compartment {
   id: string
   active: boolean
@@ -27,6 +34,7 @@ interface Compartment {
     compartment_name: string | null
     sort_order: number | null
   } | null
+  items: CompartmentItem[]
 }
 
 interface CompartmentName {
@@ -252,26 +260,53 @@ export default function ApparatusDetailClient({
             {[...compartments]
               .sort((a, b) => (a.compartment_name?.sort_order ?? 999) - (b.compartment_name?.sort_order ?? 999))
               .map(c => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border border-zinc-100 bg-zinc-50 px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center rounded-lg bg-red-50 border border-red-100 px-2.5 py-1 text-sm font-mono font-bold text-red-700">
-                      {c.compartment_name?.compartment_code ?? '—'}
-                    </span>
-                    {c.compartment_name?.compartment_name && (
-                      <span className="text-sm text-zinc-600">{c.compartment_name.compartment_name}</span>
-                    )}
+                <div key={c.id} className="rounded-lg border border-zinc-100 bg-zinc-50 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center rounded-lg bg-red-50 border border-red-100 px-2.5 py-1 text-sm font-mono font-bold text-red-700">
+                        {c.compartment_name?.compartment_code ?? '—'}
+                      </span>
+                      {c.compartment_name?.compartment_name && (
+                        <span className="text-sm text-zinc-600">{c.compartment_name.compartment_name}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs rounded-full px-2 py-0.5 ${c.active ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-400'}`}>
+                        {c.active ? 'Active' : 'Inactive'}
+                      </span>
+                      {isAdmin && (
+                        <button onClick={() => handleRemoveCompartment(c.id)} disabled={compLoading}
+                          className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50">
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-xs rounded-full px-2 py-0.5 ${c.active ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-400'}`}>
-                      {c.active ? 'Active' : 'Inactive'}
-                    </span>
-                    {isAdmin && (
-                      <button onClick={() => handleRemoveCompartment(c.id)} disabled={compLoading}
-                        className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50">
-                        Remove
-                      </button>
-                    )}
-                  </div>
+                  {c.items.length > 0 && (
+                    <div className="border-t border-zinc-100 px-4 py-2 flex flex-col gap-1.5">
+                      {c.items.map((item, i) => (
+                        <div key={i} className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm text-zinc-700">{item.item_name}</span>
+                            {item.tracks_assets && item.assets.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-0.5">
+                                {item.assets.map(a => (
+                                  <span key={a.id} className="text-xs font-mono bg-white border border-zinc-200 rounded px-1.5 py-0.5 text-zinc-500">
+                                    {a.asset_tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-xs text-zinc-400 shrink-0 mt-0.5">
+                            {item.tracks_assets
+                              ? `${item.assets.length} / ${item.expected_quantity}`
+                              : `qty ${item.expected_quantity}`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
           </div>

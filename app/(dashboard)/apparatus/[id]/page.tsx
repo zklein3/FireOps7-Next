@@ -71,11 +71,63 @@ export default async function ApparatusDetailPage({ params }: { params: Promise<
 
   const compartmentNameMap = Object.fromEntries((compartmentNameData ?? []).map(c => [c.id, c]))
 
+  // Fetch location standards (items) for all compartments
+  const allCompartmentIds = (compartmentLinks ?? []).map(c => c.id)
+  const { data: locationStandards } = allCompartmentIds.length > 0
+    ? await adminClient
+        .from('item_location_standards')
+        .select('id, apparatus_compartment_id, item_id, expected_quantity')
+        .in('apparatus_compartment_id', allCompartmentIds)
+        .eq('active', true)
+    : { data: [] as { id: string; apparatus_compartment_id: string; item_id: string; expected_quantity: number }[] }
+
+  const lsItemIds = [...new Set((locationStandards ?? []).map(ls => ls.item_id))]
+  const { data: itemData } = lsItemIds.length > 0
+    ? await adminClient
+        .from('items')
+        .select('id, item_name, tracks_assets, requires_inspection')
+        .in('id', lsItemIds)
+    : { data: [] as { id: string; item_name: string; tracks_assets: boolean; requires_inspection: boolean }[] }
+
+  const itemMap = Object.fromEntries((itemData ?? []).map(i => [i.id, i]))
+
+  // Fetch active assets for asset-tracked items
+  const trackedItemIds = (itemData ?? []).filter(i => i.tracks_assets).map(i => i.id)
+  const { data: assetData } = trackedItemIds.length > 0
+    ? await adminClient
+        .from('item_assets')
+        .select('id, item_id, asset_tag, status')
+        .in('item_id', trackedItemIds)
+        .eq('status', 'IN SERVICE')
+        .order('asset_tag')
+    : { data: [] as { id: string; item_id: string; asset_tag: string; status: string }[] }
+
+  const assetsByItem: Record<string, { id: string; asset_tag: string; status: string }[]> = {}
+  for (const a of assetData ?? []) {
+    if (!assetsByItem[a.item_id]) assetsByItem[a.item_id] = []
+    assetsByItem[a.item_id]!.push(a)
+  }
+
+  // Build compartment items map
+  const compartmentItemsMap: Record<string, { item_name: string; expected_quantity: number; tracks_assets: boolean; assets: { id: string; asset_tag: string }[] }[]> = {}
+  for (const ls of locationStandards ?? []) {
+    const item = itemMap[ls.item_id]
+    if (!item) continue
+    if (!compartmentItemsMap[ls.apparatus_compartment_id]) compartmentItemsMap[ls.apparatus_compartment_id] = []
+    compartmentItemsMap[ls.apparatus_compartment_id]!.push({
+      item_name: item.item_name,
+      expected_quantity: ls.expected_quantity,
+      tracks_assets: item.tracks_assets,
+      assets: assetsByItem[ls.item_id] ?? [],
+    })
+  }
+
   const compartments = (compartmentLinks ?? []).map(c => ({
     id: c.id,
     active: c.active,
     notes: c.notes,
     compartment_name: compartmentNameMap[c.compartment_name_id] ?? null,
+    items: compartmentItemsMap[c.id] ?? [],
   }))
 
   // Fetch available compartment names for this department
