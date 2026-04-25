@@ -85,31 +85,14 @@ export default async function ApparatusDetailPage({ params }: { params: Promise<
   const { data: itemData } = lsItemIds.length > 0
     ? await adminClient
         .from('items')
-        .select('id, item_name, tracks_assets, requires_inspection')
+        .select('id, item_name')
         .in('id', lsItemIds)
-    : { data: [] as { id: string; item_name: string; tracks_assets: boolean; requires_inspection: boolean }[] }
+    : { data: [] as { id: string; item_name: string }[] }
 
   const itemMap = Object.fromEntries((itemData ?? []).map(i => [i.id, i]))
 
-  // Fetch active assets for asset-tracked items
-  const trackedItemIds = (itemData ?? []).filter(i => i.tracks_assets).map(i => i.id)
-  const { data: assetData } = trackedItemIds.length > 0
-    ? await adminClient
-        .from('item_assets')
-        .select('id, item_id, asset_tag, status')
-        .in('item_id', trackedItemIds)
-        .eq('status', 'IN SERVICE')
-        .order('asset_tag')
-    : { data: [] as { id: string; item_id: string; asset_tag: string; status: string }[] }
-
-  const assetsByItem: Record<string, { id: string; asset_tag: string; status: string }[]> = {}
-  for (const a of assetData ?? []) {
-    if (!assetsByItem[a.item_id]) assetsByItem[a.item_id] = []
-    assetsByItem[a.item_id]!.push(a)
-  }
-
   // Build compartment items map
-  const compartmentItemsMap: Record<string, { item_name: string; expected_quantity: number; tracks_assets: boolean; assets: { id: string; asset_tag: string }[] }[]> = {}
+  const compartmentItemsMap: Record<string, { item_name: string; expected_quantity: number }[]> = {}
   for (const ls of locationStandards ?? []) {
     const item = itemMap[ls.item_id]
     if (!item) continue
@@ -117,8 +100,6 @@ export default async function ApparatusDetailPage({ params }: { params: Promise<
     compartmentItemsMap[ls.apparatus_compartment_id]!.push({
       item_name: item.item_name,
       expected_quantity: ls.expected_quantity,
-      tracks_assets: item.tracks_assets,
-      assets: assetsByItem[ls.item_id] ?? [],
     })
   }
 

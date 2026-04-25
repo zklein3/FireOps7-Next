@@ -20,8 +20,6 @@ interface ApparatusType {
 interface CompartmentItem {
   item_name: string
   expected_quantity: number
-  tracks_assets: boolean
-  assets: { id: string; asset_tag: string }[]
 }
 
 interface Compartment {
@@ -285,24 +283,9 @@ export default function ApparatusDetailClient({
                   {c.items.length > 0 && (
                     <div className="border-t border-zinc-100 px-4 py-2 flex flex-col gap-1.5">
                       {c.items.map((item, i) => (
-                        <div key={i} className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm text-zinc-700">{item.item_name}</span>
-                            {item.tracks_assets && item.assets.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-0.5">
-                                {item.assets.map(a => (
-                                  <span key={a.id} className="text-xs font-mono bg-white border border-zinc-200 rounded px-1.5 py-0.5 text-zinc-500">
-                                    {a.asset_tag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <span className="text-xs text-zinc-400 shrink-0 mt-0.5">
-                            {item.tracks_assets
-                              ? `${item.assets.length} / ${item.expected_quantity}`
-                              : `qty ${item.expected_quantity}`}
-                          </span>
+                        <div key={i} className="flex items-center justify-between gap-3">
+                          <span className="text-sm text-zinc-700">{item.item_name}</span>
+                          <span className="text-xs text-zinc-400 shrink-0">qty {item.expected_quantity}</span>
                         </div>
                       ))}
                     </div>
