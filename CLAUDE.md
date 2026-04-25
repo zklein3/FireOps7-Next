@@ -167,8 +167,11 @@ Currently `incident_personnel` is officer-managed only. Need to add member self-
 - `app/actions/incidents.ts` — add `logIncidentAttendance`, `verifyIncidentAttendance` actions
 - Incident list page — surface "active" incidents members can log onto
 
+### 2. Fix My Activity — Attendance Stat Counts Not Updating
+Events appear in the list on `/reports/my-activity` but the summary stat counts (Present, Excused, Absent, Pending) at the top do not reflect them. Investigate whether the counts are computed from the wrong field, filtered incorrectly, or not re-fetching after verification.
+
 ### Priority Order After That
-2. Asset roster view — dept-wide, filterable by item type/status
+3. Asset roster view — dept-wide, filterable by item type/status
 3. QR + Compartment page + Inspection Session — see REFERENCE.md for full design
 4. ISO Audit sections (future) — hose logs, apparatus specs, hydrant flows, mutual aid
 5. Flow & Presentation Polish
