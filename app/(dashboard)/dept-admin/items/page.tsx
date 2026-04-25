@@ -72,6 +72,7 @@ export default async function ItemsPage({
         .from('item_inspection_template_steps')
         .select('id, template_id, step_text, step_description, step_type, response_type, required, fail_if_negative, sort_order, active')
         .in('template_id', templateIds)
+        .eq('active', true)
         .order('sort_order')
     : { data: [] }
 

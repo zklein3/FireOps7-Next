@@ -131,7 +131,7 @@ export async function deleteTemplateStep(step_id: string) {
   const ctx = await getContext()
   if (!ctx?.isAdmin) return { error: 'Only admins can manage inspection steps.' }
   const adminClient = createAdminClient()
-  const { error } = await adminClient.from('item_inspection_template_steps').delete().eq('id', step_id)
+  const { error } = await adminClient.from('item_inspection_template_steps').update({ active: false }).eq('id', step_id)
   if (error) { await logError(error.message, '/dept-admin/items'); return { error: error.message } }
   revalidatePath('/dept-admin/items')
   return { success: true }
