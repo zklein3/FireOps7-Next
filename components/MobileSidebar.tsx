@@ -24,16 +24,10 @@ export default function MobileSidebar({
     <>
       {/* Mobile Top Bar — fixed at top, z-40 */}
       <div id="mobile-header" className="md:hidden fixed top-0 left-0 right-0 z-40 bg-red-800 text-white shadow">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div>
-            <h1 className="text-lg font-bold leading-tight">FireOps7</h1>
-            {userInfo.departmentName && (
-              <p className="text-xs text-red-300 leading-tight">{userInfo.departmentName}</p>
-            )}
-          </div>
+        <div className="flex items-center px-4 py-3 relative">
           <button
             onClick={() => setOpen(true)}
-            className="p-2 rounded-lg hover:bg-red-700 transition-colors"
+            className="p-2 rounded-lg hover:bg-red-700 transition-colors shrink-0"
             aria-label="Open menu"
           >
             <div className="flex flex-col gap-1.5">
@@ -42,6 +36,12 @@ export default function MobileSidebar({
               <span className="block w-6 h-0.5 bg-white" />
             </div>
           </button>
+          <div className="absolute left-1/2 -translate-x-1/2 text-center pointer-events-none">
+            <h1 className="text-lg font-bold leading-tight">FireOps7</h1>
+            {userInfo.departmentName && (
+              <p className="text-xs text-red-300 leading-tight">{userInfo.departmentName}</p>
+            )}
+          </div>
         </div>
       </div>
 
