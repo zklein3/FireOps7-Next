@@ -178,10 +178,14 @@ Currently `incident_personnel` is officer-managed only. Need to add member self-
 - Attendance Report (`/reports/attendance`) — officer/admin, participation rates, threshold flagging, printable
 - Collapsible grouped sidebar nav (Personnel / Apparatus / Reports)
 - Mobile header — hamburger left, title centered
-- Inspection step notes required on fail
+- Inspection step notes required on fail (BOOLEAN No → textarea; required if fail_if_negative)
 - Soft-delete inspection template steps (no more FK constraint error)
-- Step reorder (▲▼) in template builder
-- Apparatus detail — equipment manifest inline in compartments (item + qty, read-only all roles)
+- Step reorder (▲▼) in template builder — 3-step swap avoids unique constraint
+- Apparatus detail — equipment manifest inline in compartments (item name + qty only, read-only all roles)
+- Fixed attendance verification not updating My Activity page — added revalidatePath for `/reports/my-activity` and `/dashboard`
+- Events page defaults to 'all' filter (was 'upcoming' — hid past events from members)
+- `.claude/settings.json` consolidated to single file, folder-level Edit/Write wildcard permissions
+- Member self-log window: 12 hours from event start_time (null start_time defaults to midnight — set explicit start_time on test events)
 
 ## Dev Workflow
 - Start: `npm run dev` in project directory
