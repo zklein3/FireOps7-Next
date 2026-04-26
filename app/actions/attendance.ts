@@ -357,6 +357,75 @@ export async function requestExcuse(instance_id: string, excuse_type_id: string,
   return { success: true }
 }
 
+// ─── Close Event — mark non-logged members absent, finalize attendance ────────
+export async function closeEventInstance(instance_id: string) {
+  const ctx = await getContext()
+  if (!ctx?.isOfficerOrAbove) return { error: 'Only officers and admins can close events.' }
+
+  const adminClient = createAdminClient()
+
+  // Verify event is past and belongs to this dept
+  const { data: instanceList } = await adminClient
+    .from('event_instances')
+    .select('id, event_date, series_id, status')
+    .eq('id', instance_id)
+  const instance = instanceList?.[0]
+  if (!instance) return { error: 'Event not found.' }
+  if (new Date(instance.event_date + 'T23:59:59') >= new Date()) return { error: 'Cannot close a future event.' }
+  if (instance.status !== 'scheduled') return { error: 'Event is already closed or cancelled.' }
+
+  const { data: seriesList } = await adminClient
+    .from('event_series')
+    .select('department_id')
+    .eq('id', instance.series_id)
+  const department_id = seriesList?.[0]?.department_id
+  if (!department_id) return { error: 'Could not determine department.' }
+
+  // Get all active dept members
+  const { data: deptPersonnel } = await adminClient
+    .from('department_personnel')
+    .select('personnel_id')
+    .eq('department_id', department_id)
+    .eq('active', true)
+  const allMemberIds = (deptPersonnel ?? []).map(p => p.personnel_id)
+
+  // Find who already has any record
+  const { data: existing } = await adminClient
+    .from('event_attendance')
+    .select('personnel_id')
+    .eq('instance_id', instance_id)
+  const existingIds = new Set((existing ?? []).map(e => e.personnel_id))
+
+  const absentIds = allMemberIds.filter(id => !existingIds.has(id))
+  const now = new Date().toISOString()
+
+  if (absentIds.length > 0) {
+    const { error: insertErr } = await adminClient.from('event_attendance').insert(
+      absentIds.map(pid => ({
+        instance_id,
+        personnel_id: pid,
+        status: 'absent',
+        submitted_by: ctx.me.id,
+        submitted_at: now,
+        verified_by: ctx.me.id,
+        verified_at: now,
+      }))
+    )
+    if (insertErr) { await logError(insertErr.message, '/events'); return { error: insertErr.message } }
+  }
+
+  const { error: updateErr } = await adminClient
+    .from('event_instances')
+    .update({ status: 'completed', updated_at: now })
+    .eq('id', instance_id)
+  if (updateErr) { await logError(updateErr.message, '/events'); return { error: updateErr.message } }
+
+  revalidatePath('/events')
+  revalidatePath('/reports/my-activity')
+  revalidatePath('/dashboard')
+  return { success: true, absent_count: absentIds.length }
+}
+
 // ─── Cancel Event Instance ─────────────────────────────────────────────────────
 export async function cancelEventInstance(instance_id: string) {
   const ctx = await getContext()

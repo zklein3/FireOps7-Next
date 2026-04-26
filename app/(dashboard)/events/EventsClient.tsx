@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { logAttendance, verifyAttendance, cancelEventInstance, requestExcuse } from '@/app/actions/attendance'
+import { logAttendance, verifyAttendance, cancelEventInstance, closeEventInstance, requestExcuse } from '@/app/actions/attendance'
 
 interface AttendanceRecord {
   id: string
@@ -243,6 +243,16 @@ export default function EventsClient({
     setLoading(false)
   }
 
+  async function handleCloseEvent(instance_id: string) {
+    if (!confirm('Close this event? All members with no attendance record will be marked absent.')) return
+    reset()
+    setLoading(true)
+    const result = await closeEventInstance(instance_id)
+    if (result?.error) setError(result.error)
+    else { setSuccess(`Event closed. ${(result as any).absent_count} member(s) marked absent.`); router.refresh() }
+    setLoading(false)
+  }
+
   function toggleBulk(id: string) {
     setBulkSelected(prev => {
       const next = new Set(prev)
@@ -311,12 +321,13 @@ export default function EventsClient({
             const windowOpen = isWindowOpen(event.event_date, event.start_time)
             const canSelfLog = !past || windowOpen
             const cancelled = event.status === 'cancelled'
+            const completed = event.status === 'completed'
             const allIds = personnelList.map(p => p.id)
             const hasPending = event.pending_submissions.length > 0
             const hasExcuseRequests = event.excuse_submissions.length > 0
 
             return (
-              <div key={event.id} className={`rounded-xl bg-white shadow-sm border overflow-hidden ${cancelled ? 'border-zinc-100 opacity-60' : 'border-zinc-200'}`}>
+              <div key={event.id} className={`rounded-xl bg-white shadow-sm border overflow-hidden ${cancelled ? 'border-zinc-100 opacity-60' : completed ? 'border-zinc-200 opacity-75' : 'border-zinc-200'}`}>
                 {/* Event Row */}
                 <div className="px-5 py-4">
                   <div className="flex items-start gap-3">
@@ -341,6 +352,7 @@ export default function EventsClient({
                           {EVENT_TYPE_LABELS[event.event_type]}
                         </span>
                         {cancelled && <span className="text-xs rounded-full bg-zinc-100 text-zinc-400 px-2 py-0.5">Cancelled</span>}
+                        {completed && <span className="text-xs rounded-full bg-green-50 text-green-600 px-2 py-0.5">Closed</span>}
                         {event.requires_verification && !cancelled && (
                           <span className="text-xs text-zinc-400">Requires verification</span>
                         )}
@@ -393,7 +405,7 @@ export default function EventsClient({
                           {isExpanded ? 'Hide' : isOfficerOrAbove ? 'Manage' : 'Details'}
                         </button>
                       )}
-                      {isOfficerOrAbove && !cancelled && (
+                      {isOfficerOrAbove && !cancelled && !completed && (
                         <button onClick={() => handleCancel(event.id)} className="text-xs text-zinc-400 hover:text-red-600">
                           Cancel
                         </button>
@@ -555,6 +567,23 @@ export default function EventsClient({
                             {loading ? 'Logging...' : `Log ${bulkSelected.size > 0 ? bulkSelected.size : ''} ${bulkSelected.size === 1 ? 'Member' : 'Members'}`}
                           </button>
                         </div>
+                        {/* ── CLOSE EVENT ──────────────────────────────── */}
+                        {past && !completed && (
+                          <div className="border-t border-zinc-200 pt-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-semibold text-zinc-700">Close Event</p>
+                                <p className="text-xs text-zinc-400 mt-0.5">Marks all members with no record as absent and locks attendance.</p>
+                              </div>
+                              <button
+                                onClick={() => handleCloseEvent(event.id)}
+                                disabled={loading}
+                                className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-900 disabled:opacity-50 shrink-0 ml-4">
+                                Close Event
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <div className="flex flex-col gap-4">
