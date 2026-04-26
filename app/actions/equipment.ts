@@ -196,6 +196,20 @@ export async function updateAsset(formData: FormData) {
   return { success: true }
 }
 
+// ─── Assign Asset to Apparatus ────────────────────────────────────────────────
+export async function assignAssetApparatus(asset_id: string, apparatus_id: string | null) {
+  const ctx = await getContext()
+  if (!ctx?.isAdmin) return { error: 'Only admins can assign assets.' }
+  const adminClient = createAdminClient()
+  const { error } = await adminClient
+    .from('item_assets')
+    .update({ apparatus_id: apparatus_id || null })
+    .eq('id', asset_id)
+  if (error) { await logError(error.message, '/equipment/assets'); return { error: error.message } }
+  revalidatePath('/equipment/assets')
+  return { success: true }
+}
+
 // ─── Assign Item to Compartment ───────────────────────────────────────────────
 export async function assignItemToCompartment(formData: FormData) {
   const ctx = await getContext()

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useTransition } from 'react'
 import Link from 'next/link'
+import { assignAssetApparatus } from '@/app/actions/equipment'
 
 type AssetRow = {
   id: string
@@ -15,10 +16,12 @@ type AssetRow = {
   in_service_date: string | null
   out_of_service_date: string | null
   notes: string | null
-  locations: string[]
+  apparatus_id: string | null
+  apparatus_label: string | null
 }
 
 type ItemOption = { id: string; item_name: string }
+type ApparatusOption = { id: string; label: string }
 
 const STATUS_FILTERS = [
   { key: 'ALL', label: 'All', color: 'border-zinc-200' },
@@ -42,15 +45,58 @@ function fmt(dateStr: string | null) {
 export default function AssetRosterClient({
   assets,
   itemOptions,
+  apparatusOptions,
   isAdmin,
 }: {
   assets: AssetRow[]
   itemOptions: ItemOption[]
+  apparatusOptions: ApparatusOption[]
   isAdmin: boolean
 }) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [itemFilter, setItemFilter] = useState('ALL')
+
+  // Track apparatus assignments locally so saves reflect immediately
+  const [assignments, setAssignments] = useState<Record<string, string | null>>(
+    () => Object.fromEntries(assets.map(a => [a.id, a.apparatus_id]))
+  )
+  const [labels, setLabels] = useState<Record<string, string | null>>(
+    () => Object.fromEntries(assets.map(a => [a.id, a.apparatus_label]))
+  )
+
+  // Inline editing state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [isPending, startTransition] = useTransition()
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const apparatusLabelMap = Object.fromEntries(apparatusOptions.map(a => [a.id, a.label]))
+
+  function startEdit(assetId: string) {
+    setEditingId(assetId)
+    setEditValue(assignments[assetId] ?? '')
+    setSaveError(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setSaveError(null)
+  }
+
+  function handleSave(assetId: string) {
+    const newApparatusId = editValue || null
+    startTransition(async () => {
+      const result = await assignAssetApparatus(assetId, newApparatusId)
+      if (result?.error) {
+        setSaveError(result.error)
+        return
+      }
+      setAssignments(prev => ({ ...prev, [assetId]: newApparatusId }))
+      setLabels(prev => ({ ...prev, [assetId]: newApparatusId ? (apparatusLabelMap[newApparatusId] ?? null) : null }))
+      setEditingId(null)
+    })
+  }
 
   const statusCounts = useMemo(() => ({
     ALL: assets.length,
@@ -65,21 +111,73 @@ export default function AssetRosterClient({
       if (itemFilter !== 'ALL' && a.item_id !== itemFilter) return false
       if (search) {
         const q = search.toLowerCase()
-        const tagMatch = a.asset_tag.toLowerCase().includes(q)
-        const serialMatch = (a.serial_number ?? '').toLowerCase().includes(q)
-        const itemMatch = a.item_name.toLowerCase().includes(q)
-        if (!tagMatch && !serialMatch && !itemMatch) return false
+        if (
+          !a.asset_tag.toLowerCase().includes(q) &&
+          !(a.serial_number ?? '').toLowerCase().includes(q) &&
+          !a.item_name.toLowerCase().includes(q)
+        ) return false
       }
       return true
     })
   }, [assets, statusFilter, itemFilter, search])
+
+  function LocationCell({ assetId }: { assetId: string }) {
+    const label = labels[assetId]
+    if (!isAdmin) return <span className="text-zinc-400 text-xs">{label ?? '—'}</span>
+
+    if (editingId === assetId) {
+      return (
+        <div className="flex items-center gap-2 min-w-[220px]">
+          <select
+            value={editValue}
+            onChange={e => setEditValue(e.target.value)}
+            className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-800 focus:outline-none focus:ring-1 focus:ring-red-400"
+          >
+            <option value="">Unassigned</option>
+            {apparatusOptions.map(ap => (
+              <option key={ap.id} value={ap.id}>{ap.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => handleSave(assetId)}
+            disabled={isPending}
+            className="rounded bg-red-700 px-2 py-1 text-xs font-medium text-white hover:bg-red-800 disabled:opacity-50"
+          >
+            {isPending ? '…' : 'Save'}
+          </button>
+          <button
+            onClick={cancelEdit}
+            disabled={isPending}
+            className="rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            ✕
+          </button>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex items-center gap-1.5 group/loc">
+        <span className="text-zinc-400 text-xs">{label ?? <span className="italic">Unassigned</span>}</span>
+        <button
+          onClick={() => startEdit(assetId)}
+          className="opacity-0 group-hover/loc:opacity-100 rounded p-0.5 text-zinc-400 hover:text-red-600 transition-opacity"
+          title="Change location"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+          </svg>
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Asset Roster</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">All tracked assets across your department</p>
+          <p className="text-sm text-zinc-500 mt-0.5">All tracked assets — hover a location to reassign</p>
         </div>
         {isAdmin && (
           <Link
@@ -90,6 +188,12 @@ export default function AssetRosterClient({
           </Link>
         )}
       </div>
+
+      {saveError && (
+        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          {saveError}
+        </div>
+      )}
 
       {/* Status summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -151,7 +255,9 @@ export default function AssetRosterClient({
                   <th className="px-4 py-3 font-semibold text-zinc-700">Serial #</th>
                   <th className="px-4 py-3 font-semibold text-zinc-700">Status</th>
                   <th className="px-4 py-3 font-semibold text-zinc-700">In Service</th>
-                  <th className="px-4 py-3 font-semibold text-zinc-700">Location</th>
+                  <th className="px-4 py-3 font-semibold text-zinc-700">
+                    {isAdmin ? 'Location (hover to change)' : 'Location'}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -169,8 +275,8 @@ export default function AssetRosterClient({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-zinc-500">{fmt(a.in_service_date)}</td>
-                      <td className="px-4 py-3 text-zinc-400 text-xs">
-                        {a.locations.length > 0 ? a.locations.join(', ') : '—'}
+                      <td className="px-4 py-3">
+                        <LocationCell assetId={a.id} />
                       </td>
                     </tr>
                   )
@@ -183,6 +289,7 @@ export default function AssetRosterClient({
           <div className="sm:hidden space-y-3">
             {filtered.map(a => {
               const badge = statusBadge(a.status)
+              const label = labels[a.id]
               return (
                 <div key={a.id} className="rounded-xl bg-white border border-zinc-200 p-4">
                   <div className="flex items-start justify-between mb-1">
@@ -196,10 +303,50 @@ export default function AssetRosterClient({
                   {a.serial_number && (
                     <p className="text-xs text-zinc-400 mt-1 font-mono">S/N: {a.serial_number}</p>
                   )}
-                  <div className="mt-2 pt-2 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-400">
-                    <span>In Service: {fmt(a.in_service_date)}</span>
-                    {a.locations.length > 0 && (
-                      <span className="text-right">{a.locations.join(', ')}</span>
+
+                  {/* Mobile location + assign */}
+                  <div className="mt-3 pt-3 border-t border-zinc-100">
+                    {isAdmin && editingId === a.id ? (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={editValue}
+                          onChange={e => setEditValue(e.target.value)}
+                          className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-800 focus:outline-none focus:ring-1 focus:ring-red-400"
+                        >
+                          <option value="">Unassigned</option>
+                          {apparatusOptions.map(ap => (
+                            <option key={ap.id} value={ap.id}>{ap.label}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => handleSave(a.id)}
+                          disabled={isPending}
+                          className="rounded bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50"
+                        >
+                          {isPending ? '…' : 'Save'}
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          disabled={isPending}
+                          className="rounded border border-zinc-300 px-2 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-zinc-400">
+                          {label ?? <span className="italic">Unassigned</span>}
+                        </span>
+                        {isAdmin && (
+                          <button
+                            onClick={() => startEdit(a.id)}
+                            className="text-xs font-medium text-red-600 hover:text-red-800"
+                          >
+                            {label ? 'Move' : 'Assign'}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

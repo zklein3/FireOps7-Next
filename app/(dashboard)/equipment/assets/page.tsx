@@ -35,11 +35,11 @@ export default async function AssetRosterPage() {
 
   const itemIds = (items ?? []).map(i => i.id)
 
-  // Fetch all assets for those items (including retired/inactive)
+  // Fetch all assets (including retired) — include apparatus_id for location
   const { data: assets } = itemIds.length > 0
     ? await adminClient
         .from('item_assets')
-        .select('id, item_id, asset_tag, serial_number, in_service_date, out_of_service_date, status, active, notes')
+        .select('id, item_id, asset_tag, serial_number, in_service_date, out_of_service_date, status, active, notes, apparatus_id')
         .eq('department_id', department_id)
         .in('item_id', itemIds)
         .order('asset_tag')
@@ -54,49 +54,20 @@ export default async function AssetRosterPage() {
         .in('id', categoryIds)
     : { data: [] }
 
-  // Fetch location standards to show where item types are assigned
-  const { data: locationStandards } = itemIds.length > 0
-    ? await adminClient
-        .from('item_location_standards')
-        .select('id, item_id, apparatus_compartment_id')
-        .in('item_id', itemIds)
-        .eq('active', true)
-    : { data: [] }
-
-  // Fetch compartments referenced by location standards
-  const compartmentIds = [...new Set((locationStandards ?? []).map(ls => ls.apparatus_compartment_id).filter(Boolean) as string[])]
-  const { data: compartments } = compartmentIds.length > 0
-    ? await adminClient
-        .from('apparatus_compartments')
-        .select('id, compartment_name, apparatus_id')
-        .in('id', compartmentIds)
-    : { data: [] }
-
-  // Fetch apparatus for those compartments
-  const apparatusIds = [...new Set((compartments ?? []).map(c => c.apparatus_id).filter(Boolean) as string[])]
-  const { data: apparatusData } = apparatusIds.length > 0
-    ? await adminClient
-        .from('apparatus')
-        .select('id, unit_number')
-        .in('id', apparatusIds)
-    : { data: [] }
+  // Fetch all active apparatus for the department (for the assign dropdown)
+  const { data: apparatus } = await adminClient
+    .from('apparatus')
+    .select('id, unit_number, apparatus_name')
+    .eq('department_id', department_id)
+    .eq('active', true)
+    .order('unit_number')
 
   // Build lookup maps
   const itemMap = Object.fromEntries((items ?? []).map(i => [i.id, i]))
   const categoryMap = Object.fromEntries((categories ?? []).map(c => [c.id, c.category_name]))
-  const compartmentMap = Object.fromEntries((compartments ?? []).map(c => [c.id, c]))
-  const apparatusMap = Object.fromEntries((apparatusData ?? []).map(a => [a.id, a.unit_number]))
-
-  // item_id → location strings (item type can be in multiple compartments)
-  const itemLocationsMap: Record<string, string[]> = {}
-  for (const ls of locationStandards ?? []) {
-    const comp = compartmentMap[ls.apparatus_compartment_id]
-    if (!comp) continue
-    const unit = apparatusMap[comp.apparatus_id] ?? '?'
-    const loc = `${unit} / ${comp.compartment_name}`
-    if (!itemLocationsMap[ls.item_id]) itemLocationsMap[ls.item_id] = []
-    if (!itemLocationsMap[ls.item_id].includes(loc)) itemLocationsMap[ls.item_id].push(loc)
-  }
+  const apparatusMap = Object.fromEntries(
+    (apparatus ?? []).map(a => [a.id, a.unit_number + (a.apparatus_name ? ` — ${a.apparatus_name}` : '')])
+  )
 
   const assetRows = (assets ?? []).map(a => {
     const item = itemMap[a.item_id]
@@ -112,9 +83,15 @@ export default async function AssetRosterPage() {
       in_service_date: a.in_service_date,
       out_of_service_date: a.out_of_service_date,
       notes: a.notes,
-      locations: itemLocationsMap[a.item_id] ?? [],
+      apparatus_id: a.apparatus_id ?? null,
+      apparatus_label: a.apparatus_id ? (apparatusMap[a.apparatus_id] ?? '—') : null,
     }
   })
+
+  const apparatusOptions = (apparatus ?? []).map(a => ({
+    id: a.id,
+    label: a.unit_number + (a.apparatus_name ? ` — ${a.apparatus_name}` : ''),
+  }))
 
   const itemOptions = (items ?? []).map(i => ({ id: i.id, item_name: i.item_name }))
 
@@ -122,6 +99,7 @@ export default async function AssetRosterPage() {
     <AssetRosterClient
       assets={assetRows}
       itemOptions={itemOptions}
+      apparatusOptions={apparatusOptions}
       isAdmin={isAdmin}
     />
   )
