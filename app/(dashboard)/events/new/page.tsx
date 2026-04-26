@@ -72,11 +72,11 @@ export default function NewEventPage() {
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium text-zinc-700">Start Time</label>
-              <input name="start_time" type="time" className={inputCls} />
+              <input name="start_time" type="time" step="60" className={inputCls} />
             </div>
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium text-zinc-700">Duration (minutes)</label>
-              <input name="duration_minutes" type="number" min="15" step="15" placeholder="60" className={inputCls} />
+              <input name="duration_minutes" type="number" min="1" step="1" placeholder="60" className={inputCls} />
             </div>
           </div>
         </div>
