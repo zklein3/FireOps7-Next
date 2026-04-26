@@ -396,7 +396,7 @@ export default function EventsClient({
                         <button
                           onClick={() => setExpandedId(isExpanded ? null : event.id)}
                           className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
-                          Request Excuse
+                          Request Excused Absence
                         </button>
                       )}
                       {!cancelled && !isOfficerOrAbove && noRecordOrAbsent && past && !windowOpen && !isExcuseWindowOpen(event.event_date) && (
