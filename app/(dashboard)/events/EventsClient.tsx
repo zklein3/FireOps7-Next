@@ -147,6 +147,9 @@ export default function EventsClient({
   const [selectedExcuseType, setSelectedExcuseType] = useState('')
   const [excuseNotes, setExcuseNotes] = useState('')
 
+  // Log attendance confirmation step
+  const [confirmingLogId, setConfirmingLogId] = useState<string | null>(null)
+
   function reset() { setError(null); setSuccess(null) }
 
   const today = new Date().toISOString().split('T')[0]
@@ -378,12 +381,28 @@ export default function EventsClient({
                         </span>
                       )}
                       {!cancelled && !event.my_attendance && canSelfLog && (
-                        <button
-                          onClick={() => handleSelfLog(event)}
-                          disabled={loading}
-                          className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50">
-                          Log Attendance
-                        </button>
+                        confirmingLogId === event.id ? (
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => { handleSelfLog(event); setConfirmingLogId(null) }}
+                              disabled={loading}
+                              className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50">
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setConfirmingLogId(null)}
+                              className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50">
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmingLogId(event.id)}
+                            disabled={loading}
+                            className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+                            Log Attendance
+                          </button>
+                        )
                       )}
                       {canRequestExcuse && !past && (
                         <button
@@ -622,12 +641,19 @@ export default function EventsClient({
                                   rows={2}
                                   className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
                                 />
-                                <button
-                                  onClick={() => handleRequestExcuse(event.id)}
-                                  disabled={loading || !selectedExcuseType}
-                                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                                  {loading ? 'Submitting...' : 'Submit Excuse Request'}
-                                </button>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleRequestExcuse(event.id)}
+                                    disabled={loading || !selectedExcuseType}
+                                    className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                                    {loading ? 'Submitting...' : 'Submit'}
+                                  </button>
+                                  <button
+                                    onClick={() => { setExpandedId(null); setSelectedExcuseType(''); setExcuseNotes('') }}
+                                    className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-50">
+                                    Cancel
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </div>
