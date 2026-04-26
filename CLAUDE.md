@@ -93,6 +93,7 @@ DB constraint: `pending` | `present` | `absent` | `excused` | `excused_pending`
 - `app/actions/equipment.ts` — createItemCategory, createItem, updateItem, createAsset, updateAsset, assignItemToCompartment, removeItemFromCompartment, moveItemToCompartment
 - `app/actions/inspections.ts` — createInspectionTemplate, addTemplateStep, updateTemplateStep, deleteTemplateStep, submitInspection
 - `app/actions/attendance.ts` — createEventSeries, updateEventInstance, logAttendance, verifyAttendance, requestExcuse, closeEventInstance, cancelEventInstance, createExcuseType, saveParticipationRequirement
+- `app/actions/incidents.ts` — createIncident, updateIncident, setIncidentStatus, addIncidentApparatus, updateIncidentApparatus, removeIncidentApparatus, addIncidentPersonnel, logIncidentAttendance, verifyIncidentPersonnel, removeIncidentPersonnel
 - `app/actions/training.ts` — createCertificationType, createCourseUnit, enrollMember, verifyProgress, logDirectCert, createTrainingEvent, logTrainingAttendance
 - `app/actions/fire-school.ts` — checkBottle, logFill, addFireSchoolBottle
 
@@ -164,25 +165,17 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
 
 ## IMMEDIATE NEXT — Resume Here Next Session
 
-### 1. Incident Attendance — Member Self-Log + Officer Verification ← START HERE
-Currently `incident_personnel` is officer-managed only. Need to add member self-log flow matching the event attendance pattern:
-- Incident created (by anyone) → visible to all dept members as "active"
-- Members can log themselves onto an active incident → `incident_personnel` record with `status: pending`
-- Officer/admin reviews → verifies or rejects (same verification queue pattern as event attendance)
-- Member can see their own incident participation in My Activity report (already shows incidents)
-
-**Touches:**
-- `app/(dashboard)/incidents/[id]` — add self-log button for members + verification queue for officers
-- `app/actions/incidents.ts` — add `logIncidentAttendance`, `verifyIncidentAttendance` actions
-- Incident list page — surface "active" incidents members can log onto
+### 1. Asset Roster View ← START HERE
+Dept-wide view of all assets, filterable by item type and status (IN SERVICE / OUT OF SERVICE / RETIRED).
 
 ### Priority Order After That
-2. Asset roster view — dept-wide, filterable by item type/status
-3. QR + Compartment page + Inspection Session — see REFERENCE.md for full design
-4. ISO Audit sections (future) — hose logs, apparatus specs, hydrant flows, mutual aid
-5. Flow & Presentation Polish
+2. QR + Compartment page + Inspection Session — see REFERENCE.md for full design
+3. ISO Audit sections (future) — hose logs, apparatus specs, hydrant flows, mutual aid
+4. Flow & Presentation Polish
 
 ### Completed This Session (2026-04-26)
+- **Incident attendance — member self-log + officer verification** — members log onto active incidents via "Log Attendance" (role select + confirm/cancel, 7-day window). Officer sees pending queue per incident → Approve → `present` / Reject → `absent`. Incident list shows "My Attendance" column for members with "Log →" link on open incidents. `incident_personnel.status` constraint updated to `pending | present | absent`.
+- **Incident apparatus times pre-populate** — clicking "+ Add" apparatus pre-fills paged/on-scene/leaving/in-service from the incident's saved times (both on new incident form and detail page). `first_enroute_at` removed from manual entry — auto-computed as min `enroute_at` across apparatus and synced to DB on every apparatus add/update/remove.
 - **Attendance status fix** — `verifyAttendance` was writing `verified`/`rejected`; changed to `present`/`absent` to match both reports. DB check constraint updated, 7 existing records backfilled.
 - **My Activity stat counts** — now correctly count `present`, `excused`, `absent`, `pending` (was always 0 due to status mismatch)
 - **Excused absence flow** — member submits `requestExcuse` (upcoming = "Notify of Absence", past = "Request Excused Absence"); creates `excused_pending` record. Officer sees Excuse Requests queue per event → Approve → `excused` / Deny → `absent`. Members auto-marked absent by Close Event can still appeal within 7-day window.

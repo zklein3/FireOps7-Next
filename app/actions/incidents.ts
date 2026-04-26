@@ -119,7 +119,6 @@ export async function updateIncident(incident_id: string, formData: FormData) {
     mutual_aid_department: (formData.get('mutual_aid_department') as string)?.trim() || null,
     call_time: (formData.get('call_time') as string) || null,
     paged_at: (formData.get('paged_at') as string) || null,
-    first_enroute_at: (formData.get('first_enroute_at') as string) || null,
     first_on_scene_at: (formData.get('first_on_scene_at') as string) || null,
     last_leaving_scene_at: (formData.get('last_leaving_scene_at') as string) || null,
     in_service_at: (formData.get('in_service_at') as string) || null,
@@ -192,6 +191,18 @@ export async function setIncidentStatus(incident_id: string, status: 'pending' |
 }
 
 // ─── Apparatus on incident ────────────────────────────────────────────────────
+async function syncFirstEnroute(incident_id: string, adminClient: ReturnType<typeof createAdminClient>) {
+  const { data: rows } = await adminClient
+    .from('incident_apparatus')
+    .select('enroute_at')
+    .eq('incident_id', incident_id)
+    .not('enroute_at', 'is', null)
+    .order('enroute_at', { ascending: true })
+    .limit(1)
+  const first = rows?.[0]?.enroute_at ?? null
+  await adminClient.from('incidents').update({ first_enroute_at: first }).eq('id', incident_id)
+}
+
 export async function addIncidentApparatus(incident_id: string, formData: FormData) {
   const ctx = await getContext()
   if (!ctx || !ctx.department_id) return { error: 'Unauthorized' }
@@ -213,6 +224,7 @@ export async function addIncidentApparatus(incident_id: string, formData: FormDa
     return { error: dbErr.message }
   }
 
+  await syncFirstEnroute(incident_id, adminClient)
   revalidatePath(`/incidents/${incident_id}`)
   return { success: true }
 }
@@ -236,6 +248,7 @@ export async function updateIncidentApparatus(apparatus_log_id: string, incident
     return { error: dbErr.message }
   }
 
+  await syncFirstEnroute(incident_id, adminClient)
   revalidatePath(`/incidents/${incident_id}`)
   return { success: true }
 }
@@ -252,6 +265,7 @@ export async function removeIncidentApparatus(apparatus_log_id: string, incident
     return { error: dbErr.message }
   }
 
+  await syncFirstEnroute(incident_id, adminClient)
   revalidatePath(`/incidents/${incident_id}`)
   return { success: true }
 }
@@ -262,19 +276,17 @@ export async function addIncidentPersonnel(incident_id: string, formData: FormDa
   if (!ctx || !ctx.department_id) return { error: 'Unauthorized' }
 
   const adminClient = createAdminClient()
-
-  const apparatus_id = (formData.get('apparatus_id') as string) || null
-  const isOfficer = ctx.isOfficerOrAbove
+  const now = new Date().toISOString()
 
   const { error: dbErr } = await adminClient.from('incident_personnel').insert({
     incident_id,
     personnel_id: formData.get('personnel_id') as string,
-    apparatus_id: apparatus_id || null,
+    apparatus_id: (formData.get('apparatus_id') as string) || null,
     role: (formData.get('role') as string) || 'crew',
-    status: isOfficer ? 'verified' : 'pending',
+    status: 'present',
     submitted_by: ctx.me.id,
-    verified_by: isOfficer ? ctx.me.id : null,
-    verified_at: isOfficer ? new Date().toISOString() : null,
+    verified_by: ctx.me.id,
+    verified_at: now,
   })
 
   if (dbErr) {
@@ -286,10 +298,57 @@ export async function addIncidentPersonnel(incident_id: string, formData: FormDa
   return { success: true }
 }
 
+// ─── Member self-log onto an incident ────────────────────────────────────────
+export async function logIncidentAttendance(incident_id: string, role: string) {
+  const ctx = await getContext()
+  if (!ctx || !ctx.department_id) return { error: 'Not authenticated.' }
+
+  const adminClient = createAdminClient()
+
+  // Verify incident belongs to member's dept and is not finalized
+  const { data: incidentList } = await adminClient
+    .from('incidents')
+    .select('id, incident_date, status, department_id')
+    .eq('id', incident_id)
+  const incident = incidentList?.[0]
+  if (!incident || incident.department_id !== ctx.department_id) return { error: 'Incident not found.' }
+  if (incident.status === 'finalized') return { error: 'This incident has been finalized.' }
+
+  // 7-day self-log window from incident date
+  const windowClose = new Date(new Date(incident.incident_date + 'T23:59:59').getTime() + 7 * 24 * 60 * 60 * 1000)
+  if (new Date() > windowClose) return { error: 'Self-log window has closed (7 days after incident).' }
+
+  // No duplicate records
+  const { data: existing } = await adminClient
+    .from('incident_personnel')
+    .select('id')
+    .eq('incident_id', incident_id)
+    .eq('personnel_id', ctx.me.id)
+  if (existing && existing.length > 0) return { error: 'You have already logged onto this incident.' }
+
+  const { error: dbErr } = await adminClient.from('incident_personnel').insert({
+    incident_id,
+    personnel_id: ctx.me.id,
+    role: role || 'crew',
+    status: 'pending',
+    submitted_by: ctx.me.id,
+  })
+
+  if (dbErr) {
+    await logError('logIncidentAttendance', dbErr.message, ctx.me.id)
+    return { error: dbErr.message }
+  }
+
+  revalidatePath(`/incidents/${incident_id}`)
+  revalidatePath('/incidents')
+  revalidatePath('/reports/my-activity')
+  return { success: true }
+}
+
 export async function verifyIncidentPersonnel(
   personnel_log_id: string,
   incident_id: string,
-  status: 'verified' | 'rejected',
+  status: 'present' | 'absent',
   rejection_reason?: string
 ) {
   const ctx = await getContext()
@@ -298,7 +357,7 @@ export async function verifyIncidentPersonnel(
   const adminClient = createAdminClient()
   const { error: dbErr } = await adminClient.from('incident_personnel').update({
     status,
-    rejection_reason: status === 'rejected' ? (rejection_reason ?? null) : null,
+    rejection_reason: status === 'absent' ? (rejection_reason ?? null) : null,
     verified_by: ctx.me.id,
     verified_at: new Date().toISOString(),
   }).eq('id', personnel_log_id)
@@ -309,6 +368,7 @@ export async function verifyIncidentPersonnel(
   }
 
   revalidatePath(`/incidents/${incident_id}`)
+  revalidatePath('/reports/my-activity')
   return { success: true }
 }
 

@@ -39,11 +39,23 @@ export default async function IncidentsPage() {
     : { data: [] }
   const creatorMap = Object.fromEntries((creatorsRaw ?? []).map(p => [p.id, `${p.first_name} ${p.last_name}`]))
 
+  // Member's own attendance on these incidents
+  const incidentIds = (incidents ?? []).map(i => i.id)
+  const { data: myAttendanceRaw } = incidentIds.length > 0
+    ? await adminClient
+        .from('incident_personnel')
+        .select('incident_id, status')
+        .eq('personnel_id', me.id)
+        .in('incident_id', incidentIds)
+    : { data: [] }
+  const myAttendanceMap = Object.fromEntries((myAttendanceRaw ?? []).map(a => [a.incident_id, a.status]))
+
   return (
     <IncidentsClient
       incidents={(incidents ?? []).map(i => ({ ...i, creator_name: creatorMap[i.created_by] ?? '—' }))}
       isOfficerOrAbove={isOfficerOrAbove}
       myPersonnelId={me.id}
+      myAttendanceMap={myAttendanceMap}
     />
   )
 }

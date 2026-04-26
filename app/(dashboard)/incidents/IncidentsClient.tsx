@@ -38,13 +38,31 @@ function formatDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+const ATTENDANCE_BADGE: Record<string, string> = {
+  present: 'bg-green-100 text-green-700',
+  pending: 'bg-yellow-100 text-yellow-700',
+  absent: 'bg-red-100 text-red-700',
+}
+const ATTENDANCE_LABEL: Record<string, string> = {
+  present: 'Present',
+  pending: 'Pending',
+  absent: 'Absent',
+}
+
+function withinLogWindow(incident_date: string) {
+  const windowClose = new Date(new Date(incident_date + 'T23:59:59').getTime() + 7 * 24 * 60 * 60 * 1000)
+  return new Date() <= windowClose
+}
+
 export default function IncidentsClient({
   incidents,
   isOfficerOrAbove,
+  myAttendanceMap = {},
 }: {
   incidents: Incident[]
   isOfficerOrAbove: boolean
   myPersonnelId: string
+  myAttendanceMap?: Record<string, string>
 }) {
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -144,6 +162,7 @@ export default function IncidentsClient({
                   <th className="text-left px-4 py-3 font-semibold text-zinc-500 text-xs uppercase tracking-wide">Address</th>
                   <th className="text-left px-4 py-3 font-semibold text-zinc-500 text-xs uppercase tracking-wide">Status</th>
                   <th className="text-left px-4 py-3 font-semibold text-zinc-500 text-xs uppercase tracking-wide">NERIS</th>
+                  {!isOfficerOrAbove && <th className="text-left px-4 py-3 font-semibold text-zinc-500 text-xs uppercase tracking-wide">My Attendance</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -175,6 +194,21 @@ export default function IncidentsClient({
                         : <span className="text-zinc-400 text-xs">—</span>
                       }
                     </td>
+                    {!isOfficerOrAbove && (
+                      <td className="px-4 py-3">
+                        {myAttendanceMap[i.id] ? (
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ATTENDANCE_BADGE[myAttendanceMap[i.id]] ?? 'bg-zinc-100 text-zinc-600'}`}>
+                            {ATTENDANCE_LABEL[myAttendanceMap[i.id]] ?? myAttendanceMap[i.id]}
+                          </span>
+                        ) : i.status !== 'finalized' && withinLogWindow(i.incident_date) ? (
+                          <Link href={`/incidents/${i.id}`} className="text-xs font-semibold text-red-700 hover:underline">
+                            Log →
+                          </Link>
+                        ) : (
+                          <span className="text-zinc-400 text-xs">—</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

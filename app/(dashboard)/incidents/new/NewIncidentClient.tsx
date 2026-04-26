@@ -52,8 +52,11 @@ export default function NewIncidentClient({
   const [mutualAidDir, setMutualAidDir] = useState('')
   const [nerisReported, setNerisReported] = useState(false)
 
-  // Incident-level times that can auto-fill from apparatus
+  // Incident-level times (controlled so apparatus form can pre-populate from them)
+  const [incidentCallTime, setIncidentCallTime] = useState('')
   const [incidentPaged, setIncidentPaged] = useState('')
+  const [incidentOnScene, setIncidentOnScene] = useState('')
+  const [incidentLeavingScene, setIncidentLeavingScene] = useState('')
   const [incidentInService, setIncidentInService] = useState('')
 
   // Apparatus rows
@@ -229,27 +232,23 @@ export default function NewIncidentClient({
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div>
               <label className={labelCls}>Call Time</label>
-              <input name="call_time" type="datetime-local" className={inputCls} />
+              <input name="call_time" type="datetime-local" step="60" value={incidentCallTime} onChange={e => setIncidentCallTime(e.target.value)} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Paged</label>
-              <input name="paged_at" type="datetime-local" value={incidentPaged} onChange={e => setIncidentPaged(e.target.value)} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>First Enroute</label>
-              <input name="first_enroute_at" type="datetime-local" className={inputCls} />
+              <input name="paged_at" type="datetime-local" step="60" value={incidentPaged} onChange={e => setIncidentPaged(e.target.value)} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>First On Scene</label>
-              <input name="first_on_scene_at" type="datetime-local" className={inputCls} />
+              <input name="first_on_scene_at" type="datetime-local" step="60" value={incidentOnScene} onChange={e => setIncidentOnScene(e.target.value)} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>Last Leaving Scene</label>
-              <input name="last_leaving_scene_at" type="datetime-local" className={inputCls} />
+              <input name="last_leaving_scene_at" type="datetime-local" step="60" value={incidentLeavingScene} onChange={e => setIncidentLeavingScene(e.target.value)} className={inputCls} />
             </div>
             <div>
               <label className={labelCls}>In Service</label>
-              <input name="in_service_at" type="datetime-local" value={incidentInService} onChange={e => setIncidentInService(e.target.value)} className={inputCls} />
+              <input name="in_service_at" type="datetime-local" step="60" value={incidentInService} onChange={e => setIncidentInService(e.target.value)} className={inputCls} />
             </div>
           </div>
         </section>
@@ -301,7 +300,16 @@ export default function NewIncidentClient({
         <section className="rounded-xl bg-white border border-zinc-200 p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-zinc-900">Apparatus</h2>
-            <button type="button" onClick={() => setShowAddApparatus(true)} className="text-xs font-semibold text-red-700 hover:underline">+ Add</button>
+            <button type="button" onClick={() => {
+              setNewApparatus(prev => ({
+                ...prev,
+                paged_at: incidentPaged || prev.paged_at,
+                on_scene_at: incidentOnScene || prev.on_scene_at,
+                leaving_scene_at: incidentLeavingScene || prev.leaving_scene_at,
+                available_at: incidentInService || prev.available_at,
+              }))
+              setShowAddApparatus(true)
+            }} className="text-xs font-semibold text-red-700 hover:underline">+ Add</button>
           </div>
 
           {apparatusRows.length === 0 && !showAddApparatus && (

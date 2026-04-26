@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   updateIncident, setIncidentStatus,
   addIncidentApparatus, updateIncidentApparatus, removeIncidentApparatus,
-  addIncidentPersonnel, verifyIncidentPersonnel, removeIncidentPersonnel,
+  addIncidentPersonnel, logIncidentAttendance, verifyIncidentPersonnel, removeIncidentPersonnel,
 } from '@/app/actions/incidents'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
@@ -75,11 +75,15 @@ export default function IncidentDetailClient({
   const [editingApparatusId, setEditingApparatusId] = useState<string | null>(null)
   const [newApparatus, setNewApparatus] = useState({ apparatus_id: '', role: 'primary', paged_at: '', enroute_at: '', on_scene_at: '', leaving_scene_at: '', available_at: '' })
 
-  // Personnel
+  // Personnel — officer add
   const [showAddPersonnel, setShowAddPersonnel] = useState(false)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [newPersonnel, setNewPersonnel] = useState({ personnel_id: '', apparatus_id: '', role: 'crew' })
+  // Member self-log
+  const [confirmingLog, setConfirmingLog] = useState(false)
+  const [selfLogRole, setSelfLogRole] = useState('crew')
+  const [selfLogError, setSelfLogError] = useState<string | null>(null)
 
   const isFinalized = incident.status === 'finalized'
   const canEdit = !isFinalized || isOfficerOrAbove
@@ -147,9 +151,19 @@ export default function IncidentDetailClient({
     })
   }
 
-  async function handleVerifyPersonnel(logId: string, status: 'verified' | 'rejected') {
+  async function handleSelfLog() {
+    setSelfLogError(null)
     startTransition(async () => {
-      await verifyIncidentPersonnel(logId, incident.id, status, status === 'rejected' ? rejectReason : undefined)
+      const result = await logIncidentAttendance(incident.id, selfLogRole)
+      if (result?.error) { setSelfLogError(result.error); return }
+      setConfirmingLog(false)
+      router.refresh()
+    })
+  }
+
+  async function handleVerifyPersonnel(logId: string, status: 'present' | 'absent') {
+    startTransition(async () => {
+      await verifyIncidentPersonnel(logId, incident.id, status, status === 'absent' ? rejectReason : undefined)
       setRejectingId(null)
       setRejectReason('')
       router.refresh()
@@ -285,7 +299,6 @@ export default function IncidentDetailClient({
               {[
                 { name: 'call_time', label: 'Call Time', val: incident.call_time },
                 { name: 'paged_at', label: 'Paged', val: incident.paged_at },
-                { name: 'first_enroute_at', label: 'First Enroute', val: incident.first_enroute_at },
                 { name: 'first_on_scene_at', label: 'First On Scene', val: incident.first_on_scene_at },
                 { name: 'last_leaving_scene_at', label: 'Last Leaving Scene', val: incident.last_leaving_scene_at },
                 { name: 'in_service_at', label: 'In Service', val: incident.in_service_at },
@@ -352,7 +365,7 @@ export default function IncidentDetailClient({
               {[
                 { label: 'Call Time', val: incident.call_time },
                 { label: 'Paged', val: incident.paged_at },
-                { label: 'First Enroute', val: incident.first_enroute_at },
+                { label: 'First Enroute', val: incidentApparatus.map(a => a.enroute_at).filter(Boolean).sort()[0] ?? incident.first_enroute_at },
                 { label: 'First On Scene', val: incident.first_on_scene_at },
                 { label: 'Last Leaving Scene', val: incident.last_leaving_scene_at },
                 { label: 'In Service', val: incident.in_service_at },
@@ -389,7 +402,18 @@ export default function IncidentDetailClient({
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-zinc-900">Apparatus</h2>
           {canEdit && (
-            <button onClick={() => setShowAddApparatus(true)} className="text-xs font-semibold text-red-700 hover:underline">+ Add</button>
+            <button onClick={() => {
+              setNewApparatus({
+                apparatus_id: '',
+                role: 'primary',
+                paged_at: toDatetimeLocal(incident.paged_at),
+                enroute_at: '',
+                on_scene_at: toDatetimeLocal(incident.first_on_scene_at),
+                leaving_scene_at: toDatetimeLocal(incident.last_leaving_scene_at),
+                available_at: toDatetimeLocal(incident.in_service_at),
+              })
+              setShowAddApparatus(true)
+            }} className="text-xs font-semibold text-red-700 hover:underline">+ Add</button>
           )}
         </div>
 
@@ -512,25 +536,52 @@ export default function IncidentDetailClient({
 
       {/* Personnel section */}
       <section className="rounded-xl bg-white border border-zinc-200 p-5 mt-5 mb-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-zinc-900">Personnel on Scene</h2>
-          <div className="flex gap-3">
-            {!alreadyOnIncident && (
+          {isOfficerOrAbove && canEdit && (
+            <button onClick={() => setShowAddPersonnel(true)} className="text-xs font-semibold text-red-700 hover:underline">+ Add member</button>
+          )}
+        </div>
+
+        {/* Member self-log */}
+        {!isOfficerOrAbove && !isFinalized && (
+          <div className="mb-4">
+            {alreadyOnIncident ? (
+              <div className="rounded-lg bg-zinc-50 border border-zinc-200 px-4 py-2.5 text-sm text-zinc-600">
+                Your attendance: <span className={`font-semibold ml-1 ${
+                  incidentPersonnel.find(p => p.personnel_id === myPersonnelId)?.status === 'present' ? 'text-green-700' :
+                  incidentPersonnel.find(p => p.personnel_id === myPersonnelId)?.status === 'absent' ? 'text-red-700' :
+                  'text-yellow-700'}`}>
+                  {incidentPersonnel.find(p => p.personnel_id === myPersonnelId)?.status === 'present' ? 'Present' :
+                   incidentPersonnel.find(p => p.personnel_id === myPersonnelId)?.status === 'absent' ? 'Absent' : 'Pending verification'}
+                </span>
+              </div>
+            ) : confirmingLog ? (
+              <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 flex flex-wrap items-center gap-3">
+                <span className="text-sm text-blue-800 font-medium">Log your attendance as:</span>
+                <select
+                  value={selfLogRole}
+                  onChange={e => setSelfLogRole(e.target.value)}
+                  className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm text-zinc-900">
+                  <option value="crew">Crew</option>
+                  <option value="driver">Driver</option>
+                  <option value="officer">Officer</option>
+                  <option value="ems">EMS</option>
+                  <option value="other">Other</option>
+                </select>
+                <button onClick={handleSelfLog} disabled={isPending} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50">Confirm</button>
+                <button onClick={() => { setConfirmingLog(false); setSelfLogError(null) }} className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50">Cancel</button>
+                {selfLogError && <p className="w-full text-xs text-red-600">{selfLogError}</p>}
+              </div>
+            ) : (
               <button
-                onClick={() => {
-                  setNewPersonnel({ personnel_id: myPersonnelId, apparatus_id: '', role: 'crew' })
-                  setShowAddPersonnel(true)
-                }}
-                className="text-xs font-semibold text-red-700 hover:underline"
-              >
-                Log myself
+                onClick={() => setConfirmingLog(true)}
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800">
+                Log Attendance
               </button>
             )}
-            {canEdit && (
-              <button onClick={() => setShowAddPersonnel(true)} className="text-xs font-semibold text-red-700 hover:underline">+ Add member</button>
-            )}
           </div>
-        </div>
+        )}
 
         {/* Officer verification queue */}
         {isOfficerOrAbove && pendingPersonnel.length > 0 && (
@@ -552,13 +603,13 @@ export default function IncidentDetailClient({
                       className="rounded-lg border border-zinc-300 px-2 py-1 text-xs text-zinc-900 w-44"
                     />
                     <div className="flex gap-2">
-                      <button onClick={() => handleVerifyPersonnel(p.id, 'rejected')} className="text-xs font-semibold text-red-700 hover:underline">Confirm Reject</button>
+                      <button onClick={() => handleVerifyPersonnel(p.id, 'absent')} className="text-xs font-semibold text-red-700 hover:underline">Confirm Reject</button>
                       <button onClick={() => { setRejectingId(null); setRejectReason('') }} className="text-xs text-zinc-500 hover:text-zinc-700">Cancel</button>
                     </div>
                   </div>
                 ) : (
                   <div className="flex gap-3">
-                    <button onClick={() => handleVerifyPersonnel(p.id, 'verified')} disabled={isPending} className="text-xs font-semibold text-green-700 hover:underline disabled:opacity-50">Approve</button>
+                    <button onClick={() => handleVerifyPersonnel(p.id, 'present')} disabled={isPending} className="text-xs font-semibold text-green-700 hover:underline disabled:opacity-50">Approve</button>
                     <button onClick={() => setRejectingId(p.id)} className="text-xs font-semibold text-red-600 hover:underline">Reject</button>
                   </div>
                 )}
@@ -577,8 +628,8 @@ export default function IncidentDetailClient({
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold text-zinc-800">{p.name}</p>
-                  <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${p.status === 'verified' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {p.status === 'verified' ? 'Verified' : 'Rejected'}
+                  <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${p.status === 'present' ? 'bg-green-100 text-green-700' : p.status === 'absent' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                    {p.status === 'present' ? 'Present' : p.status === 'absent' ? 'Absent' : 'Pending'}
                   </span>
                 </div>
                 <p className="text-xs text-zinc-500 uppercase">{ROLE_LABELS[p.role]}{p.apparatus_unit ? ` · ${p.apparatus_unit}` : ' · POV'}</p>
