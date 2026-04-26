@@ -47,6 +47,15 @@
 - sys admin has no department_personnel record — pass department_id explicitly in forms
 - Never name a destructured Supabase error variable `logError` — conflicts with imported logger fn. Use `dbErr`, `stepsErr`, etc.
 
+## Attendance Status Values (event_attendance.status)
+DB constraint: `pending` | `present` | `absent` | `excused` | `excused_pending`
+- `pending` — member self-logged, awaiting officer verification
+- `excused_pending` — member submitted excuse request, awaiting officer approval
+- `present` — officer approved attendance (or auto-approved when requires_verification = false)
+- `absent` — officer rejected, or written by closeEventInstance / auto_close_stale_events()
+- `excused` — officer approved excuse request
+- event_instances.status: `scheduled` | `cancelled` | `completed` (completed = attendance finalized)
+
 ## App Route Structure
 
 ### Route Groups
@@ -83,7 +92,7 @@
 - `app/actions/compartments.ts` — createCompartmentName, assignCompartmentToApparatus, removeCompartmentFromApparatus
 - `app/actions/equipment.ts` — createItemCategory, createItem, updateItem, createAsset, updateAsset, assignItemToCompartment, removeItemFromCompartment, moveItemToCompartment
 - `app/actions/inspections.ts` — createInspectionTemplate, addTemplateStep, updateTemplateStep, deleteTemplateStep, submitInspection
-- `app/actions/attendance.ts` — createEventSeries, updateEventInstance, logAttendance, verifyAttendance, createExcuseType, saveParticipationRequirement
+- `app/actions/attendance.ts` — createEventSeries, updateEventInstance, logAttendance, verifyAttendance, requestExcuse, closeEventInstance, cancelEventInstance, createExcuseType, saveParticipationRequirement
 - `app/actions/training.ts` — createCertificationType, createCourseUnit, enrollMember, verifyProgress, logDirectCert, createTrainingEvent, logTrainingAttendance
 - `app/actions/fire-school.ts` — checkBottle, logFill, addFireSchoolBottle
 
@@ -167,16 +176,23 @@ Currently `incident_personnel` is officer-managed only. Need to add member self-
 - `app/actions/incidents.ts` — add `logIncidentAttendance`, `verifyIncidentAttendance` actions
 - Incident list page — surface "active" incidents members can log onto
 
-### 2. Fix My Activity — Attendance Stat Counts Not Updating
-Events appear in the list on `/reports/my-activity` but the summary stat counts (Present, Excused, Absent, Pending) at the top do not reflect them. Investigate whether the counts are computed from the wrong field, filtered incorrectly, or not re-fetching after verification.
-
 ### Priority Order After That
-3. Asset roster view — dept-wide, filterable by item type/status
+2. Asset roster view — dept-wide, filterable by item type/status
 3. QR + Compartment page + Inspection Session — see REFERENCE.md for full design
 4. ISO Audit sections (future) — hose logs, apparatus specs, hydrant flows, mutual aid
 5. Flow & Presentation Polish
 
-### Completed This Session
+### Completed This Session (2026-04-26)
+- **Attendance status fix** — `verifyAttendance` was writing `verified`/`rejected`; changed to `present`/`absent` to match both reports. DB check constraint updated, 7 existing records backfilled.
+- **My Activity stat counts** — now correctly count `present`, `excused`, `absent`, `pending` (was always 0 due to status mismatch)
+- **Excused absence flow** — member submits `requestExcuse` (upcoming = "Notify of Absence", past = "Request Excused Absence"); creates `excused_pending` record. Officer sees Excuse Requests queue per event → Approve → `excused` / Deny → `absent`. Members auto-marked absent by Close Event can still appeal within 7-day window.
+- **Close Event (officer)** — "Close Event" button in Manage panel for past events; marks all unrecorded active dept members as `absent`, sets instance `status = completed`. Locked from further changes.
+- **Auto-close cron** — `auto_close_stale_events()` SQL function + `auto-close-events` Edge Function runs nightly at 2 AM UTC. Auto-closes any `scheduled` instance older than 7 days with same absent logic.
+- **Member attendance UX** — Log Attendance is now two-step (Confirm/Cancel before submitting). Excuse form has Cancel button. "Request Excuse" renamed to "Request Excused Absence".
+- **Event form inputs** — Start time `step=60` (1-min precision), Duration `step=1` (free typing, e.g. 50 min).
+- **`.claude/settings.json`** — `settings.local.json` deleted, merged into single file; all Supabase MCP tools + memory write path added.
+
+### Completed Previous Session
 - Training/Cert Report (`/reports/training`) — officer/admin, filters by member/cert type/date range, expiry flagging, printable
 - Attendance Report (`/reports/attendance`) — officer/admin, participation rates, threshold flagging, printable
 - Collapsible grouped sidebar nav (Personnel / Apparatus / Reports)
@@ -187,7 +203,6 @@ Events appear in the list on `/reports/my-activity` but the summary stat counts 
 - Apparatus detail — equipment manifest inline in compartments (item name + qty only, read-only all roles)
 - Fixed attendance verification not updating My Activity page — added revalidatePath for `/reports/my-activity` and `/dashboard`
 - Events page defaults to 'all' filter (was 'upcoming' — hid past events from members)
-- `.claude/settings.json` consolidated to single file, folder-level Edit/Write wildcard permissions
 - Member self-log window: 12 hours from event start_time (null start_time defaults to midnight — set explicit start_time on test events)
 
 ## Dev Workflow
