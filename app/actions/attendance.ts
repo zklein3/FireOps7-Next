@@ -322,13 +322,13 @@ export async function requestExcuse(instance_id: string, excuse_type_id: string,
   const instance = instanceList?.[0]
   if (!instance) return { error: 'Event not found.' }
 
-  if (new Date(instance.event_date + 'T23:59:59') >= new Date()) {
-    return { error: 'Cannot request an excuse for a future event.' }
-  }
-
-  const windowClose = new Date(new Date(instance.event_date + 'T23:59:59').getTime() + 7 * 24 * 60 * 60 * 1000)
-  if (new Date() > windowClose) {
-    return { error: 'Excuse request window has closed (7 days after the event).' }
+  const eventEnd = new Date(instance.event_date + 'T23:59:59')
+  const isPastEvent = eventEnd < new Date()
+  if (isPastEvent) {
+    const windowClose = new Date(eventEnd.getTime() + 7 * 24 * 60 * 60 * 1000)
+    if (new Date() > windowClose) {
+      return { error: 'Excuse request window has closed (7 days after the event).' }
+    }
   }
 
   const { data: existing } = await adminClient

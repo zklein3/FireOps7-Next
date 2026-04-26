@@ -370,6 +370,13 @@ export default function EventsClient({
                           Log Attendance
                         </button>
                       )}
+                      {!cancelled && !event.my_attendance && !past && !isOfficerOrAbove && (
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : event.id)}
+                          className="text-xs font-semibold text-blue-600 hover:text-blue-800">
+                          Can&apos;t attend?
+                        </button>
+                      )}
                       {!cancelled && !event.my_attendance && past && !windowOpen && !isOfficerOrAbove && (
                         isExcuseWindowOpen(event.event_date)
                           ? <button
@@ -552,14 +559,17 @@ export default function EventsClient({
                     ) : (
                       <div className="flex flex-col gap-4">
                         {event.notes && <p className="text-sm text-zinc-600">{event.notes}</p>}
-                        {!event.notes && !(!event.my_attendance && past && !windowOpen && isExcuseWindowOpen(event.event_date)) && (
-                          <p className="text-xs text-zinc-400">No additional details.</p>
-                        )}
+                        {(() => {
+                          const showForm = !event.my_attendance && (!past || (!windowOpen && isExcuseWindowOpen(event.event_date)))
+                          return !event.notes && !showForm && <p className="text-xs text-zinc-400">No additional details.</p>
+                        })()}
 
                         {/* ── MEMBER EXCUSE REQUEST FORM ─────────────────── */}
-                        {!event.my_attendance && past && !windowOpen && isExcuseWindowOpen(event.event_date) && (
+                        {!event.my_attendance && (!past || (!windowOpen && isExcuseWindowOpen(event.event_date))) && (
                           <div>
-                            <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-2">Request an Excuse</p>
+                            <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-2">
+                              {past ? 'Request an Excuse' : 'Notify of Absence'}
+                            </p>
                             {excuseTypes.length === 0 ? (
                               <p className="text-xs text-zinc-400">No excuse types configured. Contact your officer.</p>
                             ) : (
