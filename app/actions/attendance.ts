@@ -333,12 +333,33 @@ export async function requestExcuse(instance_id: string, excuse_type_id: string,
 
   const { data: existing } = await adminClient
     .from('event_attendance')
-    .select('id')
+    .select('id, status')
     .eq('instance_id', instance_id)
     .eq('personnel_id', ctx.me.id)
 
-  if (existing && existing.length > 0) {
+  const existingRecord = existing?.[0]
+
+  if (existingRecord && existingRecord.status !== 'absent') {
     return { error: 'You already have an attendance record for this event.' }
+  }
+
+  const now = new Date().toISOString()
+
+  // Update auto-assigned absent record to excused_pending
+  if (existingRecord?.status === 'absent') {
+    const { error } = await adminClient.from('event_attendance').update({
+      status: 'excused_pending',
+      excuse_type_id,
+      notes: notes || null,
+      submitted_by: ctx.me.id,
+      submitted_at: now,
+      verified_by: null,
+      verified_at: null,
+    }).eq('id', existingRecord.id)
+    if (error) { await logError(error.message, '/events'); return { error: error.message } }
+    revalidatePath('/events')
+    revalidatePath('/reports/my-activity')
+    return { success: true }
   }
 
   const { error } = await adminClient.from('event_attendance').insert({
@@ -348,7 +369,7 @@ export async function requestExcuse(instance_id: string, excuse_type_id: string,
     excuse_type_id,
     notes: notes || null,
     submitted_by: ctx.me.id,
-    submitted_at: new Date().toISOString(),
+    submitted_at: now,
   })
 
   if (error) { await logError(error.message, '/events'); return { error: error.message } }

@@ -325,6 +325,9 @@ export default function EventsClient({
             const allIds = personnelList.map(p => p.id)
             const hasPending = event.pending_submissions.length > 0
             const hasExcuseRequests = event.excuse_submissions.length > 0
+            const noRecordOrAbsent = !event.my_attendance || event.my_attendance.status === 'absent'
+            const canRequestExcuse = !isOfficerOrAbove && !cancelled && noRecordOrAbsent &&
+              (!past || (!windowOpen && isExcuseWindowOpen(event.event_date)))
 
             return (
               <div key={event.id} className={`rounded-xl bg-white shadow-sm border overflow-hidden ${cancelled ? 'border-zinc-100 opacity-60' : completed ? 'border-zinc-200 opacity-75' : 'border-zinc-200'}`}>
@@ -382,21 +385,22 @@ export default function EventsClient({
                           Log Attendance
                         </button>
                       )}
-                      {!cancelled && !event.my_attendance && !past && !isOfficerOrAbove && (
+                      {canRequestExcuse && !past && (
                         <button
                           onClick={() => setExpandedId(isExpanded ? null : event.id)}
                           className="text-xs font-semibold text-blue-600 hover:text-blue-800">
                           Can&apos;t attend?
                         </button>
                       )}
-                      {!cancelled && !event.my_attendance && past && !windowOpen && !isOfficerOrAbove && (
-                        isExcuseWindowOpen(event.event_date)
-                          ? <button
-                              onClick={() => setExpandedId(isExpanded ? null : event.id)}
-                              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
-                              Request Excuse
-                            </button>
-                          : <span className="text-xs text-zinc-400">Window closed</span>
+                      {canRequestExcuse && past && (
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : event.id)}
+                          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                          Request Excuse
+                        </button>
+                      )}
+                      {!cancelled && !isOfficerOrAbove && noRecordOrAbsent && past && !windowOpen && !isExcuseWindowOpen(event.event_date) && (
+                        <span className="text-xs text-zinc-400">Window closed</span>
                       )}
                       {!cancelled && (
                         <button
@@ -588,16 +592,15 @@ export default function EventsClient({
                     ) : (
                       <div className="flex flex-col gap-4">
                         {event.notes && <p className="text-sm text-zinc-600">{event.notes}</p>}
-                        {(() => {
-                          const showForm = !event.my_attendance && (!past || (!windowOpen && isExcuseWindowOpen(event.event_date)))
-                          return !event.notes && !showForm && <p className="text-xs text-zinc-400">No additional details.</p>
-                        })()}
+                        {!event.notes && !canRequestExcuse && (
+                          <p className="text-xs text-zinc-400">No additional details.</p>
+                        )}
 
                         {/* ── MEMBER EXCUSE REQUEST FORM ─────────────────── */}
-                        {!event.my_attendance && (!past || (!windowOpen && isExcuseWindowOpen(event.event_date))) && (
+                        {canRequestExcuse && (
                           <div>
                             <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-2">
-                              {past ? 'Request an Excuse' : 'Notify of Absence'}
+                              {!past ? 'Notify of Absence' : event.my_attendance?.status === 'absent' ? 'Appeal Absence' : 'Request an Excuse'}
                             </p>
                             {excuseTypes.length === 0 ? (
                               <p className="text-xs text-zinc-400">No excuse types configured. Contact your officer.</p>
