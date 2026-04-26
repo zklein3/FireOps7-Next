@@ -157,16 +157,13 @@ export default function AssetRosterClient({
     }
 
     return (
-      <div className="flex items-center gap-1.5 group/loc">
-        <span className="text-zinc-400 text-xs">{label ?? <span className="italic">Unassigned</span>}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-zinc-500 text-xs">{label ?? <span className="text-zinc-400 italic">Unassigned</span>}</span>
         <button
           onClick={() => startEdit(assetId)}
-          className="opacity-0 group-hover/loc:opacity-100 rounded p-0.5 text-zinc-400 hover:text-red-600 transition-opacity"
-          title="Change location"
+          className="rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-100 hover:border-red-400 transition-colors"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-          </svg>
+          Manage
         </button>
       </div>
     )
@@ -177,7 +174,7 @@ export default function AssetRosterClient({
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Asset Roster</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">All tracked assets — hover a location to reassign</p>
+          <p className="text-sm text-zinc-500 mt-0.5">All tracked assets across your department</p>
         </div>
         {isAdmin && (
           <Link
@@ -255,9 +252,7 @@ export default function AssetRosterClient({
                   <th className="px-4 py-3 font-semibold text-zinc-700">Serial #</th>
                   <th className="px-4 py-3 font-semibold text-zinc-700">Status</th>
                   <th className="px-4 py-3 font-semibold text-zinc-700">In Service</th>
-                  <th className="px-4 py-3 font-semibold text-zinc-700">
-                    {isAdmin ? 'Location (hover to change)' : 'Location'}
-                  </th>
+                  <th className="px-4 py-3 font-semibold text-zinc-700">Location</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -341,9 +336,9 @@ export default function AssetRosterClient({
                         {isAdmin && (
                           <button
                             onClick={() => startEdit(a.id)}
-                            className="text-xs font-medium text-red-600 hover:text-red-800"
+                            className="rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-100 hover:border-red-400 transition-colors"
                           >
-                            {label ? 'Move' : 'Assign'}
+                            Manage
                           </button>
                         )}
                       </div>
