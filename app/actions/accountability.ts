@@ -237,6 +237,19 @@ export async function updateEntryName(entryId: string, rawName: string, rawDept:
   return { success: true }
 }
 
+// A quick-tag entry (typed name, no personnel_id) is later confirmed to be the same person as
+// a real-card scan — link it in place instead of leaving two rows for one person on the board.
+export async function linkAccountabilityEntryToPersonnel(entryId: string, personnelId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_entries')
+    .update({ personnel_id: personnelId, raw_name: null, raw_dept: null, status: 'on_scene', released_at: null })
+    .eq('id', entryId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
 export async function removeAccountabilityEntry(entryId: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }

@@ -8,7 +8,7 @@ import {
   initBoardLanes, addBoardLane,
   checkInPerson, movePersonToLane, removeAccountabilityEntry, updateEntryName, recordPAR, saveDebugScan,
   setBoardIcsFields, setEntryIcsRole, setLaneLeader, setLaneWorkAssignment, addActivityLogEntry,
-  releaseAccountabilityEntry, reactivateAccountabilityEntry,
+  releaseAccountabilityEntry, reactivateAccountabilityEntry, linkAccountabilityEntryToPersonnel,
 } from '@/app/actions/accountability'
 import { ICS_COMMAND_ROLES, ICS_ACTIVE_VIOLENCE_ROLES, icsRoleLabel } from '@/lib/ics-roles'
 
@@ -49,6 +49,17 @@ function hashRaw(raw: string): string {
   let h = 0
   for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) | 0
   return `RT${(h >>> 0).toString(36)}`
+}
+
+// Last name + first initial, not the full string — catches "Zak Klein" vs. "Zachary Klein"
+// (nickname on a hand-typed quick tag vs. the real card's full name). A wrong trigger just
+// costs one extra "No, different person" click, so it's fine to run loose here.
+function nameMatchKey(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length < 2) return name.trim().toLowerCase()
+  const last = parts[parts.length - 1].toLowerCase()
+  const firstInitial = parts[0][0]?.toLowerCase() ?? ''
+  return `${firstInitial}:${last}`
 }
 interface ActivityLogEntry { id: string; entry_time: string; note: string; author_name: string }
 
@@ -122,6 +133,15 @@ export default function AccountabilityBoard({
   const [tagDept, setTagDept] = useState('')
   const [tagSaving, setTagSaving] = useState(false)
   const pendingTagRawRef = useRef<string | null>(null)
+
+  // A real-card scan resolves to a person already on the board under a typed quick-tag
+  // name (possibly released from a prior day of a multi-day incident) — confirm before
+  // linking rather than auto-merging, since two different people can share a name.
+  const [mergeCandidate, setMergeCandidate] = useState<{
+    entryId: string; existingName: string; wasReleased: boolean
+    personnelId: string; newDisplayName: string; newDisplayDept: string
+  } | null>(null)
+  const [mergeSaving, setMergeSaving] = useState(false)
 
   const stagingLane = lanes.find(l => l.name === 'Staging') ?? lanes[0] ?? null
 
@@ -312,12 +332,57 @@ export default function AccountabilityBoard({
       return
     }
 
+    // A real, linked card may match someone already on the board under a typed quick-tag
+    // name — e.g. showed up on a prior day of a multi-day incident with only a quick tag,
+    // brought their real card today. Confirm before linking; don't auto-merge on name alone.
+    if (resolved.personnelId) {
+      const targetKey = nameMatchKey(resolved.displayName)
+      const nameMatch = entries.find(e =>
+        !e.personnel_id && e.raw_name && nameMatchKey(e.raw_name) === targetKey
+      )
+      if (nameMatch) {
+        setMergeCandidate({
+          entryId: nameMatch.id, existingName: nameMatch.display_name, wasReleased: nameMatch.status === 'released',
+          personnelId: resolved.personnelId, newDisplayName: resolved.displayName, newDisplayDept: resolved.displayDept,
+        })
+        return
+      }
+    }
+
     const laneId = stagingLane?.id ?? null
     const res = await checkInPerson(boardId, laneId, resolved.personnelId, resolved.rawName, resolved.rawDept)
     if (res?.error) { setError(res.error); return }
     if (res.entry) {
       setEntries(prev => [...prev, { ...res.entry, display_name: resolved.displayName, display_dept: resolved.displayDept }])
     }
+  }
+
+  async function handleConfirmMerge() {
+    if (!mergeCandidate) return
+    setMergeSaving(true)
+    const { entryId, personnelId, newDisplayName, newDisplayDept } = mergeCandidate
+    const res = await linkAccountabilityEntryToPersonnel(entryId, personnelId)
+    setMergeSaving(false)
+    if (res?.error) { setError(res.error); return }
+    setEntries(prev => prev.map(e => e.id === entryId
+      ? { ...e, personnel_id: personnelId, raw_name: null, raw_dept: null, status: 'on_scene', released_at: null, display_name: newDisplayName, display_dept: newDisplayDept }
+      : e
+    ))
+    setMergeCandidate(null)
+  }
+
+  async function handleDeclineMerge() {
+    if (!mergeCandidate) return
+    setMergeSaving(true)
+    const { personnelId, newDisplayName, newDisplayDept } = mergeCandidate
+    const laneId = stagingLane?.id ?? null
+    const res = await checkInPerson(boardId, laneId, personnelId, null, null)
+    setMergeSaving(false)
+    if (res?.error) { setError(res.error); setMergeCandidate(null); return }
+    if (res.entry) {
+      setEntries(prev => [...prev, { ...res.entry, display_name: newDisplayName, display_dept: newDisplayDept }])
+    }
+    setMergeCandidate(null)
   }
 
   async function handleNameTag() {
@@ -726,6 +791,28 @@ export default function AccountabilityBoard({
               </button>
               <button type="button" onClick={() => { setNameTagOpen(false); pendingTagRawRef.current = null }}
                 className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mergeCandidate && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <p className="font-semibold text-zinc-900 mb-1">Same Person?</p>
+            <p className="text-sm text-zinc-600 mb-4">
+              <strong>{mergeCandidate.existingName}</strong> is already {mergeCandidate.wasReleased ? 'on this board (released)' : 'checked in'} under a quick tag.
+              This card belongs to <strong>{mergeCandidate.newDisplayName}</strong>. Same person?
+            </p>
+            <div className="flex flex-col gap-2">
+              <button type="button" disabled={mergeSaving} onClick={handleConfirmMerge}
+                className="w-full rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+                {mergeSaving ? 'Saving...' : 'Yes — Link to This Card'}
+              </button>
+              <button type="button" disabled={mergeSaving} onClick={handleDeclineMerge}
+                className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 disabled:opacity-50">
+                No — Different Person, Check In Separately
+              </button>
             </div>
           </div>
         </div>
