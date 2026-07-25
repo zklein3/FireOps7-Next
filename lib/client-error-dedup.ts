@@ -6,7 +6,15 @@
 const recentlySeen = new Map<string, number>()
 const DEDUP_WINDOW_MS = 5000
 
+// Known-benign browser/OS quirks that fire from outside our code (not from any promise
+// we or our dependencies create — traced end to end, nothing in the app calls these).
+// Real errors, zero actionable signal — just noise every time someone scans on Android.
+const KNOWN_NOISE = [
+  'setPhotoOptions failed', // Android Chrome's internal camera pipeline, during getUserMedia video capture
+]
+
 export function shouldLogClientError(key: string): boolean {
+  if (KNOWN_NOISE.some(noise => key.includes(noise))) return false
   const now = Date.now()
   const last = recentlySeen.get(key)
   if (last && now - last < DEDUP_WINDOW_MS) return false
