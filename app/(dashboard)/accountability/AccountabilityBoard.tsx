@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import QRScanner from '@/components/QRScanner'
 import { parseSalamanderCard, parseFireOps7Card, isFireOps7Card, salamanderCanonicalKey } from '@/lib/salamander'
@@ -152,18 +152,38 @@ export default function AccountabilityBoard({
   // Realtime evaluates our RLS policies using the JWT attached to the socket, so the session
   // token must be loaded and handed to supabase.realtime before subscribing — otherwise the
   // socket connects unauthenticated and silently receives zero rows (subscribe still "succeeds").
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null)
+
   useEffect(() => {
     const supabase = createClient()
-    let channel: ReturnType<typeof supabase.channel> | null = null
     let cancelled = false
 
-    async function start() {
+    async function refetchBoardState() {
+      const [{ data: entryRows }, { data: laneRows }] = await Promise.all([
+        supabase.from('accountability_entries')
+          .select('id, board_id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at')
+          .eq('board_id', boardId).order('checked_in_at'),
+        supabase.from('accountability_lanes')
+          .select('id, name, sort_order, leader_entry_id, work_assignment')
+          .eq('board_id', boardId).order('sort_order'),
+      ])
+      if (cancelled) return
+      if (entryRows) setEntries(entryRows.map(row => ({ ...row, ...resolveEntryDisplay(row) } as Entry)))
+      if (laneRows) setLanes(laneRows as Lane[])
+    }
+
+    async function subscribeChannel() {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+
       const { data: { session } } = await supabase.auth.getSession()
       if (cancelled) return
       if (session) supabase.realtime.setAuth(session.access_token)
 
-      channel = supabase
-        .channel(`accountability_board_${boardId}`)
+      channelRef.current = supabase
+        .channel(`accountability_board_${boardId}_${Date.now()}`)
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'accountability_entries', filter: `board_id=eq.${boardId}` },
@@ -199,7 +219,7 @@ export default function AccountabilityBoard({
         .subscribe()
     }
 
-    start()
+    subscribeChannel()
 
     // Keep the realtime socket's auth token current across refreshes so the
     // subscription doesn't silently go dark when the session token rotates.
@@ -207,10 +227,23 @@ export default function AccountabilityBoard({
       if (session) supabase.realtime.setAuth(session.access_token)
     })
 
+    // Phones suspend background tabs — screen lock, app switch, dead cell signal — which can
+    // silently kill the socket with no error and no reconnect. On regaining focus, always pull
+    // fresh state (Realtime doesn't replay missed events) and rejoin if the channel isn't live.
+    function handleResume() {
+      if (document.visibilityState !== 'visible') return
+      refetchBoardState()
+      if (channelRef.current?.state !== 'joined') subscribeChannel()
+    }
+    document.addEventListener('visibilitychange', handleResume)
+    window.addEventListener('focus', handleResume)
+
     return () => {
       cancelled = true
+      document.removeEventListener('visibilitychange', handleResume)
+      window.removeEventListener('focus', handleResume)
       authListener.subscription.unsubscribe()
-      if (channel) supabase.removeChannel(channel)
+      if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
     }
   }, [boardId])
 
