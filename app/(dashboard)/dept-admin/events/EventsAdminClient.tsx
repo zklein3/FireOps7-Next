@@ -509,7 +509,7 @@ export default function EventsAdminClient({
                       {!cancelled && (
                         <button
                           onClick={() => editingId === event.id ? setEditingId(null) : handleEditStart(event)}
-                          className="text-xs text-zinc-400 hover:text-zinc-700">
+                          className="text-xs font-semibold text-blue-600 hover:text-blue-800">
                           {editingId === event.id ? 'Cancel Edit' : 'Edit'}
                         </button>
                       )}
