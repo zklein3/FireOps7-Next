@@ -25,7 +25,7 @@ export default async function AccountabilityBoardPage({
 
   const { data: board } = await adminClient
     .from('accountability_boards')
-    .select('id, title, board_date, status, linked_incident_id, linked_training_event_id, linked_event_instance_id')
+    .select('id, title, board_date, status, linked_incident_id, linked_training_event_id, linked_event_instance_id, objectives, safety_message, weather, is_active_violence')
     .eq('id', boardId)
     .eq('department_id', department_id)
     .single()
@@ -43,22 +43,37 @@ export default async function AccountabilityBoardPage({
   // Lanes + entries
   const { data: lanes } = await adminClient
     .from('accountability_lanes')
-    .select('id, name, sort_order')
+    .select('id, name, sort_order, leader_entry_id, work_assignment')
     .eq('board_id', boardId)
     .order('sort_order')
 
   const { data: entriesRaw } = await adminClient
     .from('accountability_entries')
-    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at')
+    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role')
     .eq('board_id', boardId)
     .order('checked_in_at')
 
-  // Resolve personnel names
-  const personnelIds = [...new Set((entriesRaw ?? []).map(e => e.personnel_id).filter(Boolean))] as string[]
+  // Activity log
+  const { data: activityLogRaw } = await adminClient
+    .from('accountability_activity_log')
+    .select('id, entry_time, note, author_personnel_id')
+    .eq('board_id', boardId)
+    .order('entry_time', { ascending: false })
+
+  // Resolve personnel names (entries + activity log authors share one lookup)
+  const personnelIds = [...new Set([
+    ...(entriesRaw ?? []).map(e => e.personnel_id),
+    ...(activityLogRaw ?? []).map(a => a.author_personnel_id),
+  ].filter(Boolean))] as string[]
   const { data: personnelRaw } = personnelIds.length > 0
     ? await adminClient.from('personnel').select('id, first_name, last_name').in('id', personnelIds)
     : { data: [] }
   const nameMap = Object.fromEntries((personnelRaw ?? []).map(p => [p.id, `${p.first_name} ${p.last_name}`]))
+
+  const activityLog = (activityLogRaw ?? []).map(a => ({
+    ...a,
+    author_name: a.author_personnel_id ? (nameMap[a.author_personnel_id] ?? '—') : '—',
+  }))
 
   // Dept personnel list — includes role title so checked-in members show dept + position
   const { data: deptPersonnelRaw } = await adminClient
@@ -145,6 +160,12 @@ export default async function AccountabilityBoardPage({
         deptPersonnel={deptPersonnel}
         departmentName={departmentName}
         isOfficerOrAbove={isOfficerOrAbove}
+        initialObjectives={board.objectives}
+        initialSafetyMessage={board.safety_message}
+        initialWeather={board.weather}
+        initialIsActiveViolence={board.is_active_violence}
+        initialActivityLog={activityLog}
+        currentUserName={[me.first_name, me.last_name].filter(Boolean).join(' ') || '—'}
       />
     </div>
   )

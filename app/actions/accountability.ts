@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
+import { ALL_ICS_ROLE_VALUES } from '@/lib/ics-roles'
 
 async function getContext() {
   const ctx = await getCurrentDepartmentContext()
@@ -170,7 +171,7 @@ export async function initBoardLanes(boardId: string) {
 
   const rows = templates.map(t => ({ board_id: boardId, name: t.name, sort_order: t.sort_order }))
   const { data: inserted, error: dbErr } = await ctx.adminClient
-    .from('accountability_lanes').insert(rows).select('id, name, sort_order')
+    .from('accountability_lanes').insert(rows).select('id, name, sort_order, leader_entry_id, work_assignment')
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true, lanes: inserted ?? [] }
 }
@@ -188,7 +189,7 @@ export async function addBoardLane(boardId: string, name: string) {
   const { data: row, error: dbErr } = await ctx.adminClient
     .from('accountability_lanes')
     .insert({ board_id: boardId, name: name.trim(), sort_order: nextOrder })
-    .select('id, name, sort_order').single()
+    .select('id, name, sort_order, leader_entry_id, work_assignment').single()
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true, lane: row }
 }
@@ -209,7 +210,7 @@ export async function checkInPerson(
   const { data: row, error: dbErr } = await ctx.adminClient
     .from('accountability_entries')
     .insert({ board_id: boardId, lane_id: laneId, personnel_id: personnelId, raw_name: rawName, raw_dept: rawDept, added_by: ctx.me.id })
-    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at').single()
+    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role').single()
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true, entry: row }
 }
@@ -252,6 +253,105 @@ export async function recordPAR(boardId: string, snapshot: { lane_name: string; 
     .insert({ board_id: boardId, checked_by: ctx.me.id, snapshot })
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true }
+}
+
+// ─── ICS fields (command roles, lane leader/work assignment, board objectives) ─
+
+function isOfficerOrAdmin(role: string | null) {
+  return role === 'officer' || role === 'admin'
+}
+
+export async function setBoardIcsFields(
+  boardId: string,
+  fields: { objectives?: string | null; safety_message?: string | null; weather?: string | null; is_active_violence?: boolean }
+) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_boards')
+    .update(fields)
+    .eq('id', boardId)
+    .eq('department_id', ctx.dept.department_id)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
+export async function setEntryIcsRole(entryId: string, role: string | null) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  if (role && !ALL_ICS_ROLE_VALUES.includes(role as typeof ALL_ICS_ROLE_VALUES[number])) return { error: 'Invalid role.' }
+
+  const { data: entryRows } = await ctx.adminClient
+    .from('accountability_entries').select('board_id').eq('id', entryId)
+  const boardId = entryRows?.[0]?.board_id
+  if (!boardId) return { error: 'Entry not found.' }
+
+  const { data: boardRows } = await ctx.adminClient
+    .from('accountability_boards').select('department_id').eq('id', boardId)
+  if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
+
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_entries').update({ ics_role: role }).eq('id', entryId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
+export async function setLaneLeader(laneId: string, entryId: string | null) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+
+  const { data: laneRows } = await ctx.adminClient
+    .from('accountability_lanes').select('board_id').eq('id', laneId)
+  const boardId = laneRows?.[0]?.board_id
+  if (!boardId) return { error: 'Lane not found.' }
+
+  const { data: boardRows } = await ctx.adminClient
+    .from('accountability_boards').select('department_id').eq('id', boardId)
+  if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
+
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_lanes').update({ leader_entry_id: entryId }).eq('id', laneId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
+export async function setLaneWorkAssignment(laneId: string, text: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+
+  const { data: laneRows } = await ctx.adminClient
+    .from('accountability_lanes').select('board_id').eq('id', laneId)
+  const boardId = laneRows?.[0]?.board_id
+  if (!boardId) return { error: 'Lane not found.' }
+
+  const { data: boardRows } = await ctx.adminClient
+    .from('accountability_boards').select('department_id').eq('id', boardId)
+  if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
+
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_lanes').update({ work_assignment: text.trim() || null }).eq('id', laneId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
+// ─── Activity log ──────────────────────────────────────────────────────────────
+
+export async function addActivityLogEntry(boardId: string, note: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!note.trim()) return { error: 'Note required.' }
+
+  const { data: row, error: dbErr } = await ctx.adminClient
+    .from('accountability_activity_log')
+    .insert({ board_id: boardId, author_personnel_id: ctx.me.id, note: note.trim() })
+    .select('id, entry_time, note, author_personnel_id')
+    .single()
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true, entry: row }
 }
 
 export async function saveDebugScan(rawValue: string, source: string = 'accountability') {

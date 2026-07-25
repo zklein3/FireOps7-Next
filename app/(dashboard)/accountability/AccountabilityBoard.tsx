@@ -7,9 +7,11 @@ import { parseSalamanderCard, parseFireOps7Card, isFireOps7Card, salamanderCanon
 import {
   initBoardLanes, addBoardLane,
   checkInPerson, movePersonToLane, removeAccountabilityEntry, updateEntryName, recordPAR, saveDebugScan,
+  setBoardIcsFields, setEntryIcsRole, setLaneLeader, setLaneWorkAssignment, addActivityLogEntry,
 } from '@/app/actions/accountability'
+import { ICS_COMMAND_ROLES, ICS_ACTIVE_VIOLENCE_ROLES, icsRoleLabel } from '@/lib/ics-roles'
 
-interface Lane { id: string; name: string; sort_order: number }
+interface Lane { id: string; name: string; sort_order: number; leader_entry_id: string | null; work_assignment: string | null }
 interface Entry {
   id: string
   lane_id: string | null
@@ -20,6 +22,7 @@ interface Entry {
   checked_in_at: string
   display_name: string
   display_dept: string
+  ics_role: string | null
 }
 interface QrToken { personnel_id: string; token_type: string; token_value: string; display_name: string }
 interface EntryRow {
@@ -31,7 +34,9 @@ interface EntryRow {
   raw_dept: string | null
   status: string
   checked_in_at: string
+  ics_role: string | null
 }
+interface ActivityLogEntry { id: string; entry_time: string; note: string; author_name: string }
 
 export default function AccountabilityBoard({
   boardId,
@@ -41,6 +46,12 @@ export default function AccountabilityBoard({
   deptPersonnel,
   departmentName,
   isOfficerOrAbove,
+  initialObjectives,
+  initialSafetyMessage,
+  initialWeather,
+  initialIsActiveViolence,
+  initialActivityLog,
+  currentUserName,
 }: {
   boardId: string
   initialLanes: Lane[]
@@ -49,11 +60,21 @@ export default function AccountabilityBoard({
   deptPersonnel: { id: string; name: string; title: string | null }[]
   departmentName: string | null
   isOfficerOrAbove: boolean
+  initialObjectives: string | null
+  initialSafetyMessage: string | null
+  initialWeather: string | null
+  initialIsActiveViolence: boolean
+  initialActivityLog: ActivityLogEntry[]
+  currentUserName: string
 }) {
   const [lanes, setLanes] = useState<Lane[]>(initialLanes)
   const [entries, setEntries] = useState<Entry[]>(initialEntries)
   const [scannerOpen, setScannerOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isActiveViolence, setIsActiveViolence] = useState(initialIsActiveViolence)
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>(initialActivityLog)
+  const [noteInput, setNoteInput] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
 
   const [addingLane, setAddingLane] = useState(false)
   const [newLaneName, setNewLaneName] = useState('')
@@ -250,6 +271,81 @@ export default function AccountabilityBoard({
     const res = await removeAccountabilityEntry(entryId)
     if (res?.error) { setError(res.error); return }
     setEntries(prev => prev.filter(e => e.id !== entryId))
+  }
+
+  async function handleSetIcsRole(entryId: string, role: string | null) {
+    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, ics_role: role } : e))
+    const res = await setEntryIcsRole(entryId, role)
+    if (res?.error) setError(res.error)
+  }
+
+  async function handleToggleLeader(lane: Lane, entry: Entry) {
+    const newLeaderId = lane.leader_entry_id === entry.id ? null : entry.id
+    setLanes(prev => prev.map(l => l.id === lane.id ? { ...l, leader_entry_id: newLeaderId } : l))
+    const res = await setLaneLeader(lane.id, newLeaderId)
+    if (res?.error) setError(res.error)
+  }
+
+  async function handleLaneWorkAssignmentBlur(lane: Lane, value: string) {
+    const trimmed = value.trim() || null
+    if (trimmed === lane.work_assignment) return
+    setLanes(prev => prev.map(l => l.id === lane.id ? { ...l, work_assignment: trimmed } : l))
+    const res = await setLaneWorkAssignment(lane.id, value)
+    if (res?.error) setError(res.error)
+  }
+
+  async function handleToggleActiveViolence(checked: boolean) {
+    setIsActiveViolence(checked)
+    const res = await setBoardIcsFields(boardId, { is_active_violence: checked })
+    if (res?.error) setError(res.error)
+  }
+
+  async function handleSaveBoardField(field: 'objectives' | 'safety_message' | 'weather', value: string) {
+    const res = await setBoardIcsFields(boardId, { [field]: value.trim() || null })
+    if (res?.error) setError(res.error)
+  }
+
+  async function handleAddNote() {
+    if (!noteInput.trim()) return
+    setNoteSaving(true)
+    const res = await addActivityLogEntry(boardId, noteInput.trim())
+    setNoteSaving(false)
+    if (res?.error) { setError(res.error); return }
+    if (res.entry) {
+      setActivityLog(prev => [{ id: res.entry.id, entry_time: res.entry.entry_time, note: res.entry.note, author_name: currentUserName }, ...prev])
+    }
+    setNoteInput('')
+  }
+
+  function renderEntryCard(entry: Entry) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm w-full">
+        <div onClick={() => isOfficerOrAbove ? setMovingEntryId(entry.id) : undefined}
+          className={`flex-1 min-w-0 ${isOfficerOrAbove ? 'cursor-pointer' : ''}`}>
+          <p className="text-sm font-medium text-zinc-900 truncate">{entry.display_name}</p>
+          {entry.display_dept && <p className="text-xs text-zinc-400 truncate">{entry.display_dept}</p>}
+        </div>
+        {isOfficerOrAbove ? (
+          <select
+            value={entry.ics_role ?? ''}
+            onClick={e => e.stopPropagation()}
+            onChange={e => handleSetIcsRole(entry.id, e.target.value || null)}
+            className="shrink-0 max-w-[130px] rounded border border-zinc-300 px-1 py-1 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
+            <option value="">ICS Role —</option>
+            <optgroup label="Command">
+              {ICS_COMMAND_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </optgroup>
+            {isActiveViolence && (
+              <optgroup label="Active Violence">
+                {ICS_ACTIVE_VIOLENCE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </optgroup>
+            )}
+          </select>
+        ) : entry.ics_role ? (
+          <span className="shrink-0 text-xs font-semibold text-red-700">{icsRoleLabel(entry.ics_role)}</span>
+        ) : null}
+      </div>
+    )
   }
 
   function openEditName(entry: Entry) {
@@ -513,26 +609,70 @@ export default function AccountabilityBoard({
         </div>
       )}
 
+      <div className="mb-4 flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white p-3">
+        {isOfficerOrAbove ? (
+          <label className="flex items-center gap-2 text-sm font-semibold text-red-700">
+            <input type="checkbox" checked={isActiveViolence}
+              onChange={e => handleToggleActiveViolence(e.target.checked)} />
+            Active Violence / Mass Casualty Event
+          </label>
+        ) : isActiveViolence ? (
+          <p className="text-sm font-semibold text-red-700">⚠ Active Violence / Mass Casualty Event</p>
+        ) : null}
+        <div>
+          <label className="block text-xs font-medium text-zinc-500 mb-1 uppercase tracking-wide">Objectives</label>
+          <textarea disabled={!isOfficerOrAbove} defaultValue={initialObjectives ?? ''} rows={2}
+            onBlur={e => handleSaveBoardField('objectives', e.target.value)}
+            placeholder={isOfficerOrAbove ? 'Incident objectives...' : 'None set'}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm disabled:bg-zinc-50 disabled:text-zinc-500 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-zinc-500 mb-1 uppercase tracking-wide">Safety Message</label>
+          <textarea disabled={!isOfficerOrAbove} defaultValue={initialSafetyMessage ?? ''} rows={2}
+            onBlur={e => handleSaveBoardField('safety_message', e.target.value)}
+            placeholder={isOfficerOrAbove ? 'Safety message...' : 'None set'}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm disabled:bg-zinc-50 disabled:text-zinc-500 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-zinc-500 mb-1 uppercase tracking-wide">Weather</label>
+          <input disabled={!isOfficerOrAbove} defaultValue={initialWeather ?? ''}
+            onBlur={e => handleSaveBoardField('weather', e.target.value)}
+            placeholder={isOfficerOrAbove ? 'Weather / conditions...' : 'None set'}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm disabled:bg-zinc-50 disabled:text-zinc-500 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+        </div>
+      </div>
+
       <div className="flex flex-col gap-4">
         {lanes.map(lane => {
           const inLane = entries.filter(e => e.lane_id === lane.id)
           return (
             <div key={lane.id} className="rounded-xl border border-zinc-200 bg-zinc-50 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2 bg-zinc-100 border-b border-zinc-200">
-                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600">{lane.name}</span>
-                <span className="text-xs text-zinc-400">{inLane.length}</span>
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-100 border-b border-zinc-200">
+                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600 shrink-0">{lane.name}</span>
+                {isOfficerOrAbove ? (
+                  <input key={`${lane.id}-wa`} defaultValue={lane.work_assignment ?? ''}
+                    onBlur={e => handleLaneWorkAssignmentBlur(lane, e.target.value)}
+                    placeholder="Work assignment / instructions..."
+                    className="flex-1 min-w-0 rounded border border-zinc-300 bg-white px-2 py-1 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+                ) : lane.work_assignment ? (
+                  <span className="flex-1 min-w-0 truncate text-xs italic text-zinc-500">{lane.work_assignment}</span>
+                ) : <span className="flex-1" />}
+                <span className="text-xs text-zinc-400 shrink-0">{inLane.length}</span>
               </div>
               <div className="p-3 flex flex-col gap-2 min-h-[48px]">
                 {inLane.length === 0 && <p className="text-xs text-zinc-400 text-center py-2">Empty</p>}
                 {inLane.map(entry => (
-                  <button key={entry.id} type="button" onClick={() => isOfficerOrAbove ? setMovingEntryId(entry.id) : undefined}
-                    className={`flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 py-2 text-left shadow-sm w-full ${isOfficerOrAbove ? 'hover:border-red-300 hover:bg-red-50 cursor-pointer' : 'cursor-default'}`}>
-                    <div>
-                      <p className="text-sm font-medium text-zinc-900">{entry.display_name}</p>
-                      {entry.display_dept && <p className="text-xs text-zinc-400">{entry.display_dept}</p>}
-                    </div>
-                    {isOfficerOrAbove && <span className="text-xs text-zinc-300">tap to move</span>}
-                  </button>
+                  <div key={entry.id} className="flex items-center gap-1.5">
+                    {isOfficerOrAbove ? (
+                      <button type="button" title="Mark as lane leader" onClick={() => handleToggleLeader(lane, entry)}
+                        className={`shrink-0 text-lg leading-none ${lane.leader_entry_id === entry.id ? 'text-amber-500' : 'text-zinc-300 hover:text-amber-400'}`}>
+                        ★
+                      </button>
+                    ) : lane.leader_entry_id === entry.id ? (
+                      <span className="shrink-0 text-lg leading-none text-amber-500">★</span>
+                    ) : null}
+                    {renderEntryCard(entry)}
+                  </div>
                 ))}
               </div>
             </div>
@@ -546,13 +686,7 @@ export default function AccountabilityBoard({
             </div>
             <div className="p-3 flex flex-col gap-2">
               {entries.filter(e => !e.lane_id).map(entry => (
-                <button key={entry.id} type="button" onClick={() => isOfficerOrAbove ? setMovingEntryId(entry.id) : undefined}
-                  className={`flex items-center justify-between rounded-lg border border-yellow-200 bg-white px-3 py-2 text-left w-full ${isOfficerOrAbove ? 'hover:border-red-300 cursor-pointer' : 'cursor-default'}`}>
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900">{entry.display_name}</p>
-                    {entry.display_dept && <p className="text-xs text-zinc-400">{entry.display_dept}</p>}
-                  </div>
-                </button>
+                <div key={entry.id}>{renderEntryCard(entry)}</div>
               ))}
             </div>
           </div>
@@ -562,6 +696,31 @@ export default function AccountabilityBoard({
       {entries.length === 0 && (
         <p className="text-center text-sm text-zinc-400 mt-6">No one checked in yet. Scan a card or add manually.</p>
       )}
+
+      <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">Activity Log</p>
+        <div className="flex gap-2 mb-3">
+          <input value={noteInput} onChange={e => setNoteInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAddNote() }}
+            placeholder="Add a timestamped note..."
+            className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+          <button type="button" disabled={noteSaving || !noteInput.trim()} onClick={handleAddNote}
+            className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+            {noteSaving ? '...' : 'Add'}
+          </button>
+        </div>
+        <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
+          {activityLog.length === 0 && <p className="text-xs text-zinc-400 text-center py-2">No activity logged yet.</p>}
+          {activityLog.map(a => (
+            <div key={a.id} className="text-xs text-zinc-600 border-b border-zinc-100 pb-1.5 last:border-0">
+              <span className="font-mono text-zinc-400">
+                {new Date(a.entry_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+              </span>
+              {' · '}<span className="font-medium text-zinc-700">{a.author_name}</span>{' — '}{a.note}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
