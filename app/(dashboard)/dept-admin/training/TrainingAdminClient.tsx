@@ -37,7 +37,7 @@ interface TrainingSubmission {
 
 interface TrainingEvent {
   id: string; event_date: string; start_time: string | null; topic: string
-  hours: number | null; location: string | null; description: string | null
+  hours: number | null; location: string | null; description: string | null; instructor: string | null
   requires_verification: boolean; verified_count: number; signed_count: number
   event_instance_id: string | null
   pending_attendance: PendingAttendance[]
@@ -813,7 +813,10 @@ export default function TrainingAdminClient({
                   <div className="w-28"><label className="mb-1 block text-xs font-medium text-zinc-600">Start Time</label><input name="start_time" type="time" className={inputCls} /></div>
                   <div className="w-20"><label className="mb-1 block text-xs font-medium text-zinc-600">Hours</label><input name="hours" type="number" step="0.5" min="0" className={inputCls} placeholder="2" /></div>
                 </div>
-                <input name="description" className={inputCls} placeholder="Description (optional)" />
+                <div className="flex gap-3">
+                  <div className="flex-1"><label className="mb-1 block text-xs font-medium text-zinc-600">Instructor</label><input name="instructor" className={inputCls} placeholder="Name" /></div>
+                  <div className="flex-1"><label className="mb-1 block text-xs font-medium text-zinc-600">Description</label><input name="description" className={inputCls} placeholder="Optional" /></div>
+                </div>
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input type="checkbox" checked={requiresVerification} onChange={e => setRequiresVerification(e.target.checked)} className={`mt-0.5 ${checkCls}`} />
                   <div>
@@ -855,6 +858,7 @@ export default function TrainingAdminClient({
                           <span>{new Date(evt.event_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                           {evt.location && <span>📍 {evt.location}</span>}
                           {evt.hours && <span>{evt.hours}h</span>}
+                          {evt.instructor && <span>Instructor: {evt.instructor}</span>}
                           {!linkedTitle && <span>{evt.verified_count} verified</span>}
                           {!linkedTitle && evt.signed_count > 0 && (
                             <span className="text-green-600 font-semibold">✓ {evt.signed_count} signed</span>

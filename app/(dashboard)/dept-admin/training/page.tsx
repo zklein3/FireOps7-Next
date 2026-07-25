@@ -90,7 +90,7 @@ export default async function TrainingAdminPage() {
 
   const { data: trainingEvents } = await adminClient
     .from('training_events')
-    .select('id, event_date, start_time, topic, hours, location, description, requires_verification, event_instance_id')
+    .select('id, event_date, start_time, topic, hours, location, description, instructor, requires_verification, event_instance_id')
     .eq('department_id', department_id)
     .eq('cancelled', false)
     .gte('event_date', past30.toISOString().split('T')[0])

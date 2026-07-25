@@ -438,6 +438,7 @@ export async function createTrainingEvent(formData: FormData) {
     start_time: (formData.get('start_time') as string) || null,
     topic: formData.get('topic') as string,
     description: (formData.get('description') as string) || null,
+    instructor: (formData.get('instructor') as string) || null,
     hours: parseFloat(formData.get('hours') as string) || null,
     location: (formData.get('location') as string) || null,
     requires_verification,

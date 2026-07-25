@@ -64,7 +64,7 @@ export default async function EventsAdminPage() {
   const { data: seriesData } = seriesIds.length > 0
     ? await adminClient
         .from('event_series')
-        .select('id, title, event_type, department_id, recurrence_type, description, is_public, duration_minutes, is_training, training_hours, training_cert_type_id')
+        .select('id, title, event_type, department_id, recurrence_type, description, is_public, duration_minutes, is_training, training_hours, training_cert_type_id, training_instructor')
         .in('id', seriesIds)
         .eq('department_id', department_id)
     : { data: [] }
@@ -162,6 +162,7 @@ export default async function EventsAdminPage() {
     is_training: seriesMap[i.series_id]?.is_training ?? false,
     training_hours: seriesMap[i.series_id]?.training_hours ?? null,
     training_cert_type_id: seriesMap[i.series_id]?.training_cert_type_id ?? null,
+    training_instructor: seriesMap[i.series_id]?.training_instructor ?? null,
     event_date: i.event_date,
     start_time: i.start_time,
     location: i.location,

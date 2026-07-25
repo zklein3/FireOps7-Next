@@ -54,6 +54,7 @@ interface Event {
   is_training: boolean
   training_hours: number | null
   training_cert_type_id: string | null
+  training_instructor: string | null
   pending_sig_id: string | null
   is_public: boolean
   my_attendance: AttendanceRecord | null
@@ -169,7 +170,7 @@ export default function EventsAdminClient({
     title: '', event_type: 'meeting', description: '', location: '',
     event_date: '', start_time: '', duration_minutes: '', notes: '',
     requires_verification: true, requires_signature: false,
-    is_training: false, training_hours: '', training_cert_type_id: '',
+    is_training: false, training_hours: '', training_cert_type_id: '', training_instructor: '',
   })
 
   const [publicState, setPublicState] = useState<Record<string, boolean>>(
@@ -200,6 +201,7 @@ export default function EventsAdminClient({
       is_training: event.is_training,
       training_hours: event.training_hours != null ? String(event.training_hours) : '',
       training_cert_type_id: event.training_cert_type_id ?? '',
+      training_instructor: event.training_instructor ?? '',
     })
     setEditScope('instance')
     setEditingId(event.id)
@@ -224,6 +226,7 @@ export default function EventsAdminClient({
       fd.set('is_training', editForm.is_training ? 'true' : 'false')
       fd.set('training_hours', editForm.training_hours)
       fd.set('training_cert_type_id', editForm.training_cert_type_id)
+      fd.set('training_instructor', editForm.training_instructor)
       if (event.recurrence_type === 'one_time') fd.set('event_date', editForm.event_date)
       const result = await updateEventSeries(fd)
       if (result?.error) { setError(result.error); setLoading(false); return }
@@ -636,6 +639,13 @@ export default function EventsAdminClient({
                                 <input type="number" min="0" step="0.5" value={editForm.training_hours}
                                   onChange={e => setEditForm(f => ({ ...f, training_hours: e.target.value }))}
                                   placeholder="2"
+                                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                              </div>
+                              <div className="flex-1">
+                                <label className="block text-xs font-medium text-zinc-600 mb-1">Instructor</label>
+                                <input type="text" value={editForm.training_instructor}
+                                  onChange={e => setEditForm(f => ({ ...f, training_instructor: e.target.value }))}
+                                  placeholder="Name"
                                   className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                               </div>
                               <div className="flex-1">

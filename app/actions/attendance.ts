@@ -82,6 +82,7 @@ export async function createEventSeries(formData: FormData) {
   const is_training = formData.get('is_training') === 'true'
   const training_hours = formData.get('training_hours') ? parseFloat(formData.get('training_hours') as string) : null
   const training_cert_type_id = (formData.get('training_cert_type_id') as string) || null
+  const training_instructor = (formData.get('training_instructor') as string) || null
 
   if (!title || !event_type || !recurrence_type) return { error: 'Title, type, and recurrence are required.' }
 
@@ -127,6 +128,7 @@ export async function createEventSeries(formData: FormData) {
     is_training,
     training_hours: is_training ? training_hours : null,
     training_cert_type_id: is_training ? training_cert_type_id : null,
+    training_instructor: is_training ? training_instructor : null,
     active: true,
     generate_through_date,
     created_by: ctx.me.id,
@@ -183,6 +185,8 @@ export async function createEventSeries(formData: FormData) {
           department_id,
           event_instance_id: inst.id,
           topic: title,
+          description: description || null,
+          instructor: training_instructor,
           event_date: inst.event_date,
           hours: training_hours,
           certification_type_id: training_cert_type_id,
@@ -288,6 +292,7 @@ export async function updateEventSeries(formData: FormData) {
   const is_training = formData.get('is_training') === 'true'
   const training_hours = formData.get('training_hours') ? parseFloat(formData.get('training_hours') as string) : null
   const training_cert_type_id = (formData.get('training_cert_type_id') as string) || null
+  const training_instructor = (formData.get('training_instructor') as string) || null
 
   // Update series
   const { error: seriesErr } = await adminClient.from('event_series').update({
@@ -301,6 +306,7 @@ export async function updateEventSeries(formData: FormData) {
     is_training,
     training_hours: is_training ? training_hours : null,
     training_cert_type_id: is_training ? training_cert_type_id : null,
+    training_instructor: is_training ? training_instructor : null,
     updated_at: new Date().toISOString(),
   }).eq('id', series_id)
 
@@ -389,6 +395,8 @@ export async function updateEventSeries(formData: FormData) {
             department_id: ctx.department_id,
             event_instance_id: instId,
             topic: title,
+            description: description || null,
+            instructor: training_instructor,
             event_date: instDateMap[instId],
             hours: training_hours,
             certification_type_id: training_cert_type_id,
@@ -401,7 +409,10 @@ export async function updateEventSeries(formData: FormData) {
       }
       if (toUpdateIds.length > 0) {
         await adminClient.from('training_events')
-          .update({ hours: training_hours, certification_type_id: training_cert_type_id, cancelled: false, topic: title })
+          .update({
+            hours: training_hours, certification_type_id: training_cert_type_id, cancelled: false,
+            topic: title, description: description || null, instructor: training_instructor,
+          })
           .in('id', toUpdateIds)
       }
       if (toInsert.length > 0) {

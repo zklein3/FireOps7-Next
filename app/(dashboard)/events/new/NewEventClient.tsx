@@ -206,6 +206,7 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
               <p className="text-sm font-medium text-zinc-800">This is a training event</p>
               <p className="text-xs text-zinc-500 mt-0.5">
                 Tracks training hours and shows on the Training page. Optionally auto-issues a certification when attendance is verified.
+                Uses the Description field above as the training record&apos;s course description.
               </p>
             </div>
           </label>
@@ -215,6 +216,10 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
                 <div className="flex-1">
                   <label className="mb-1 block text-sm font-medium text-zinc-700">Training Hours</label>
                   <input name="training_hours" type="number" min="0" step="0.5" placeholder="2" className={inputCls} />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-1 block text-sm font-medium text-zinc-700">Instructor</label>
+                  <input name="training_instructor" type="text" placeholder="Name" className={inputCls} />
                 </div>
               </div>
               <div>

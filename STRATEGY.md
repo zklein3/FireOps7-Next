@@ -26,6 +26,13 @@ Session notes captured 2026-06-26. Forward-looking roadmap — not yet built. Se
 - Module/feature flag system already partially built (`module_operations`, `module_iso`) — extend it to support department type
 - No duplication of the database or codebase needed
 
+## Emergency Management (EM) Vertical — FUTURE, noted 2026-07-25
+
+- New `department_type` value: `emergency_management` — same small community as an existing fire/police pilot (e.g. Yutan/Winslow), not a separate customer
+- Intent: EM becomes a home for functions that currently live awkwardly inside the fire or police verticals because there's nowhere else to put them (e.g. anything spanning both — mutual aid coordination, community-wide incident command, resource/asset tracking that isn't apparatus-specific, public alerting)
+- Framing: a small town's EM director is often the same person wearing a fire or police hat too — this isn't a new market, it's unbundling functionality that's currently mis-homed under `fire` or `law_enforcement` into its own department-type context
+- Not scoped yet — no specific function list decided on which pieces move out of police/fire first. Revisit once a concrete EM pilot contact exists (parallel to how Terry's Yutan PD pilot drove the `law_enforcement` build-out) rather than guessing at EM-specific schema now
+
 ## Terry's Yutan Police Pilot Plan
 
 - Terry is a friend — fire department member AND police chief of Yutan
