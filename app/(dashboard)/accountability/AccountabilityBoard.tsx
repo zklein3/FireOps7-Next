@@ -8,6 +8,7 @@ import {
   initBoardLanes, addBoardLane,
   checkInPerson, movePersonToLane, removeAccountabilityEntry, updateEntryName, recordPAR, saveDebugScan,
   setBoardIcsFields, setEntryIcsRole, setLaneLeader, setLaneWorkAssignment, addActivityLogEntry,
+  releaseAccountabilityEntry, reactivateAccountabilityEntry,
 } from '@/app/actions/accountability'
 import { ICS_COMMAND_ROLES, ICS_ACTIVE_VIOLENCE_ROLES, icsRoleLabel } from '@/lib/ics-roles'
 
@@ -23,6 +24,7 @@ interface Entry {
   display_name: string
   display_dept: string
   ics_role: string | null
+  released_at: string | null
 }
 interface QrToken { personnel_id: string; token_type: string; token_value: string; display_name: string }
 interface EntryRow {
@@ -35,6 +37,7 @@ interface EntryRow {
   status: string
   checked_in_at: string
   ics_role: string | null
+  released_at: string | null
 }
 interface ActivityLogEntry { id: string; entry_time: string; note: string; author_name: string }
 
@@ -273,6 +276,20 @@ export default function AccountabilityBoard({
     setEntries(prev => prev.filter(e => e.id !== entryId))
   }
 
+  async function handleRelease(entryId: string) {
+    setMovingEntryId(null)
+    const now = new Date().toISOString()
+    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, status: 'released', released_at: now } : e))
+    const res = await releaseAccountabilityEntry(entryId)
+    if (res?.error) setError(res.error)
+  }
+
+  async function handleReactivate(entryId: string) {
+    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, status: 'on_scene', released_at: null } : e))
+    const res = await reactivateAccountabilityEntry(entryId)
+    if (res?.error) setError(res.error)
+  }
+
   async function handleSetIcsRole(entryId: string, role: string | null) {
     setEntries(prev => prev.map(e => e.id === entryId ? { ...e, ics_role: role } : e))
     const res = await setEntryIcsRole(entryId, role)
@@ -393,11 +410,12 @@ export default function AccountabilityBoard({
 
   async function handlePAR() {
     setParSaving(true)
+    const onScene = entries.filter(e => e.status !== 'released')
     const snapshot = lanes.map(lane => {
-      const inLane = entries.filter(e => e.lane_id === lane.id)
+      const inLane = onScene.filter(e => e.lane_id === lane.id)
       return { lane_name: lane.name, count: inLane.length, names: inLane.map(e => e.display_name) }
     })
-    const unassigned = entries.filter(e => !e.lane_id)
+    const unassigned = onScene.filter(e => !e.lane_id)
     if (unassigned.length) snapshot.push({ lane_name: 'Unassigned', count: unassigned.length, names: unassigned.map(e => e.display_name) })
     const res = await recordPAR(boardId, snapshot)
     setParSaving(false)
@@ -421,6 +439,9 @@ export default function AccountabilityBoard({
   }
 
   const movingEntry = movingEntryId ? entries.find(e => e.id === movingEntryId) : null
+  const activeEntries = entries.filter(e => e.status !== 'released')
+  const releasedEntries = entries.filter(e => e.status === 'released')
+    .sort((a, b) => new Date(b.released_at ?? 0).getTime() - new Date(a.released_at ?? 0).getTime())
 
   return (
     <div>
@@ -525,6 +546,10 @@ export default function AccountabilityBoard({
                 </button>
               ))}
             </div>
+            <button type="button" onClick={() => handleRelease(movingEntry.id)}
+              className="w-full mb-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition-colors">
+              Release (Left Scene)
+            </button>
             <div className="flex gap-2">
               {!movingEntry.personnel_id && (
                 <button type="button" onClick={() => openEditName(movingEntry)}
@@ -644,7 +669,7 @@ export default function AccountabilityBoard({
 
       <div className="flex flex-col gap-4">
         {lanes.map(lane => {
-          const inLane = entries.filter(e => e.lane_id === lane.id)
+          const inLane = activeEntries.filter(e => e.lane_id === lane.id)
           return (
             <div key={lane.id} className="rounded-xl border border-zinc-200 bg-zinc-50 overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-2 bg-zinc-100 border-b border-zinc-200">
@@ -679,13 +704,13 @@ export default function AccountabilityBoard({
           )
         })}
 
-        {entries.filter(e => !e.lane_id).length > 0 && (
+        {activeEntries.filter(e => !e.lane_id).length > 0 && (
           <div className="rounded-xl border border-yellow-200 bg-yellow-50 overflow-hidden">
             <div className="px-4 py-2 bg-yellow-100 border-b border-yellow-200">
               <span className="text-xs font-semibold uppercase tracking-wide text-yellow-700">Unassigned</span>
             </div>
             <div className="p-3 flex flex-col gap-2">
-              {entries.filter(e => !e.lane_id).map(entry => (
+              {activeEntries.filter(e => !e.lane_id).map(entry => (
                 <div key={entry.id}>{renderEntryCard(entry)}</div>
               ))}
             </div>
@@ -693,8 +718,36 @@ export default function AccountabilityBoard({
         )}
       </div>
 
-      {entries.length === 0 && (
+      {activeEntries.length === 0 && (
         <p className="text-center text-sm text-zinc-400 mt-6">No one checked in yet. Scan a card or add manually.</p>
+      )}
+
+      {releasedEntries.length > 0 && (
+        <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 overflow-hidden">
+          <div className="px-4 py-2 bg-zinc-100 border-b border-zinc-200">
+            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Released ({releasedEntries.length})</span>
+          </div>
+          <div className="p-3 flex flex-col gap-1.5">
+            {releasedEntries.map(entry => (
+              <div key={entry.id} className="flex items-center justify-between gap-2 text-sm text-zinc-500">
+                <span className="truncate">
+                  {entry.display_name}
+                  {entry.released_at && (
+                    <span className="ml-2 text-xs text-zinc-400">
+                      left {new Date(entry.released_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                    </span>
+                  )}
+                </span>
+                {isOfficerOrAbove && (
+                  <button type="button" onClick={() => handleReactivate(entry.id)}
+                    className="shrink-0 text-xs font-medium text-red-700 hover:underline">
+                    ↩ Reactivate
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-3">

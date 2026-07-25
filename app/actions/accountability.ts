@@ -210,7 +210,7 @@ export async function checkInPerson(
   const { data: row, error: dbErr } = await ctx.adminClient
     .from('accountability_entries')
     .insert({ board_id: boardId, lane_id: laneId, personnel_id: personnelId, raw_name: rawName, raw_dept: rawDept, added_by: ctx.me.id })
-    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role').single()
+    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at').single()
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true, entry: row }
 }
@@ -241,6 +241,28 @@ export async function removeAccountabilityEntry(entryId: string) {
   if (!ctx) return { error: 'Not authenticated.' }
   const { error: dbErr } = await ctx.adminClient
     .from('accountability_entries').delete().eq('id', entryId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
+export async function releaseAccountabilityEntry(entryId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_entries')
+    .update({ status: 'released', released_at: new Date().toISOString() })
+    .eq('id', entryId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
+export async function reactivateAccountabilityEntry(entryId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_entries')
+    .update({ status: 'on_scene', released_at: null })
+    .eq('id', entryId)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true }
 }
