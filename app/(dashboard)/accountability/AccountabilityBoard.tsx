@@ -104,6 +104,15 @@ export default function AccountabilityBoard({
   const [editDept, setEditDept] = useState('')
   const [editSaving, setEditSaving] = useState(false)
 
+  // Rapid/quick tags (Salamander's unassigned event tags) carry no name — scanning one
+  // prompts for a name on the spot instead of checking in raw undecoded tag data.
+  const [nameTagOpen, setNameTagOpen] = useState(false)
+  const [tagName, setTagName] = useState('')
+  const [tagDept, setTagDept] = useState('')
+  const [tagSaving, setTagSaving] = useState(false)
+  const pendingTagRawRef = useRef<string | null>(null)
+  const namedTagsRef = useRef<Map<string, string>>(new Map())
+
   const stagingLane = lanes.find(l => l.name === 'Staging') ?? lanes[0] ?? null
 
   async function handleInit() {
@@ -122,16 +131,6 @@ export default function AccountabilityBoard({
     if (res.lane) setLanes(prev => [...prev, res.lane])
     setNewLaneName('')
     setAddingLane(false)
-  }
-
-  function sanitizeRaw(s: string): string {
-    return Array.from(s).map(c => {
-      const code = c.charCodeAt(0)
-      if ((code < 0x20 && code !== 0x09 && code !== 0x0A && code !== 0x0D) || (code >= 0x7F && code <= 0x9F)) {
-        return `\\x${code.toString(16).padStart(2, '0')}`
-      }
-      return c
-    }).join('')
   }
 
   function deptAndTitle(personnelId: string): string {
@@ -247,7 +246,7 @@ export default function AccountabilityBoard({
     }
   }, [boardId])
 
-  function resolveCard(raw: string): { personnelId: string | null; rawName: string | null; rawDept: string | null; displayName: string; displayDept: string } {
+  function resolveCard(raw: string): { personnelId: string | null; rawName: string | null; rawDept: string | null; displayName: string; displayDept: string; needsNaming?: boolean } {
     if (isFireOps7Card(raw)) {
       const pid = parseFireOps7Card(raw)
       if (pid) {
@@ -265,8 +264,10 @@ export default function AccountabilityBoard({
       }
       return { personnelId: null, rawName: `${card.firstName} ${card.lastName}`, rawDept: card.department, displayName: `${card.firstName} ${card.lastName}`, displayDept: card.department }
     }
-    const safe = sanitizeRaw(raw).slice(0, 60)
-    return { personnelId: null, rawName: safe, rawDept: null, displayName: safe, displayDept: '' }
+    // Doesn't match the personally-assigned card format — this is a Salamander rapid/quick
+    // tag (blank event tags with no name encoded) rather than a misread. Signal for naming
+    // instead of dumping the undecoded tag data onto the board as the "name".
+    return { personnelId: null, rawName: null, rawDept: null, displayName: '', displayDept: '', needsNaming: true }
   }
 
   async function handleScan(raw: string) {
@@ -278,6 +279,17 @@ export default function AccountabilityBoard({
     if (!isKnown) saveDebugScan(raw)
 
     const resolved = resolveCard(raw)
+
+    if (resolved.needsNaming) {
+      const existingId = namedTagsRef.current.get(raw)
+      const existingEntry = existingId ? entries.find(e => e.id === existingId) : null
+      if (existingEntry) { setMovingEntryId(existingEntry.id); return }
+      pendingTagRawRef.current = raw
+      setTagName('')
+      setTagDept('')
+      setNameTagOpen(true)
+      return
+    }
 
     const alreadyOn = entries.find(e =>
       (resolved.personnelId && e.personnel_id === resolved.personnelId) ||
@@ -294,6 +306,23 @@ export default function AccountabilityBoard({
     if (res.entry) {
       setEntries(prev => [...prev, { ...res.entry, display_name: resolved.displayName, display_dept: resolved.displayDept }])
     }
+  }
+
+  async function handleNameTag() {
+    if (!tagName.trim()) return
+    setTagSaving(true)
+    const laneId = stagingLane?.id ?? null
+    const name = tagName.trim()
+    const dept = tagDept.trim() || null
+    const res = await checkInPerson(boardId, laneId, null, name, dept)
+    setTagSaving(false)
+    if (res?.error) { setError(res.error); return }
+    if (res.entry) {
+      setEntries(prev => [...prev, { ...res.entry, display_name: name, display_dept: dept ?? '' }])
+      if (pendingTagRawRef.current) namedTagsRef.current.set(pendingTagRawRef.current, res.entry.id)
+    }
+    pendingTagRawRef.current = null
+    setNameTagOpen(false)
   }
 
   async function handleMove(entryId: string, laneId: string) {
@@ -661,6 +690,29 @@ export default function AccountabilityBoard({
                 {editSaving ? 'Saving...' : 'Save'}
               </button>
               <button type="button" onClick={() => setEditingEntryId(null)}
+                className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {nameTagOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <p className="font-semibold text-zinc-900 mb-1">Name This Tag</p>
+            <p className="text-xs text-zinc-500 mb-4">This is a rapid tag — it doesn&apos;t carry a name. Enter who it was handed to for this incident.</p>
+            <div className="flex flex-col gap-3 mb-4">
+              <input autoFocus value={tagName} onChange={e => setTagName(e.target.value)}
+                placeholder="Name" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+              <input value={tagDept} onChange={e => setTagDept(e.target.value)}
+                placeholder="Agency / Department (optional)" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+            </div>
+            <div className="flex gap-2">
+              <button type="button" disabled={tagSaving || !tagName.trim()} onClick={handleNameTag}
+                className="flex-1 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+                {tagSaving ? 'Saving...' : 'Check In'}
+              </button>
+              <button type="button" onClick={() => { setNameTagOpen(false); pendingTagRawRef.current = null }}
                 className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">Cancel</button>
             </div>
           </div>
