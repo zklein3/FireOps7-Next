@@ -25,6 +25,7 @@ interface Entry {
   display_dept: string
   ics_role: string | null
   released_at: string | null
+  tag_ref: string | null
 }
 interface QrToken { personnel_id: string; token_type: string; token_value: string; display_name: string }
 interface EntryRow {
@@ -38,6 +39,16 @@ interface EntryRow {
   checked_in_at: string
   ics_role: string | null
   released_at: string | null
+  tag_ref: string | null
+}
+
+// Stable, non-cryptographic fingerprint for a scanned rapid tag's raw payload — used only to
+// recognize "this is the same physical tag" across scans (including after a reload), never
+// stored as the raw bytes themselves (which can contain control chars Postgres text can choke on).
+function hashRaw(raw: string): string {
+  let h = 0
+  for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) | 0
+  return `RT${(h >>> 0).toString(36)}`
 }
 interface ActivityLogEntry { id: string; entry_time: string; note: string; author_name: string }
 
@@ -111,7 +122,6 @@ export default function AccountabilityBoard({
   const [tagDept, setTagDept] = useState('')
   const [tagSaving, setTagSaving] = useState(false)
   const pendingTagRawRef = useRef<string | null>(null)
-  const namedTagsRef = useRef<Map<string, string>>(new Map())
 
   const stagingLane = lanes.find(l => l.name === 'Staging') ?? lanes[0] ?? null
 
@@ -160,7 +170,7 @@ export default function AccountabilityBoard({
     async function refetchBoardState() {
       const [{ data: entryRows }, { data: laneRows }] = await Promise.all([
         supabase.from('accountability_entries')
-          .select('id, board_id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at')
+          .select('id, board_id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref')
           .eq('board_id', boardId).order('checked_in_at'),
         supabase.from('accountability_lanes')
           .select('id, name, sort_order, leader_entry_id, work_assignment')
@@ -281,8 +291,10 @@ export default function AccountabilityBoard({
     const resolved = resolveCard(raw)
 
     if (resolved.needsNaming) {
-      const existingId = namedTagsRef.current.get(raw)
-      const existingEntry = existingId ? entries.find(e => e.id === existingId) : null
+      // Match on tag_ref (persisted) rather than the session-only ref, so re-scanning the same
+      // physical tag still finds its entry after a reload/board reopen instead of re-prompting.
+      const ref = hashRaw(raw)
+      const existingEntry = entries.find(e => e.tag_ref === ref)
       if (existingEntry) { setMovingEntryId(existingEntry.id); return }
       pendingTagRawRef.current = raw
       setTagName('')
@@ -314,12 +326,12 @@ export default function AccountabilityBoard({
     const laneId = stagingLane?.id ?? null
     const name = tagName.trim()
     const dept = tagDept.trim() || null
-    const res = await checkInPerson(boardId, laneId, null, name, dept)
+    const tagRef = pendingTagRawRef.current ? hashRaw(pendingTagRawRef.current) : null
+    const res = await checkInPerson(boardId, laneId, null, name, dept, tagRef)
     setTagSaving(false)
     if (res?.error) { setError(res.error); return }
     if (res.entry) {
       setEntries(prev => [...prev, { ...res.entry, display_name: name, display_dept: dept ?? '' }])
-      if (pendingTagRawRef.current) namedTagsRef.current.set(pendingTagRawRef.current, res.entry.id)
     }
     pendingTagRawRef.current = null
     setNameTagOpen(false)

@@ -201,7 +201,8 @@ export async function checkInPerson(
   laneId: string | null,
   personnelId: string | null,
   rawName: string | null,
-  rawDept: string | null
+  rawDept: string | null,
+  tagRef: string | null = null
 ) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
@@ -209,8 +210,8 @@ export async function checkInPerson(
 
   const { data: row, error: dbErr } = await ctx.adminClient
     .from('accountability_entries')
-    .insert({ board_id: boardId, lane_id: laneId, personnel_id: personnelId, raw_name: rawName, raw_dept: rawDept, added_by: ctx.me.id })
-    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at').single()
+    .insert({ board_id: boardId, lane_id: laneId, personnel_id: personnelId, raw_name: rawName, raw_dept: rawDept, tag_ref: tagRef, added_by: ctx.me.id })
+    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref').single()
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true, entry: row }
 }
