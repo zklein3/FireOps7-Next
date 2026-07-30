@@ -787,15 +787,18 @@ export default function NerisReportClient({
             disabled={isSubmitted}
           />
           <div>
-            <label className={labelCls}>No-Action Reason <span className="text-zinc-400 font-normal">(if no actions were taken)</span></label>
-            <input
-              type="text"
+            <label className={labelCls}>No-Action Reason <span className="text-zinc-400 font-normal">(only if the department did nothing at all — not for medical/transport outcomes)</span></label>
+            <select
               value={noActionReason}
               onChange={e => setNoActionReason(e.target.value)}
               disabled={isSubmitted || actionsTaken.length > 0}
-              placeholder="e.g. Cancelled enroute, no emergency found"
               className={inputCls}
-            />
+            >
+              <option value="">— Select —</option>
+              <option value="CANCELLED">Cancelled enroute</option>
+              <option value="NO_INCIDENT_FOUND">No incident found on arrival</option>
+              <option value="STAGED_STANDBY">Staged / standby only</option>
+            </select>
           </div>
         </section>
 

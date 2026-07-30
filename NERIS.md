@@ -113,7 +113,7 @@ All live in `/core_schemas/value_sets/csv/` in the repo.
 |---|---|---|---|
 | Incident type | `incident_types[].type` | `incident_neris.neris_incident_type` | ✅ 2026-05-13 |
 | Actions taken | `actions_tactics.action_noaction.actions[]` | `incident_neris.actions_taken[]` | ✅ 2026-05-13 |
-| No-action reason | `actions_tactics.action_noaction.reason` | `incident_neris.no_action_reason` | ✅ 2026-05-13 |
+| No-action reason | `actions_tactics.action_noaction.noaction_type` | `incident_neris.no_action_reason` | ✅ corrected 2026-07-30 — field is `noaction_type`, not `reason` (was wrong since 2026-05-13, never actually hit this code path in a live submission until now); closed enum `CANCELLED \| NO_INCIDENT_FOUND \| STAGED_STANDBY`, confirmed against live openapi.json. Not for medical/transport outcomes (e.g. "patient refused transport" — that's `medical_details[].transport_disposition = PATIENT_REFUSED_TRANSPORT`, a real action was taken). |
 | State | `base.location.state` + `dispatch.location.state` | `incidents.state` | ✅ 2026-05-13 |
 | Street address | `base.location.street` | `incidents.address` | ✅ 2026-05-15 |
 | Postal code | `base.location.postal_code` | `incidents.zip` | ✅ 2026-05-15 |

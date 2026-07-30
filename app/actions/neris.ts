@@ -292,7 +292,11 @@ function buildNerisPayload(
     payload.actions_tactics = {
       action_noaction: {
         type: 'NOACTION',
-        reason: neris.no_action_reason,
+        // Field confirmed against live openapi.json 2026-07-30 — NERIS calls this
+        // noaction_type, not "reason", and it's a closed enum (CANCELLED /
+        // NO_INCIDENT_FOUND / STAGED_STANDBY), not free text. The UI now only
+        // lets an officer pick one of those three, so this value is always valid.
+        noaction_type: neris.no_action_reason,
       },
     }
   }
