@@ -195,17 +195,24 @@ export default function AccountabilityBoard({
     let cancelled = false
 
     async function refetchBoardState() {
-      const [{ data: entryRows }, { data: laneRows }] = await Promise.all([
+      const [{ data: entryRows }, { data: laneRows }, { data: logRows }] = await Promise.all([
         supabase.from('accountability_entries')
           .select('id, board_id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref')
           .eq('board_id', boardId).order('checked_in_at'),
         supabase.from('accountability_lanes')
           .select('id, name, sort_order, leader_entry_id, work_assignment, profile')
           .eq('board_id', boardId).order('sort_order'),
+        supabase.from('accountability_activity_log')
+          .select('id, entry_time, note, author_personnel_id')
+          .eq('board_id', boardId).order('entry_time', { ascending: false }),
       ])
       if (cancelled) return
       if (entryRows) setEntries(entryRows.map(row => ({ ...row, ...resolveEntryDisplay(row) } as Entry)))
       if (laneRows) setLanes(laneRows as Lane[])
+      if (logRows) setActivityLog(logRows.map(row => ({
+        id: row.id, entry_time: row.entry_time, note: row.note,
+        author_name: row.author_personnel_id ? (deptPersonnel.find(p => p.id === row.author_personnel_id)?.name ?? '—') : '—',
+      })))
     }
 
     async function subscribeChannel() {
@@ -250,6 +257,15 @@ export default function AccountabilityBoard({
           payload => {
             const row = payload.new as Lane
             setLanes(prev => prev.some(l => l.id === row.id) ? prev : [...prev, row].sort((a, b) => a.sort_order - b.sort_order))
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'accountability_activity_log', filter: `board_id=eq.${boardId}` },
+          payload => {
+            const row = payload.new as { id: string; entry_time: string; note: string; author_personnel_id: string | null }
+            const authorName = row.author_personnel_id ? (deptPersonnel.find(p => p.id === row.author_personnel_id)?.name ?? '—') : '—'
+            setActivityLog(prev => prev.some(a => a.id === row.id) ? prev : [{ id: row.id, entry_time: row.entry_time, note: row.note, author_name: authorName }, ...prev])
           }
         )
         .subscribe()
