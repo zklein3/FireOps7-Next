@@ -10,14 +10,27 @@ interface Lane {
   active: boolean
 }
 
-export default function AccountabilitySettingsClient({
-  lanes: initialLanes,
-  departmentId,
-}: {
+type ProfileKey = 'default' | 'ics' | 'active_violence'
+
+interface ProfileData {
+  profile: ProfileKey
+  label: string
+  description: string
   lanes: Lane[]
+  builtInPreset: string[] | null
+}
+
+export default function AccountabilitySettingsClient({
+  departmentId,
+  profiles,
+}: {
   departmentId: string
+  profiles: ProfileData[]
 }) {
-  const [lanes, setLanes] = useState<Lane[]>(initialLanes)
+  const [activeProfile, setActiveProfile] = useState<ProfileKey>('default')
+  const [allLanes, setAllLanes] = useState<Record<ProfileKey, Lane[]>>(
+    Object.fromEntries(profiles.map(p => [p.profile, p.lanes])) as Record<ProfileKey, Lane[]>
+  )
   const [newName, setNewName] = useState('')
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -25,14 +38,21 @@ export default function AccountabilitySettingsClient({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  const current = profiles.find(p => p.profile === activeProfile)!
+  const lanes = allLanes[activeProfile]
+
+  function setLanesFor(profile: ProfileKey, updater: (lanes: Lane[]) => Lane[]) {
+    setAllLanes(prev => ({ ...prev, [profile]: updater(prev[profile]) }))
+  }
+
   async function handleAdd() {
     if (!newName.trim()) return
     setAdding(true)
     setError(null)
-    const res = await addLaneTemplate(departmentId, newName.trim())
+    const res = await addLaneTemplate(departmentId, newName.trim(), activeProfile)
     setAdding(false)
     if (res?.error) { setError(res.error); return }
-    setLanes(prev => [...prev, {
+    setLanesFor(activeProfile, prev => [...prev, {
       id: crypto.randomUUID(),
       name: newName.trim(),
       sort_order: prev.length,
@@ -48,14 +68,14 @@ export default function AccountabilitySettingsClient({
     const res = await updateLaneTemplate(id, editName.trim())
     setSaving(false)
     if (res?.error) { setError(res.error); return }
-    setLanes(prev => prev.map(l => l.id === id ? { ...l, name: editName.trim() } : l))
+    setLanesFor(activeProfile, prev => prev.map(l => l.id === id ? { ...l, name: editName.trim() } : l))
     setEditingId(null)
   }
 
   async function handleToggle(id: string, active: boolean) {
     const res = await toggleLaneTemplate(id, active)
     if (res?.error) { setError(res.error); return }
-    setLanes(prev => prev.map(l => l.id === id ? { ...l, active } : l))
+    setLanesFor(activeProfile, prev => prev.map(l => l.id === id ? { ...l, active } : l))
   }
 
   async function handleMove(id: string, direction: 'up' | 'down') {
@@ -67,25 +87,43 @@ export default function AccountabilitySettingsClient({
     const swap = direction === 'up' ? idx - 1 : idx + 1
     ;[next[idx], next[swap]] = [next[swap], next[idx]]
     const reordered = next.map((l, i) => ({ ...l, sort_order: i }))
-    setLanes(reordered)
+    setLanesFor(activeProfile, () => reordered)
     await reorderLaneTemplates(departmentId, reordered.map(l => l.id))
   }
 
   return (
     <div className="max-w-xl">
-      <div className="flex items-center gap-3 mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-zinc-900">Accountability Lanes</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Default lane assignments copied into every incident. Reorder, rename, or deactivate as needed.</p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-zinc-900">Accountability Lanes</h1>
+        <p className="text-sm text-zinc-500 mt-0.5">Built-in presets are used until you set your own — customize any profile below.</p>
       </div>
+
+      <div className="flex gap-1 mb-4 border-b border-zinc-200">
+        {profiles.map(p => (
+          <button key={p.profile} type="button" onClick={() => { setActiveProfile(p.profile); setEditingId(null); setError(null) }}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeProfile === p.profile ? 'border-red-700 text-red-700' : 'border-transparent text-zinc-500 hover:text-zinc-800'
+            }`}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-sm text-zinc-500 mb-4">{current.description}</p>
 
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
+      {current.builtInPreset && lanes.length === 0 && (
+        <div className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+          Using the built-in preset — no custom lanes set for this profile yet: <strong>{current.builtInPreset.join(', ')}</strong>.
+          Add a lane below to start customizing; once you do, your list replaces the preset for this profile.
+        </div>
+      )}
+
       <div className="rounded-xl bg-white shadow-sm border border-zinc-200 divide-y divide-zinc-100 mb-4">
-        {lanes.length === 0 && (
+        {lanes.length === 0 && !current.builtInPreset && (
           <p className="px-4 py-6 text-sm text-zinc-400 text-center">No lanes yet.</p>
         )}
         {lanes.map((lane, idx) => (

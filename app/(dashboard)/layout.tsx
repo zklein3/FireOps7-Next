@@ -60,6 +60,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let moduleOperations = false
   let moduleIso = false
   let moduleNeris = false
+  let moduleIcs = false
   let pendingSignatureCount = 0
   if (!viewingSysAdminOverview && user?.department_id && user?.id) {
     const adminClient = createAdminClient()
@@ -73,7 +74,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       isOfficerOrAbove
         ? adminClient.from('public_record_requests').select('id').eq('department_id', user.department_id).eq('status', 'pending')
         : Promise.resolve({ data: [] }),
-      adminClient.from('departments').select('public_site_enabled, module_operations, module_iso, module_neris, module_medical').eq('id', user.department_id).single(),
+      adminClient.from('departments').select('public_site_enabled, module_operations, module_iso, module_neris, module_medical, module_ics').eq('id', user.department_id).single(),
       adminClient.from('incident_signatures').select('id', { count: 'exact', head: true }).eq('personnel_id', user.id).is('signed_at', null),
       Promise.resolve({ count: 0, data: null, error: null }), // medical alert resolved after deptFlags
     ])
@@ -84,6 +85,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     moduleOperations = (deptFlags as any)?.module_operations ?? false
     moduleIso = (deptFlags as any)?.module_iso ?? false
     moduleNeris = (deptFlags as any)?.module_neris ?? false
+    moduleIcs = (deptFlags as any)?.module_ics ?? false
     const moduleMedical = (deptFlags as any)?.module_medical ?? false
 
     // Medical alert badge — only when module is enabled
@@ -134,12 +136,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { items: [{ href: '/operations', label: 'Operations', badge: opsBadge }] },
     { items: [{ href: '/inbox', label: 'Inbox', badge: inboxBadge }] },
     ...(isOfficerOrAbove ? [{ items: [{ href: '/officer', label: 'Officer' }] }] : []),
+    ...(moduleIcs ? [{ items: [{ href: '/ics', label: 'ICS' }] }] : []),
     { items: [{ href: '/personnel', label: 'Personnel' }] },
     { items: [{ href: '/training', label: 'Training' }] },
     { items: [{ href: '/equipment', label: 'Inventory' }] },
     { items: [{ href: '/reports', label: 'Reports' }] },
   ] : [
     { items: [{ href: '/dashboard', label: 'Dashboard' }] },
+    ...(moduleIcs ? [{ items: [{ href: '/ics', label: 'ICS' }] }] : []),
     { items: [{ href: '/personnel', label: 'Personnel' }] },
     { items: [{ href: '/training', label: 'Training' }] },
     { items: [{ href: '/reports', label: 'Reports' }] },

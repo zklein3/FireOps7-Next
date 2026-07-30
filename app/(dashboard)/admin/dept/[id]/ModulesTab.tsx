@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { updateDepartmentModules, saveNerisEntityId } from '@/app/actions/departments'
 
 interface Bundle {
-  key: 'module_operations' | 'module_iso' | 'module_neris' | 'module_medical' | 'module_fuel_storage' | 'public_site_enabled'
+  key: 'module_operations' | 'module_iso' | 'module_neris' | 'module_medical' | 'module_fuel_storage' | 'module_ics' | 'public_site_enabled'
   label: string
   description: string
   features: string[]
@@ -19,6 +19,7 @@ export default function ModulesTab({
   moduleMedical,
   moduleMedicalControlled,
   moduleFuelStorage,
+  moduleIcs,
   publicSiteEnabled,
   nerisEntityId,
 }: {
@@ -29,6 +30,7 @@ export default function ModulesTab({
   moduleMedical: boolean
   moduleMedicalControlled: boolean
   moduleFuelStorage: boolean
+  moduleIcs: boolean
   publicSiteEnabled: boolean
   nerisEntityId: string | null
 }) {
@@ -41,6 +43,7 @@ export default function ModulesTab({
     module_medical: moduleMedical,
     module_medical_controlled: moduleMedicalControlled,
     module_fuel_storage: moduleFuelStorage,
+    module_ics: moduleIcs,
     public_site_enabled: publicSiteEnabled,
   })
   const [entityId, setEntityId] = useState(nerisEntityId ?? '')
@@ -116,6 +119,13 @@ export default function ModulesTab({
       description: 'Fuel tank inventory and fill-up logging. Dept admins can also self-enable this from Dept Admin.',
       features: ['Fuel tank inventory', 'Apparatus fuel log', 'Fuel usage & cost report'],
       enabled: state.module_fuel_storage,
+    },
+    {
+      key: 'module_ics',
+      label: 'ICS — Incident Command System',
+      description: 'Cross-department ICS packets (201/202/203/204/205/206/207/211/214). Available to fire, police, and EM departments alike.',
+      features: ['Operational-period ICS packets, snapshotted from the accountability board', 'Cross-department interoperability (agency grants, jurisdiction)', 'ICS 211 check-in list & 214 activity log'],
+      enabled: state.module_ics,
     },
   ]
 

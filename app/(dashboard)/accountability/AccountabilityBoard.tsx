@@ -7,12 +7,12 @@ import { parseSalamanderCard, parseFireOps7Card, isFireOps7Card, salamanderCanon
 import {
   initBoardLanes, addBoardLane,
   checkInPerson, movePersonToLane, removeAccountabilityEntry, updateEntryName, recordPAR, saveDebugScan,
-  setBoardIcsFields, setEntryIcsRole, setLaneLeader, setLaneWorkAssignment, addActivityLogEntry,
+  setBoardIcsFields, setEntryIcsRole, setLaneLeader, setLaneWorkAssignment, addActivityLogEntry, logBoardStamp, renameLane,
   releaseAccountabilityEntry, reactivateAccountabilityEntry, linkAccountabilityEntryToPersonnel,
 } from '@/app/actions/accountability'
 import { ICS_COMMAND_ROLES, ICS_ACTIVE_VIOLENCE_ROLES, icsRoleLabel } from '@/lib/ics-roles'
 
-interface Lane { id: string; name: string; sort_order: number; leader_entry_id: string | null; work_assignment: string | null }
+interface Lane { id: string; name: string; sort_order: number; leader_entry_id: string | null; work_assignment: string | null; profile: 'default' | 'ics' | 'active_violence' | null }
 interface Entry {
   id: string
   lane_id: string | null
@@ -75,6 +75,7 @@ export default function AccountabilityBoard({
   initialSafetyMessage,
   initialWeather,
   initialIsActiveViolence,
+  initialNimsMode,
   initialActivityLog,
   currentUserName,
 }: {
@@ -89,6 +90,7 @@ export default function AccountabilityBoard({
   initialSafetyMessage: string | null
   initialWeather: string | null
   initialIsActiveViolence: boolean
+  initialNimsMode: boolean
   initialActivityLog: ActivityLogEntry[]
   currentUserName: string
 }) {
@@ -97,9 +99,14 @@ export default function AccountabilityBoard({
   const [scannerOpen, setScannerOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isActiveViolence, setIsActiveViolence] = useState(initialIsActiveViolence)
+  useEffect(() => { setIsActiveViolence(initialIsActiveViolence) }, [initialIsActiveViolence])
+  const [nimsMode, setNimsMode] = useState(initialNimsMode)
+  useEffect(() => { setNimsMode(initialNimsMode) }, [initialNimsMode])
+  const [renamingLaneId, setRenamingLaneId] = useState<string | null>(null)
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>(initialActivityLog)
   const [noteInput, setNoteInput] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
+  const [stampSaving, setStampSaving] = useState(false)
 
   const [addingLane, setAddingLane] = useState(false)
   const [newLaneName, setNewLaneName] = useState('')
@@ -193,7 +200,7 @@ export default function AccountabilityBoard({
           .select('id, board_id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref')
           .eq('board_id', boardId).order('checked_in_at'),
         supabase.from('accountability_lanes')
-          .select('id, name, sort_order, leader_entry_id, work_assignment')
+          .select('id, name, sort_order, leader_entry_id, work_assignment, profile')
           .eq('board_id', boardId).order('sort_order'),
       ])
       if (cancelled) return
@@ -442,17 +449,20 @@ export default function AccountabilityBoard({
     if (res?.error) setError(res.error)
   }
 
+  async function handleRenameLane(lane: Lane, value: string) {
+    const trimmed = value.trim()
+    setRenamingLaneId(null)
+    if (!trimmed || trimmed === lane.name) return
+    setLanes(prev => prev.map(l => l.id === lane.id ? { ...l, name: trimmed } : l))
+    const res = await renameLane(lane.id, trimmed)
+    if (res?.error) setError(res.error)
+  }
+
   async function handleLaneWorkAssignmentBlur(lane: Lane, value: string) {
     const trimmed = value.trim() || null
     if (trimmed === lane.work_assignment) return
     setLanes(prev => prev.map(l => l.id === lane.id ? { ...l, work_assignment: trimmed } : l))
     const res = await setLaneWorkAssignment(lane.id, value)
-    if (res?.error) setError(res.error)
-  }
-
-  async function handleToggleActiveViolence(checked: boolean) {
-    setIsActiveViolence(checked)
-    const res = await setBoardIcsFields(boardId, { is_active_violence: checked })
     if (res?.error) setError(res.error)
   }
 
@@ -473,7 +483,26 @@ export default function AccountabilityBoard({
     setNoteInput('')
   }
 
+  async function handleLogStamp() {
+    setStampSaving(true)
+    const res = await logBoardStamp(boardId, noteInput)
+    setStampSaving(false)
+    if (res?.error) { setError(res.error); return }
+    if (res.entry) {
+      setActivityLog(prev => [{ id: res.entry.id, entry_time: res.entry.entry_time, note: res.entry.note, author_name: currentUserName }, ...prev])
+    }
+    setNoteInput('')
+  }
+
   function renderEntryCard(entry: Entry) {
+    // Only offer positions nobody else currently holds — a role someone else is
+    // already in disappears from every other entry's list, but stays selectable
+    // here if it's this entry's own current assignment.
+    const takenRoles = new Set(
+      activeEntries.filter(e => e.id !== entry.id && e.ics_role).map(e => e.ics_role)
+    )
+    const availableCommandRoles = ICS_COMMAND_ROLES.filter(r => !takenRoles.has(r.value) || r.value === entry.ics_role)
+    const availableActiveViolenceRoles = ICS_ACTIVE_VIOLENCE_ROLES.filter(r => !takenRoles.has(r.value) || r.value === entry.ics_role)
     return (
       <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm w-full">
         <div onClick={() => isOfficerOrAbove ? setMovingEntryId(entry.id) : undefined}
@@ -489,11 +518,11 @@ export default function AccountabilityBoard({
             className="shrink-0 max-w-[130px] rounded border border-zinc-300 px-1 py-1 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
             <option value="">ICS Role —</option>
             <optgroup label="Command">
-              {ICS_COMMAND_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              {availableCommandRoles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </optgroup>
             {isActiveViolence && (
               <optgroup label="Active Violence">
-                {ICS_ACTIVE_VIOLENCE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                {availableActiveViolenceRoles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </optgroup>
             )}
           </select>
@@ -581,6 +610,17 @@ export default function AccountabilityBoard({
   const activeEntries = entries.filter(e => e.status !== 'released')
   const releasedEntries = entries.filter(e => e.status === 'released')
     .sort((a, b) => new Date(b.released_at ?? 0).getTime() - new Date(a.released_at ?? 0).getTime())
+
+  // A lane never disappears if anyone's actually checked into it — only empty
+  // lanes get hidden/shown based on which mode(s) are currently active. Lanes with
+  // no profile (added ad hoc via + Lane) always show, regardless of mode.
+  const visibleLanes = lanes.filter(lane => {
+    if (activeEntries.some(e => e.lane_id === lane.id)) return true
+    if (lane.profile === 'default') return !nimsMode && !isActiveViolence
+    if (lane.profile === 'ics') return nimsMode
+    if (lane.profile === 'active_violence') return isActiveViolence
+    return true
+  })
 
   return (
     <div>
@@ -819,15 +859,9 @@ export default function AccountabilityBoard({
       )}
 
       <div className="mb-4 flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white p-3">
-        {isOfficerOrAbove ? (
-          <label className="flex items-center gap-2 text-sm font-semibold text-red-700">
-            <input type="checkbox" checked={isActiveViolence}
-              onChange={e => handleToggleActiveViolence(e.target.checked)} />
-            Active Violence / Mass Casualty Event
-          </label>
-        ) : isActiveViolence ? (
+        {isActiveViolence && (
           <p className="text-sm font-semibold text-red-700">⚠ Active Violence / Mass Casualty Event</p>
-        ) : null}
+        )}
         <div>
           <label className="block text-xs font-medium text-zinc-500 mb-1 uppercase tracking-wide">Objectives</label>
           <textarea disabled={!isOfficerOrAbove} defaultValue={initialObjectives ?? ''} rows={2}
@@ -852,12 +886,25 @@ export default function AccountabilityBoard({
       </div>
 
       <div className="flex flex-col gap-4">
-        {lanes.map(lane => {
+        {visibleLanes.map(lane => {
           const inLane = activeEntries.filter(e => e.lane_id === lane.id)
           return (
             <div key={lane.id} className="rounded-xl border border-zinc-200 bg-zinc-50 overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-2 bg-zinc-100 border-b border-zinc-200">
-                <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600 shrink-0">{lane.name}</span>
+                {nimsMode && isOfficerOrAbove && renamingLaneId === lane.id ? (
+                  <input autoFocus key={`${lane.id}-rename`} defaultValue={lane.name}
+                    onBlur={e => handleRenameLane(lane, e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                    className="text-xs font-semibold uppercase tracking-wide text-zinc-600 shrink-0 rounded border border-red-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-red-500 w-32" />
+                ) : nimsMode && isOfficerOrAbove ? (
+                  <button type="button" onClick={() => setRenamingLaneId(lane.id)}
+                    className="text-xs font-semibold uppercase tracking-wide text-zinc-600 shrink-0 hover:underline decoration-dashed underline-offset-2"
+                    title="Rename lane">
+                    {lane.name} ✎
+                  </button>
+                ) : (
+                  <span className="text-xs font-semibold uppercase tracking-wide text-zinc-600 shrink-0">{lane.name}</span>
+                )}
                 {isOfficerOrAbove ? (
                   <input key={`${lane.id}-wa`} defaultValue={lane.work_assignment ?? ''}
                     onBlur={e => handleLaneWorkAssignmentBlur(lane, e.target.value)}
@@ -935,7 +982,15 @@ export default function AccountabilityBoard({
       )}
 
       <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">Activity Log</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Activity Log</p>
+          {isOfficerOrAbove && (
+            <button type="button" disabled={stampSaving} onClick={handleLogStamp}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 transition-colors">
+              {stampSaving ? 'Logging…' : 'Log 214'}
+            </button>
+          )}
+        </div>
         <div className="flex gap-2 mb-3">
           <input value={noteInput} onChange={e => setNoteInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleAddNote() }}

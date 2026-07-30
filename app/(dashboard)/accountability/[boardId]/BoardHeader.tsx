@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { closeBoard, reopenBoard, updateBoardLink } from '@/app/actions/accountability'
+import { closeBoard, reopenBoard, updateBoardLink, setBoardIcsFields } from '@/app/actions/accountability'
+import { createIcsIncident } from '@/app/actions/ics'
 
 export default function BoardHeader({
   boardId,
@@ -14,6 +15,10 @@ export default function BoardHeader({
   linkedIncidentLabel,
   isOfficerOrAbove,
   incidentOptions,
+  moduleIcs,
+  existingIcsIncidentId,
+  initialIsActiveViolence,
+  initialNimsMode,
 }: {
   boardId: string
   title: string
@@ -23,9 +28,35 @@ export default function BoardHeader({
   linkedIncidentLabel: string | null
   isOfficerOrAbove: boolean
   incidentOptions: { id: string; label: string }[]
+  moduleIcs: boolean
+  existingIcsIncidentId: string | null
+  initialIsActiveViolence: boolean
+  initialNimsMode: boolean
 }) {
   const router = useRouter()
   const [toggling, setToggling] = useState(false)
+  const [openingIcs, setOpeningIcs] = useState(false)
+  const [isActiveViolence, setIsActiveViolence] = useState(initialIsActiveViolence)
+  const [nimsMode, setNimsMode] = useState(initialNimsMode)
+  const [modeSaving, setModeSaving] = useState<'violence' | 'nims' | null>(null)
+
+  async function handleToggleMode(field: 'is_active_violence' | 'nims_mode', checked: boolean) {
+    setModeSaving(field === 'is_active_violence' ? 'violence' : 'nims')
+    const res = await setBoardIcsFields(boardId, { [field]: checked })
+    setModeSaving(null)
+    if (res?.error) return
+    if (field === 'is_active_violence') setIsActiveViolence(checked)
+    else setNimsMode(checked)
+    router.refresh()
+  }
+
+  async function handleOpenIcsPacket() {
+    if (existingIcsIncidentId) { router.push(`/ics/${existingIcsIncidentId}`); return }
+    setOpeningIcs(true)
+    const result = await createIcsIncident(title, null, boardId)
+    setOpeningIcs(false)
+    if (result?.id) router.push(`/ics/${result.id}`)
+  }
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkType, setLinkType] = useState<'none' | 'incident'>(linkedIncidentId ? 'incident' : 'none')
   const [selectedIncident, setSelectedIncident] = useState(linkedIncidentId ?? '')
@@ -82,6 +113,12 @@ export default function BoardHeader({
         </div>
         {isOfficerOrAbove && (
           <div className="flex gap-2 shrink-0">
+            {moduleIcs && (
+              <button type="button" disabled={openingIcs} onClick={handleOpenIcsPacket}
+                className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors shadow-sm disabled:opacity-50">
+                {openingIcs ? 'Opening…' : existingIcsIncidentId ? 'View ICS Packet' : 'Open ICS Packet'}
+              </button>
+            )}
             <button type="button" onClick={() => setLinkOpen(true)}
               className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 transition-colors shadow-sm">
               Link
@@ -96,6 +133,27 @@ export default function BoardHeader({
             </button>
           </div>
         )}
+      </div>
+
+      <div className="mb-5 rounded-xl border border-zinc-200 bg-white p-3 flex flex-wrap gap-x-6 gap-y-2">
+        {isOfficerOrAbove ? (
+          <label className="flex items-center gap-2 text-sm font-semibold text-red-700">
+            <input type="checkbox" checked={isActiveViolence} disabled={modeSaving === 'violence'}
+              onChange={e => handleToggleMode('is_active_violence', e.target.checked)} />
+            Active Violence / Mass Casualty Event
+          </label>
+        ) : isActiveViolence ? (
+          <p className="text-sm font-semibold text-red-700">⚠ Active Violence / Mass Casualty Event</p>
+        ) : null}
+        {isOfficerOrAbove ? (
+          <label className="flex items-center gap-2 text-sm font-semibold text-zinc-700">
+            <input type="checkbox" checked={nimsMode} disabled={modeSaving === 'nims'}
+              onChange={e => handleToggleMode('nims_mode', e.target.checked)} />
+            ICS / NIMS Mode
+          </label>
+        ) : nimsMode ? (
+          <p className="text-sm font-semibold text-zinc-700">ICS / NIMS Mode active</p>
+        ) : null}
       </div>
 
       {linkOpen && (

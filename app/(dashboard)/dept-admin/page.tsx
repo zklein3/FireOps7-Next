@@ -87,7 +87,7 @@ export default async function DeptAdminPage() {
         />
         <HubCard
           title="Accountability"
-          description="Configure default incident accountability lanes"
+          description="Configure accountability lanes — default, ICS/NIMS Mode, and Active Violence profiles"
           href="/dept-admin/accountability"
         />
         <HubCard

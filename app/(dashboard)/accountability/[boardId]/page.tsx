@@ -23,9 +23,16 @@ export default async function AccountabilityBoardPage({
   const department_id = ctx.departmentId
   const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
 
+  const { data: deptFlags } = await adminClient.from('departments').select('module_ics').eq('id', department_id).single()
+  const moduleIcs = deptFlags?.module_ics ?? false
+
+  const { data: existingIcsIncident } = moduleIcs
+    ? await adminClient.from('ics_incidents').select('id').eq('linked_accountability_board_id', boardId).maybeSingle()
+    : { data: null }
+
   const { data: board } = await adminClient
     .from('accountability_boards')
-    .select('id, title, board_date, status, linked_incident_id, linked_training_event_id, linked_event_instance_id, objectives, safety_message, weather, is_active_violence')
+    .select('id, title, board_date, status, linked_incident_id, linked_training_event_id, linked_event_instance_id, objectives, safety_message, weather, is_active_violence, nims_mode')
     .eq('id', boardId)
     .eq('department_id', department_id)
     .single()
@@ -43,7 +50,7 @@ export default async function AccountabilityBoardPage({
   // Lanes + entries
   const { data: lanes } = await adminClient
     .from('accountability_lanes')
-    .select('id, name, sort_order, leader_entry_id, work_assignment')
+    .select('id, name, sort_order, leader_entry_id, work_assignment, profile')
     .eq('board_id', boardId)
     .order('sort_order')
 
@@ -56,7 +63,7 @@ export default async function AccountabilityBoardPage({
   // Activity log
   const { data: activityLogRaw } = await adminClient
     .from('accountability_activity_log')
-    .select('id, entry_time, note, author_personnel_id')
+    .select('id, entry_time, note, author_personnel_id, lane_id')
     .eq('board_id', boardId)
     .order('entry_time', { ascending: false })
 
@@ -70,9 +77,11 @@ export default async function AccountabilityBoardPage({
     : { data: [] }
   const nameMap = Object.fromEntries((personnelRaw ?? []).map(p => [p.id, `${p.first_name} ${p.last_name}`]))
 
+  const laneNameMap = Object.fromEntries((lanes ?? []).map(l => [l.id, l.name]))
   const activityLog = (activityLogRaw ?? []).map(a => ({
     ...a,
     author_name: a.author_personnel_id ? (nameMap[a.author_personnel_id] ?? '—') : '—',
+    lane_name: a.lane_id ? (laneNameMap[a.lane_id] ?? null) : null,
   }))
 
   // Dept personnel list — includes role title so checked-in members show dept + position
@@ -150,6 +159,10 @@ export default async function AccountabilityBoardPage({
         linkedIncidentLabel={linkedIncidentLabel}
         isOfficerOrAbove={isOfficerOrAbove}
         incidentOptions={incidentOptions}
+        moduleIcs={moduleIcs}
+        existingIcsIncidentId={existingIcsIncident?.id ?? null}
+        initialIsActiveViolence={board.is_active_violence}
+        initialNimsMode={board.nims_mode}
       />
 
       <AccountabilityBoard
@@ -164,6 +177,7 @@ export default async function AccountabilityBoardPage({
         initialSafetyMessage={board.safety_message}
         initialWeather={board.weather}
         initialIsActiveViolence={board.is_active_violence}
+        initialNimsMode={board.nims_mode}
         initialActivityLog={activityLog}
         currentUserName={[me.first_name, me.last_name].filter(Boolean).join(' ') || '—'}
       />

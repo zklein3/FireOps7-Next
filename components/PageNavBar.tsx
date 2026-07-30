@@ -7,7 +7,7 @@ function getParentHub(pathname: string): { label: string; href: string } | null 
   if (pathname === '/dashboard') return null
 
   // Hub pages → parent is Dashboard
-  const topHubs = ['/operations', '/personnel', '/training', '/equipment', '/reports', '/dept-admin']
+  const topHubs = ['/operations', '/personnel', '/training', '/equipment', '/reports', '/dept-admin', '/ics']
   if (topHubs.includes(pathname)) return { label: 'Dashboard', href: '/dashboard' }
 
   // ISO hub → parent is Dept Admin
@@ -20,6 +20,10 @@ function getParentHub(pathname: string): { label: string; href: string } | null 
     pathname.startsWith('/accountability') ||
     pathname === '/inbox'
   ) return { label: 'Operations', href: '/operations' }
+
+  // ICS sub-pages
+  if (pathname.startsWith('/ics/'))
+    return { label: 'ICS', href: '/ics' }
 
   // Training sub-pages
   if (pathname.startsWith('/events') || pathname.startsWith('/training'))

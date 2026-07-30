@@ -26,12 +26,34 @@ Session notes captured 2026-06-26. Forward-looking roadmap — not yet built. Se
 - Module/feature flag system already partially built (`module_operations`, `module_iso`) — extend it to support department type
 - No duplication of the database or codebase needed
 
-## Emergency Management (EM) Vertical — FUTURE, noted 2026-07-25
+## Emergency Management (EM) Vertical — FUTURE, noted 2026-07-25, expanded 2026-07-26
 
 - New `department_type` value: `emergency_management` — same small community as an existing fire/police pilot (e.g. Yutan/Winslow), not a separate customer
 - Intent: EM becomes a home for functions that currently live awkwardly inside the fire or police verticals because there's nowhere else to put them (e.g. anything spanning both — mutual aid coordination, community-wide incident command, resource/asset tracking that isn't apparatus-specific, public alerting)
 - Framing: a small town's EM director is often the same person wearing a fire or police hat too — this isn't a new market, it's unbundling functionality that's currently mis-homed under `fire` or `law_enforcement` into its own department-type context
-- Not scoped yet — no specific function list decided on which pieces move out of police/fire first. Revisit once a concrete EM pilot contact exists (parallel to how Terry's Yutan PD pilot drove the `law_enforcement` build-out) rather than guessing at EM-specific schema now
+- Not scoped yet in code — no specific function list decided on which pieces move out of police/fire first, no nav/UI built. `department_type` schema value added 2026-07-26 (see "Schema — added ahead of pilot" below) so a dept can be flagged EM whenever needed, without any EM-specific tables/forms yet. Revisit the actual build once a concrete EM pilot contact exists (parallel to how Terry's Yutan PD pilot drove the `law_enforcement` build-out) rather than guessing at EM-specific schema now
+
+### Candidate EM functions (brainstormed 2026-07-26, none scoped/built)
+
+The ICS module (see below) is the anchor because it's a national standard (FEMA/NIMS) rather than one town's preference — same reasoning applies to the rest of this list, so these are safe to eventually schema out without a live pilot dictating field-level shape, unlike the police contact/business-check forms which correctly waited for Terry's actual paper forms:
+
+- **EOC Activation tracking** — activation level (monitoring/partial/full), operational periods, staffing pattern, activation/deactivation timestamps. Pairs with ICS 214 activity logs.
+- **Situation Reports (SitRep)** — periodic structured status updates during an incident (weather, resources committed, priorities, next operational period). Standard NIMS format, reuses existing incident data.
+- **Local Emergency/Disaster Declaration** — declaration date, authority, scope, expiration/renewal — the legal trigger that unlocks mutual aid and state/federal resources.
+- **Preliminary Damage Assessment (PDA)** — FEMA-standard fields for residential/commercial/public damage counts and dollar estimates, feeds a declaration request. Could reuse the existing photo-upload + Claude-parse pattern from outside training submissions.
+- **Shelter Management** — shelter locations, capacity, open/closed status, resident check-in — near-direct reuse of the kiosk/QR check-in system already built for stations (§Use Case B in CLAUDE.md).
+- **Mutual Aid Resource Requests (EMAC-style)** — request/offer tracking for resources beyond local capacity. `iso_mutual_aid_agreements` already exists; this would be the "activate an agreement during a real event" counterpart.
+- **After-Action Report / Improvement Plan (AAR/IP)** — standard HSEEP format: what happened, what worked, corrective actions with owners/due dates.
+- **Exercise Tracking (HSEEP)** — tabletop/functional/full-scale exercises logged against ICS cert types already supported (100/200/300/400) — essentially the training module with an HSEEP-shaped record type.
+- **EM Duty Officer Roster** — who's on-call for EM this week/month, simple on-call schedule for after-hours activation.
+- **LEOP builds** (Local Emergency Operations Plan) — the standing planning document EM directors maintain (base plan + functional/hazard-specific annexes). Build it with the same dynamic form/section-builder pattern as the inspection template builder ("Forms as a Product" above) rather than a static upload — sections, versioning, and review/renewal dates as structured data instead of a single PDF nobody updates.
+- **Document shares** — the general capability of sharing a document (LEOP, an annex, an SOP) with another department, not an EM-only feature but confirmed as needed for EM first. Same Supabase storage pattern already used elsewhere (photo uploads, asset documents) plus a sharing grant — likely the same shape as the `ics_incident_agencies` interoperability grant below (owning dept controls who gets read access), so the two features should share one grant mechanism rather than inventing a second one.
+- Confirmed direction (2026-07-29): unlike the rest of this list, EM gets a **full build-out**, not just a stubbed department type — Fire and Police get their own verticals built out already/in progress, EM is the third leg of that, sequenced the same way (wait for a real pilot to prioritize which pieces first), not treated as an afterthought.
+
+### Schema — added ahead of pilot (2026-07-26)
+
+- `departments.department_type` check constraint (`departments_department_type_check`) extended to include `emergency_management` — migration applied directly 2026-07-26. Schema-only, no UI to select it yet (same as today: `createDepartment` doesn't expose `department_type` at all, existing non-fire depts were set via direct SQL, e.g. Yutan PD). `department-theme.ts` and nav gating already default any non-`fire` type to the navy/MuniOps treatment, so an EM dept would render reasonably (stripped nav, generic branding) with zero further code changes the moment one is created.
+- Deliberately stopped here — no EM-specific tables, no nav additions, no forms. Add pieces from the candidate list above incrementally once a real EM pilot defines which ones actually matter first.
 
 ## Terry's Yutan Police Pilot Plan
 
@@ -89,32 +111,78 @@ Session notes captured 2026-06-26. Forward-looking roadmap — not yet built. Se
 
 Off by default — explicitly inactive until admin toggles it on per department. No clutter for departments not ready for it — only appears when enabled. Activated via department module toggle in admin settings.
 
-**Core concept:**
-- When opened, pulls existing data already in the system — incident details, personnel roster, apparatus assignments
-- No re-entering data that already exists
-- Built-in form fill instructions alongside each field — members know what goes where and why
-- Each ICS position has guidance on responsibilities and what to document
+**Cross-vertical requirement (discussed 2026-07-26):** fire, police, and EM all need ICS — it can't be built as a feature bolted onto fire's `incidents` table, or nested in the fire-only Operations hub (hidden entirely for non-fire depts). It has to be its own core-platform module. Confirmed 2026-07-29: build ICS from the ground up as its own module. Conceptually/thematically it's rooted in the EM vertical (EM's whole job is cross-agency coordination, and it's where the fullest experience eventually lives) — but that's a documentation/product-narrative frame, not a technical dependency. See "Backend ownership" below.
 
-**ICS Forms to support:**
-- ICS 201 — Incident Briefing
-- ICS 202 — Incident Objectives
-- ICS 203 — Organization Assignment List (pulls from personnel roster)
-- ICS 204 — Assignment List (pulls from apparatus assignments)
-- ICS 205 — Incident Radio Communications Plan
-- ICS 206 — Medical Plan
-- ICS 207 — Incident Organization Chart (visual org chart)
-- ICS 214 — Activity Log
+**Architecture:**
+- New `module_ics` flag (doesn't exist yet — not the same as `module_iso`, which is the unrelated Insurance Services Office rating module). Toggled per-department like `module_medical`/`module_iso` today, independent of `department_type` — fire, police, EM, or municipal can each turn it on separately.
+- Nav: its own top-level entry (or small "Command" hub), shown purely on `module_ics`, not nested under Operations.
+- New `ics_incidents` table, department-owned, standing alone — does NOT require a linked fire `incidents` row. Optional `linked_incident_id` so a fire dept still gets auto-pull convenience when a real incident exists, but it's never a hard dependency (police/EM won't have one).
+- Build sequencing decision (2026-07-29): build the full ICS data model first, then wire in access points per section (a link from the accountability board, a link from the incident page, a standalone entry point for police/EM) — rather than half-building ICS logic scattered across existing pages before the core model is solid.
+
+**Backend ownership (clarified 2026-07-29):** the tables are department-neutral — every ICS table just has a generic `department_id` FK, same as `incidents`/`apparatus`/`department_personnel`. Nothing requires an EM department row to exist; a fire or police dept with `module_ics` on creates and owns its own `ics_incidents` rows directly. "EM owns it" means code organization (e.g. a shared `app/actions/ics.ts`, not nested under a police- or fire-specific folder) and product narrative (documented as EM's flagship feature in STRATEGY.md) — not a schema constraint. Fire and Police get full read/write on their own incidents, not a stripped-down guest view into "EM's" data.
+
+**Operational model — ICS forms are a backup to live data, not a primary entry point (clarified 2026-07-29):** on a routine call, nothing ICS-shaped gets touched at all. ICS only comes into play when an incident runs long enough to justify the paperwork — filled out after the fact ("on the back side" of a normal incident), then daily/per-shift if it keeps going. Concretely:
+- An incident does not get one ICS record — it gets one **per operational period**, created only when someone opens one.
+- **Opening a period is a snapshot-and-copy from the accountability board, not a live link** — same mechanic already proven by `accountability_par_checks.snapshot` (a jsonb capture of "lane→names at time of check"), just editable afterward instead of a frozen audit blob. At open time: current `accountability_entries` (personnel_id/raw_name/raw_dept, `ics_role`, lane) copy into that period's own assignment rows — now independently editable without touching the live board or retroactively changing an already-finalized prior period. Current `incident_apparatus`/`apparatus` + `incident_mutual_aid.apparatus_description` copy the same way into that period's resource rows. `accountability_boards.objectives`/`.safety_message`/`.weather` pre-fill as editable text — a starting point, not a permanent sync.
+- **ICS 214 doesn't get copied** — `accountability_activity_log` is already a chronological timestamped feed; a period's 214 is a straight read filtered to that period's time window, plus room for supplementary ICS-specific notes. History shouldn't be editable after the fact.
+
+**Form-by-form gather points (Fire side, mapped against the real schema 2026-07-29):**
+- **ICS 211 — Check-In List:** a real, mostly-free snapshot — direct pull from `accountability_entries.checked_in_at`, no new gather logic. Per-shift/per-period, continuously updated. This is the one to build first.
+- **ICS 201 — Incident Briefing:** mostly a snapshot too (`incidents` type/address/times/narrative, `incident_apparatus`+`apparatus`, `incident_personnel`), but taken once near the start rather than per period. Gap: no map/sketch field anywhere (address only, no lat/long) — stays manual.
+- **ICS 202/203/204/207 — the actual planning documents, NOT snapshots.** In real NIMS use these represent the **plan for the upcoming operational period**, built in the Planning Meeting using the current 211 as reference material — not a record of what already happened. This is where the real gap lives:
+  - **Blocked on shift assignments not existing yet.** Without a duty roster, there's no data source for "who's expected for Period 2" — the accountability board only knows who's checked in *right now*. Period 2's 203/204 has to start as a blank, hand-typed plan until shift assignments exist to answer that. Scoping decision needed before a real build: accept retrospective-only for v1, or treat this as the forcing function to build shift assignments first.
+  - **204 also needs a resource-planning concept that doesn't exist yet.** Real ICS resource planning is Kind + Type-tier + Quantity (e.g. "2 Engines, a Truck, a Medic, a patrol unit") — a *need*, independent of which specific unit fills it — not a link to a specific `apparatus` row. Checked `apparatus_types`: it's just `name`+`sort_order`, dept-scoped fire-only inventory categorization, no NIMS Type I–IV tiering, and police/EM have no equivalent table at all. Needs a new shared "resource kind" vocabulary usable across all three verticals (apparatus_types can seed the fire subset), with a resource-need row (kind/type/quantity/status: requested→staged→assigned) that only *optionally* links to a real `apparatus` row once a specific unit is actually dispatched — same two-tier linked-or-raw-text pattern as everywhere else in this design.
+- **ICS 205 — Radio Communications Plan:** real gap, nothing to gather — no channel/frequency table anywhere in the schema. Would need dept-level default channels (same "configure once, reuse per incident" pattern as Vehicle Check Items) plus per-incident assignment.
+- **ICS 206 — Medical Plan:** real gap — `medical_storerooms`/`medical_supply_types` are inventory, not an incident medical plan (nearest hospital, ambulance service, aid station). Same dept-default-then-override pattern as 205 would fit.
+- **ICS 214 — Activity Log:** continuous feed, not a snapshot — see operational model above.
+
+**Accountability board gains a "NIMS mode" (2026-07-29):** same cheap mechanism already proven by `is_active_violence` (a boolean on `accountability_boards` that just unlocks an extra role list + banner in `AccountabilityBoard.tsx` — nothing structural). A `nims_mode` flag the same way unlocks resource-need entries (kind/type/quantity/status) alongside the personnel entries the board already tracks — this is what makes the board double as the live staging/assignment tool during the incident, with ICS 211 just being a formatted report off of it. Everything else (202/203/204/205/206/207/214-as-a-finished-record) stays a separate, full ICS module — not crammed into the board's UI.
+
+**Interoperability — responding/mutual-aid agencies (ad hoc, per-incident):**
+- `ics_incident_agencies` join table (`ics_incident_id`, `department_id`, `added_by`, `added_at`, `status`, `closed_at`, `closed_by`). When an agency is dispatched, an admin on the incident searches all departments on the platform and adds them to that specific ICS incident — no standing relationship required, though `iso_mutual_aid_agreements` partners can be surfaced as quick-add suggestions.
+- Once added, that department's real roster/apparatus become selectable for ICS 203/204 instead of free text.
+- **Session/visibility wrinkle:** the added department's members are logged into their own department context, not the owning dept's — they need a "Shared With Your Department" list on their own dashboard showing ICS incidents where their dept appears in `ics_incident_agencies`, rather than a full department-context switch.
+- **Access level:** view the incident + self-log their own ICS 214 activity entries for their assigned position (mirrors existing event/training self check-in). Cannot close anyone else's portion or the incident itself.
+
+**Standing jurisdiction — EM oversight (2026-07-29, distinct from the ad hoc grant above):**
+- New `department_jurisdictions` table (`parent_department_id`, `child_department_id`) — e.g. County EM as parent, Winslow Fire and Yutan PD as children. Sys-admin configured, standing, not per-incident.
+- **Scoped strictly to interoperability tables** — `ics_incidents` (+ children), `iso_mutual_aid_agreements`, LEOP documents, and general document shares. Zero visibility or access into a child department's personnel, training, non-ICS incidents, inventory, or apparatus records. EM is a peer collaborator on the shared interoperability layer, not an overseer of the department — EM is not "the boss."
+- **Admin-level edit rights within that scope** (not read-only — corrected from an earlier read-only default). EM can edit ICS forms, mutual aid agreements, LEOP, and shared documents for departments in its jurisdiction, same as if they were a participant.
+- **"Should consult" handled as audit-trail visibility, not a hard approval gate.** Every edit made by a non-owning department shows who made it and when (e.g. "Edited by Cass County EM — 2026-07-29") — no approval workflow, just transparency so the owning department always sees EM's fingerprints on their own document.
+- This is separate from, and does not require, a Transfer of Command — jurisdiction never grants command authority, only standing edit access to the shared documents.
+
+**Transfer of Command (2026-07-29):** a real NIMS concept — command formally passing from the initial IC to another department (e.g. County EM taking over once a county emergency is declared), logged rather than implicit.
+- `ics_incidents` has a mutable **current owning department**, not a permanent value fixed at creation.
+- `ics_command_transfers` log (`from_department_id`, `to_department_id`, `transferred_at`, `transferred_by`, notes) — every handoff is a timestamped record.
+- Whoever currently owns it has full authority (edit, close, grant access). The previous owner drops to the same access level a granted/invited department has — still involved, no longer in command.
+
+**Per-agency close lifecycle (2026-07-29):** owner and invited/granted agencies collapse into one "participant" concept, each with independent status.
+- Every department involved in an incident — the one that opened it, plus any added via `ics_incident_agencies` — is a participant with its own `status` (active/closed), `closed_at`, `closed_by`. Each closes *their own* portion (their personnel/resource entries, their activity log contributions, their piece of the forms) whenever they're done, independent of the others.
+- The incident's overall status is **derived, not set directly** — stays open while any participant is active, flips to closed automatically when the last active participant closes theirs.
+- EM's standing jurisdiction access sits outside this lifecycle — can reopen the incident or edit data even after every agency has closed out and the derived status is closed, since that grant isn't tied to being an active participant.
+
+**Personnel and equipment — always available regardless of any of the above:**
+- ICS 203 (org assignment) and ICS 204 (resources/equipment, new `ics_incident_resources` table) both use the same two-tier shape:
+  - Linked to a real record — `department_personnel`/`apparatus` from the owning dept, or from an added dept once granted access
+  - OR raw `name`/`description` + `raw_agency` free text — always available, no dependency on the grant system, covers any outside agency, ad hoc volunteer, or piece of equipment nobody bothered to formally add. (`incident_mutual_aid.apparatus_description` already does exactly this for outside apparatus today — direct precedent.)
+- The grant/jurisdiction system only upgrades free text into a structured picker when it applies — it never gates the baseline ability to just type a name or a piece of equipment onto the incident.
+
+**ICS Forms to support:** 201, 202, 203, 204, 205, 206, 207, 211, 214 (211 added 2026-07-29 — see gather points above).
 
 **Connection to existing modules:**
-- Incidents module — ICS positions assigned per incident (IC, Safety Officer, Ops Chief, etc.)
+- Incidents module — optional link only, fire depts get auto-pull convenience; police/EM incidents stand alone
+- Accountability boards — source of truth for 211/214 and (via NIMS mode) the live staging/assignment tool; ICS periods snapshot from it, never the reverse
 - Training module — ICS 100/200/300/400 are just certification types already supported
 - Personnel profiles — show ICS qualifications, only show qualified personnel for each role when building command chart
+- ISO mutual aid agreements — surfaced as quick-add suggestions when adding an agency to an incident, not a requirement
 
 **Key design rules:**
 - Module is off until turned on — never visible by default
-- Always pulls existing data in — never ask for what's already there
+- Always pulls existing data in where a link exists — never ask for what's already there
+- Never gate manual entry (people or equipment) behind the department-grant/jurisdiction system — raw text is always the fallback
 - Instructions built into every form field — no guessing required
 - Printable ICS chart for command post use
+- Not scoped for actual build yet — this is architecture only, captured ahead of a real pilot per the same reasoning as the rest of the EM vertical above. A lot has converged here (2026-07-26 through 2026-07-29) — this is close to build-ready, but shift assignments (needed for real 203/204 forward planning) and the resource-kind vocabulary (needed for 204) are the two pieces most likely to need their own design pass before writing schema.
 
 ## Infrastructure & Scaling Plan
 

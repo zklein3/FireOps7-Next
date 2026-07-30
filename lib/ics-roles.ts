@@ -19,6 +19,13 @@ export const ICS_ACTIVE_VIOLENCE_ROLES = [
   { value: 'transportation_officer', label: 'Transportation Officer' },
 ] as const
 
+// Lane profiles ensured (additively — existing lanes are never touched or removed)
+// when a board is switched into each mode. Fire's own department defaults
+// (`accountability_lane_templates`) are the baseline for a board with neither
+// mode on — these only apply on top of whatever's already there.
+export const ICS_MODE_LANES = ['Staging', 'Command']
+export const ACTIVE_VIOLENCE_LANES = ['Staging', 'Command', 'Rescue Task Force', 'Triage', 'Treatment', 'Transport']
+
 export const ALL_ICS_ROLES = [...ICS_COMMAND_ROLES, ...ICS_ACTIVE_VIOLENCE_ROLES]
 export const ALL_ICS_ROLE_VALUES = ALL_ICS_ROLES.map(r => r.value)
 

@@ -75,7 +75,7 @@ export async function saveDeptInspectionSettings(formData: FormData) {
 
 export async function updateDepartmentModules(
   departmentId: string,
-  modules: { module_operations?: boolean; module_iso?: boolean; module_neris?: boolean; module_medical?: boolean; module_medical_controlled?: boolean; module_fuel_storage?: boolean; public_site_enabled?: boolean }
+  modules: { module_operations?: boolean; module_iso?: boolean; module_neris?: boolean; module_medical?: boolean; module_medical_controlled?: boolean; module_fuel_storage?: boolean; module_ics?: boolean; public_site_enabled?: boolean }
 ) {
   const authErr = await assertSysAdmin()
   if (authErr) return { error: authErr }

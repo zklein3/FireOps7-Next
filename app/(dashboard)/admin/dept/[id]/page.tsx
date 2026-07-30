@@ -19,7 +19,7 @@ export default async function SysAdminDeptPage({ params }: { params: Promise<{ i
   // Fetch department
   const { data: deptList } = await adminClient
     .from('departments')
-    .select('id, name, code, active, public_slug, public_site_enabled, public_phone, public_email, public_address, public_tagline, public_about, burn_permit_restrictions, burn_permit_county_info, module_operations, module_iso, module_neris, module_medical, module_medical_controlled, module_fuel_storage, neris_entity_id')
+    .select('id, name, code, active, public_slug, public_site_enabled, public_phone, public_email, public_address, public_tagline, public_about, burn_permit_restrictions, burn_permit_county_info, module_operations, module_iso, module_neris, module_medical, module_medical_controlled, module_fuel_storage, module_ics, neris_entity_id')
     .eq('id', id)
   const dept = deptList?.[0]
   if (!dept) redirect('/dashboard')
