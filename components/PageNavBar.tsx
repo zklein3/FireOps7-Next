@@ -45,7 +45,7 @@ function getParentHub(pathname: string): { label: string; href: string } | null 
   if (pathname.startsWith('/medical'))
     return { label: 'Inventory', href: '/equipment' }
 
-  // Dept Admin sub-pages
+  // Dept Admin sub-pages (includes /dept-admin/ics-defaults)
   if (pathname.startsWith('/dept-admin'))
     return { label: 'Dept Admin', href: '/dept-admin' }
 

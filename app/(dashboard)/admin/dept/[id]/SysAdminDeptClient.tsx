@@ -8,6 +8,7 @@ import { createApparatus } from '@/app/actions/apparatus'
 import { createCompartmentName, updateCompartmentName } from '@/app/actions/compartments'
 import PublicSiteTab from './PublicSiteTab'
 import ModulesTab from './ModulesTab'
+import JurisdictionTab from './JurisdictionTab'
 
 const STATUS_STYLES: Record<string, string> = {
   active: 'bg-green-100 text-green-700',
@@ -26,7 +27,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY']
 
-type Tab = 'personnel' | 'stations' | 'apparatus' | 'compartments' | 'public_site' | 'modules'
+type Tab = 'personnel' | 'stations' | 'apparatus' | 'compartments' | 'public_site' | 'modules' | 'jurisdiction'
 
 interface Dept {
   id: string; name: string; code: string | null; active: boolean
@@ -50,10 +51,13 @@ interface CompartmentName { id: string; compartment_code: string; compartment_na
 
 export default function SysAdminDeptClient({
   dept, personnel, stations, apparatus, roles, compartmentNames, departmentId, eventSeries,
+  jurisdictions, allDepartments,
 }: {
   dept: Dept; personnel: PersonnelRecord[]; stations: Station[]
   apparatus: Apparatus[]; roles: Role[]; compartmentNames: CompartmentName[]
   departmentId: string; eventSeries: EventSeries[]
+  jurisdictions: { id: string; department_id: string; department_name: string }[]
+  allDepartments: { id: string; name: string }[]
 }) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('personnel')
@@ -114,6 +118,7 @@ export default function SysAdminDeptClient({
     { key: 'compartments', label: 'Compartments', count: compartmentNames.length },
     { key: 'public_site', label: 'Public Site' },
     { key: 'modules', label: 'Modules' },
+    { key: 'jurisdiction', label: 'Jurisdiction', count: jurisdictions.length || undefined },
   ]
 
   return (
@@ -589,6 +594,15 @@ export default function SysAdminDeptClient({
           moduleIcs={dept.module_ics}
           publicSiteEnabled={dept.public_site_enabled}
           nerisEntityId={dept.neris_entity_id}
+        />
+      )}
+
+      {tab === 'jurisdiction' && (
+        <JurisdictionTab
+          departmentId={departmentId}
+          departmentName={dept.name}
+          jurisdictions={jurisdictions}
+          allDepartments={allDepartments}
         />
       )}
     </div>

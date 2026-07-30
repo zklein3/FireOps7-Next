@@ -110,6 +110,18 @@ export default async function SysAdminDeptPage({ params }: { params: Promise<{ i
     .eq('active', true)
     .order('title')
 
+  // Jurisdiction — standing oversight this department holds over others (e.g. EM over fire/police)
+  const { data: jurisdictionRows } = await adminClient
+    .from('department_jurisdictions').select('id, child_department_id').eq('parent_department_id', id)
+  const childIds = (jurisdictionRows ?? []).map(j => j.child_department_id)
+  const { data: childDepts } = childIds.length > 0
+    ? await adminClient.from('departments').select('id, name').in('id', childIds)
+    : { data: [] }
+  const childNameById = Object.fromEntries((childDepts ?? []).map(d => [d.id, d.name]))
+  const jurisdictions = (jurisdictionRows ?? []).map(j => ({ id: j.id, department_id: j.child_department_id, department_name: childNameById[j.child_department_id] ?? '—' }))
+
+  const { data: allDepartments } = await adminClient.from('departments').select('id, name').eq('active', true).order('name')
+
   return (
     <SysAdminDeptClient
       dept={dept}
@@ -120,6 +132,8 @@ export default async function SysAdminDeptPage({ params }: { params: Promise<{ i
       compartmentNames={compartmentNames ?? []}
       departmentId={id}
       eventSeries={eventSeries ?? []}
+      jurisdictions={jurisdictions}
+      allDepartments={(allDepartments ?? []).filter(d => d.id !== id)}
     />
   )
 }

@@ -36,6 +36,8 @@ export default async function IcsIncidentPage({ params }: { params: Promise<{ id
 
   let assignmentsRaw: any[] = []
   let resourcesRaw: any[] = []
+  let radioChannels: any[] = []
+  let medicalPlanEntries: any[] = []
   if (latestPeriod) {
     const { data: a } = await adminClient
       .from('ics_assignments').select('id, personnel_id, raw_name, raw_agency, ics_role, lane_label')
@@ -46,6 +48,16 @@ export default async function IcsIncidentPage({ params }: { params: Promise<{ id
       .from('ics_resources').select('id, apparatus_id, kind, raw_description, raw_agency, lane_label, status')
       .eq('ics_operational_period_id', latestPeriod.id).order('lane_label')
     resourcesRaw = r ?? []
+
+    const { data: rc } = await adminClient
+      .from('ics_radio_channels').select('id, channel_name, assignment')
+      .eq('ics_operational_period_id', latestPeriod.id)
+    radioChannels = rc ?? []
+
+    const { data: mp } = await adminClient
+      .from('ics_medical_plan_entries').select('id, contact_type, name, phone, address')
+      .eq('ics_operational_period_id', latestPeriod.id)
+    medicalPlanEntries = mp ?? []
   }
 
   // Live 211 / 214 off the linked board, if any
@@ -104,6 +116,8 @@ export default async function IcsIncidentPage({ params }: { params: Promise<{ id
   const activityLog = activityLogRaw.map(l => ({ ...l, author_name: l.author_personnel_id ? (personnelNameById[l.author_personnel_id] ?? '—') : '—' }))
 
   const { data: allDepartments } = await adminClient.from('departments').select('id, name').eq('active', true).order('name')
+  const { data: shifts } = await adminClient
+    .from('department_shifts').select('id, name').eq('department_id', departmentId).eq('active', true).order('sort_order')
 
   const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
   const isOwner = incident.department_id === departmentId
@@ -120,11 +134,14 @@ export default async function IcsIncidentPage({ params }: { params: Promise<{ id
       latestPeriod={latestPeriod}
       assignments={assignments}
       resources={resources}
+      radioChannels={radioChannels}
+      medicalPlanEntries={medicalPlanEntries}
       checkIns={checkIns}
       activityLog={activityLog}
       hasLinkedBoard={!!incident.linked_accountability_board_id}
       linkedBoardStatus={linkedBoardStatus}
       allDepartments={(allDepartments ?? []).filter(d => d.id !== departmentId)}
+      shifts={shifts ?? []}
     />
   )
 }

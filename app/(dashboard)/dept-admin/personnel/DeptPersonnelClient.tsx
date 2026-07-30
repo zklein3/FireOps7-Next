@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createDeptMember } from '@/app/actions/users'
+import { assignPersonnelShift, addShift } from '@/app/actions/shifts'
 
 interface Role {
   id: string
@@ -10,6 +11,8 @@ interface Role {
   is_officer: boolean
   sort_order: number
 }
+
+interface Shift { id: string; name: string; sort_order: number; active: boolean }
 
 interface PersonnelRecord {
   id: string
@@ -19,6 +22,8 @@ interface PersonnelRecord {
   employee_number: string | null
   hire_date: string | null
   role_id: string | null
+  shift_id: string | null
+  shift_name: string | null
   personnel: {
     id: string
     first_name: string
@@ -51,11 +56,13 @@ const STATUS_LABELS: Record<string, string> = {
 export default function DeptPersonnelClient({
   personnel,
   roles,
+  shifts,
   departmentName,
   departmentId,
 }: {
   personnel: PersonnelRecord[]
   roles: Role[]
+  shifts: Shift[]
   departmentName: string
   departmentId: string
 }) {
@@ -64,6 +71,25 @@ export default function DeptPersonnelClient({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [shiftOverrides, setShiftOverrides] = useState<Record<string, string | null>>({})
+  const [newShiftName, setNewShiftName] = useState('')
+  const [addingShift, setAddingShift] = useState(false)
+
+  async function handleAssignShift(recordId: string, shiftId: string) {
+    setShiftOverrides(prev => ({ ...prev, [recordId]: shiftId || null }))
+    const res = await assignPersonnelShift(recordId, shiftId || null)
+    if (res?.error) setError(res.error)
+  }
+
+  async function handleAddShift() {
+    if (!newShiftName.trim()) return
+    setAddingShift(true)
+    const res = await addShift(departmentId, newShiftName.trim())
+    setAddingShift(false)
+    if (res?.error) { setError(res.error); return }
+    setNewShiftName('')
+    router.refresh()
+  }
 
   async function handleCreate(formData: FormData) {
     setError(null)
@@ -253,6 +279,18 @@ export default function DeptPersonnelClient({
         </div>
       )}
 
+      {/* Shifts — standing assignment, not a rotation calendar. Feeds ICS forward-planning. */}
+      <div className="mb-4 flex items-center gap-2">
+        <span className="text-xs font-medium text-zinc-500">Shifts:</span>
+        {shifts.map(s => <span key={s.id} className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">{s.name}</span>)}
+        <input value={newShiftName} onChange={e => setNewShiftName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleAddShift() }}
+          placeholder="+ Add shift (A Shift, Day Crew…)"
+          className="rounded-full border border-zinc-200 px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-500 w-48" />
+        <button type="button" disabled={addingShift || !newShiftName.trim()} onClick={handleAddShift}
+          className="text-xs font-semibold text-red-700 hover:underline disabled:opacity-50">Add</button>
+      </div>
+
       {/* Personnel Cards */}
       {sorted.length === 0 ? (
         <div className="rounded-xl bg-white border border-zinc-200 px-6 py-12 text-center text-sm text-zinc-400">
@@ -281,11 +319,20 @@ export default function DeptPersonnelClient({
                     {record.system_role.charAt(0).toUpperCase() + record.system_role.slice(1)}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-1.5 mt-2">
+                <div className="flex flex-wrap gap-1.5 mt-2 items-center">
                   {record.personnel_roles?.name && (
                     <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
                       {record.personnel_roles.name}
                     </span>
+                  )}
+                  {shifts.length > 0 && (
+                    <select
+                      value={shiftOverrides[record.id] ?? record.shift_id ?? ''}
+                      onChange={e => handleAssignShift(record.id, e.target.value)}
+                      className="rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-red-500">
+                      <option value="">No shift</option>
+                      {shifts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
                   )}
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[status] ?? 'bg-zinc-100 text-zinc-500'}`}>
                     {STATUS_LABELS[status] ?? status}

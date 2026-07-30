@@ -5,12 +5,14 @@ import { createClient } from '@/lib/supabase/client'
 import QRScanner from '@/components/QRScanner'
 import { parseSalamanderCard, parseFireOps7Card, isFireOps7Card, salamanderCanonicalKey } from '@/lib/salamander'
 import {
-  initBoardLanes, addBoardLane,
+  initBoardLanes, addBoardLane, deleteLane,
   checkInPerson, movePersonToLane, removeAccountabilityEntry, updateEntryName, recordPAR, saveDebugScan,
   setBoardIcsFields, setEntryIcsRole, setLaneLeader, setLaneWorkAssignment, addActivityLogEntry, logBoardStamp, renameLane,
   releaseAccountabilityEntry, reactivateAccountabilityEntry, linkAccountabilityEntryToPersonnel,
+  checkInResource, moveResourceToLane, releaseResource, attachPersonnelToResource,
 } from '@/app/actions/accountability'
 import { ICS_COMMAND_ROLES, ICS_ACTIVE_VIOLENCE_ROLES, icsRoleLabel } from '@/lib/ics-roles'
+import { RESOURCE_KINDS, RESOURCE_TYPE_TIERS } from '@/lib/resource-kinds'
 
 interface Lane { id: string; name: string; sort_order: number; leader_entry_id: string | null; work_assignment: string | null; profile: 'default' | 'ics' | 'active_violence' | null }
 interface Entry {
@@ -26,6 +28,7 @@ interface Entry {
   ics_role: string | null
   released_at: string | null
   tag_ref: string | null
+  resource_id: string | null
 }
 interface QrToken { personnel_id: string; token_type: string; token_value: string; display_name: string }
 interface EntryRow {
@@ -40,6 +43,20 @@ interface EntryRow {
   ics_role: string | null
   released_at: string | null
   tag_ref: string | null
+  resource_id: string | null
+}
+interface Resource {
+  id: string
+  lane_id: string | null
+  apparatus_id: string | null
+  raw_description: string | null
+  raw_agency: string | null
+  kind: string | null
+  type_tier: string | null
+  status: string
+  checked_in_at: string
+  released_at: string | null
+  display_desc: string
 }
 
 // Stable, non-cryptographic fingerprint for a scanned rapid tag's raw payload — used only to
@@ -61,7 +78,7 @@ function nameMatchKey(name: string): string {
   const firstInitial = parts[0][0]?.toLowerCase() ?? ''
   return `${firstInitial}:${last}`
 }
-interface ActivityLogEntry { id: string; entry_time: string; note: string; author_name: string }
+interface ActivityLogEntry { id: string; entry_time: string; note: string; author_name: string; lane_id: string | null }
 
 export default function AccountabilityBoard({
   boardId,
@@ -77,6 +94,8 @@ export default function AccountabilityBoard({
   initialIsActiveViolence,
   initialNimsMode,
   initialActivityLog,
+  initialResources,
+  fleetApparatus,
   currentUserName,
 }: {
   boardId: string
@@ -92,10 +111,22 @@ export default function AccountabilityBoard({
   initialIsActiveViolence: boolean
   initialNimsMode: boolean
   initialActivityLog: ActivityLogEntry[]
+  initialResources: Resource[]
+  fleetApparatus: { id: string; unit_number: string }[]
   currentUserName: string
 }) {
   const [lanes, setLanes] = useState<Lane[]>(initialLanes)
   const [entries, setEntries] = useState<Entry[]>(initialEntries)
+  const [resources, setResources] = useState<Resource[]>(initialResources)
+  const [resourceFormOpen, setResourceFormOpen] = useState(false)
+  const [resourceApparatusId, setResourceApparatusId] = useState('')
+  const [resourceDescription, setResourceDescription] = useState('')
+  const [resourceAgency, setResourceAgency] = useState('')
+  const [resourceKind, setResourceKind] = useState('')
+  const [resourceKindOther, setResourceKindOther] = useState('')
+  const [resourceTypeTier, setResourceTypeTier] = useState('')
+  const [resourceSaving, setResourceSaving] = useState(false)
+  const [movingResourceId, setMovingResourceId] = useState<string | null>(null)
   const [scannerOpen, setScannerOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isActiveViolence, setIsActiveViolence] = useState(initialIsActiveViolence)
@@ -107,6 +138,7 @@ export default function AccountabilityBoard({
   const [noteInput, setNoteInput] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
   const [stampSaving, setStampSaving] = useState(false)
+  const [activityLogFilter, setActivityLogFilter] = useState<'all' | string>('all')
 
   const [addingLane, setAddingLane] = useState(false)
   const [newLaneName, setNewLaneName] = useState('')
@@ -175,6 +207,11 @@ export default function AccountabilityBoard({
     return [departmentName, dp?.title].filter(Boolean).join(' · ')
   }
 
+  function resolveResourceDisplay(row: { apparatus_id: string | null; raw_description: string | null; kind: string | null }): string {
+    if (row.apparatus_id) return fleetApparatus.find(a => a.id === row.apparatus_id)?.unit_number ?? '—'
+    return row.raw_description ?? row.kind ?? '—'
+  }
+
   function resolveEntryDisplay(row: { personnel_id: string | null; raw_name: string | null; raw_dept: string | null }): { display_name: string; display_dept: string } {
     if (row.personnel_id) {
       const token = qrTokens.find(t => t.personnel_id === row.personnel_id)
@@ -195,24 +232,28 @@ export default function AccountabilityBoard({
     let cancelled = false
 
     async function refetchBoardState() {
-      const [{ data: entryRows }, { data: laneRows }, { data: logRows }] = await Promise.all([
+      const [{ data: entryRows }, { data: laneRows }, { data: logRows }, { data: resourceRows }] = await Promise.all([
         supabase.from('accountability_entries')
-          .select('id, board_id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref')
+          .select('id, board_id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id')
           .eq('board_id', boardId).order('checked_in_at'),
         supabase.from('accountability_lanes')
           .select('id, name, sort_order, leader_entry_id, work_assignment, profile')
           .eq('board_id', boardId).order('sort_order'),
         supabase.from('accountability_activity_log')
-          .select('id, entry_time, note, author_personnel_id')
+          .select('id, entry_time, note, author_personnel_id, lane_id')
           .eq('board_id', boardId).order('entry_time', { ascending: false }),
+        supabase.from('accountability_resources')
+          .select('id, lane_id, apparatus_id, raw_description, raw_agency, kind, type_tier, status, checked_in_at, released_at')
+          .eq('board_id', boardId).order('checked_in_at'),
       ])
       if (cancelled) return
       if (entryRows) setEntries(entryRows.map(row => ({ ...row, ...resolveEntryDisplay(row) } as Entry)))
       if (laneRows) setLanes(laneRows as Lane[])
       if (logRows) setActivityLog(logRows.map(row => ({
-        id: row.id, entry_time: row.entry_time, note: row.note,
+        id: row.id, entry_time: row.entry_time, note: row.note, lane_id: row.lane_id,
         author_name: row.author_personnel_id ? (deptPersonnel.find(p => p.id === row.author_personnel_id)?.name ?? '—') : '—',
       })))
+      if (resourceRows) setResources(resourceRows.map(row => ({ ...row, display_desc: resolveResourceDisplay(row) })))
     }
 
     async function subscribeChannel() {
@@ -261,11 +302,51 @@ export default function AccountabilityBoard({
         )
         .on(
           'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'accountability_lanes', filter: `board_id=eq.${boardId}` },
+          payload => {
+            const row = payload.new as Lane
+            setLanes(prev => prev.map(l => l.id === row.id ? row : l))
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'accountability_lanes', filter: `board_id=eq.${boardId}` },
+          payload => {
+            const row = payload.old as Lane
+            setLanes(prev => prev.filter(l => l.id !== row.id))
+          }
+        )
+        .on(
+          'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'accountability_activity_log', filter: `board_id=eq.${boardId}` },
           payload => {
-            const row = payload.new as { id: string; entry_time: string; note: string; author_personnel_id: string | null }
+            const row = payload.new as { id: string; entry_time: string; note: string; author_personnel_id: string | null; lane_id: string | null }
             const authorName = row.author_personnel_id ? (deptPersonnel.find(p => p.id === row.author_personnel_id)?.name ?? '—') : '—'
-            setActivityLog(prev => prev.some(a => a.id === row.id) ? prev : [{ id: row.id, entry_time: row.entry_time, note: row.note, author_name: authorName }, ...prev])
+            setActivityLog(prev => prev.some(a => a.id === row.id) ? prev : [{ id: row.id, entry_time: row.entry_time, note: row.note, author_name: authorName, lane_id: row.lane_id }, ...prev])
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'accountability_resources', filter: `board_id=eq.${boardId}` },
+          payload => {
+            const row = payload.new as Omit<Resource, 'display_desc'>
+            setResources(prev => prev.some(r => r.id === row.id) ? prev : [...prev, { ...row, display_desc: resolveResourceDisplay(row) }])
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'accountability_resources', filter: `board_id=eq.${boardId}` },
+          payload => {
+            const row = payload.new as Omit<Resource, 'display_desc'>
+            setResources(prev => prev.map(r => r.id === row.id ? { ...row, display_desc: resolveResourceDisplay(row) } : r))
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'accountability_resources', filter: `board_id=eq.${boardId}` },
+          payload => {
+            const row = payload.old as { id: string }
+            setResources(prev => prev.filter(r => r.id !== row.id))
           }
         )
         .subscribe()
@@ -494,7 +575,7 @@ export default function AccountabilityBoard({
     setNoteSaving(false)
     if (res?.error) { setError(res.error); return }
     if (res.entry) {
-      setActivityLog(prev => [{ id: res.entry.id, entry_time: res.entry.entry_time, note: res.entry.note, author_name: currentUserName }, ...prev])
+      setActivityLog(prev => [{ id: res.entry.id, entry_time: res.entry.entry_time, note: res.entry.note, author_name: currentUserName, lane_id: null }, ...prev])
     }
     setNoteInput('')
   }
@@ -505,9 +586,65 @@ export default function AccountabilityBoard({
     setStampSaving(false)
     if (res?.error) { setError(res.error); return }
     if (res.entry) {
-      setActivityLog(prev => [{ id: res.entry.id, entry_time: res.entry.entry_time, note: res.entry.note, author_name: currentUserName }, ...prev])
+      setActivityLog(prev => [{ id: res.entry.id, entry_time: res.entry.entry_time, note: res.entry.note, author_name: currentUserName, lane_id: null }, ...prev])
     }
     setNoteInput('')
+  }
+
+  async function handleDeleteLane(lane: Lane, occupied: boolean) {
+    if (occupied) { setError('Move everyone out of this lane before deleting it.'); return }
+    if (!confirm(`Delete lane "${lane.name}"?`)) return
+    const res = await deleteLane(lane.id)
+    if (res?.error) { setError(res.error); return }
+    setLanes(prev => prev.filter(l => l.id !== lane.id))
+  }
+
+  async function handleCheckInResource() {
+    if (!resourceApparatusId && !resourceDescription.trim()) { setError('Pick an apparatus or type a description.'); return }
+    setResourceSaving(true)
+    const kindValue = resourceKind === 'Other' ? resourceKindOther.trim() : resourceKind
+    const res = await checkInResource(
+      boardId, stagingLane?.id ?? null,
+      resourceApparatusId || null, resourceDescription.trim() || null, resourceAgency.trim() || null,
+      kindValue || null, resourceTypeTier || null,
+    )
+    setResourceSaving(false)
+    if (res?.error) { setError(res.error); return }
+    if (res.resource) setResources(prev => [...prev, { ...res.resource, display_desc: resolveResourceDisplay(res.resource) }])
+    setResourceApparatusId(''); setResourceDescription(''); setResourceAgency(''); setResourceKind(''); setResourceKindOther(''); setResourceTypeTier('')
+    setResourceFormOpen(false)
+  }
+
+  async function handleMoveResource(resourceId: string, laneId: string) {
+    setResources(prev => prev.map(r => r.id === resourceId ? { ...r, lane_id: laneId } : r))
+    setEntries(prev => prev.map(e => e.resource_id === resourceId ? { ...e, lane_id: laneId } : e))
+    setMovingResourceId(null)
+    const res = await moveResourceToLane(resourceId, laneId)
+    if (res?.error) setError(res.error)
+  }
+
+  async function handleReleaseResource(resourceId: string) {
+    if (!confirm('Release this resource? Attached crew stay where they are.')) return
+    const res = await releaseResource(resourceId)
+    if (res?.error) { setError(res.error); return }
+    setResources(prev => prev.map(r => r.id === resourceId ? { ...r, status: 'released', released_at: new Date().toISOString() } : r))
+  }
+
+  async function handleAttachToResource(entryId: string, resourceId: string) {
+    const resource = resources.find(r => r.id === resourceId)
+    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, resource_id: resourceId, lane_id: resource?.lane_id ?? e.lane_id } : e))
+    const res = await attachPersonnelToResource(entryId, resourceId)
+    if (res?.error) setError(res.error)
+  }
+
+  async function handleLogLaneStamp(laneId: string) {
+    setStampSaving(true)
+    const res = await logBoardStamp(boardId, undefined, laneId)
+    setStampSaving(false)
+    if (res?.error) { setError(res.error); return }
+    if (res.entry) {
+      setActivityLog(prev => [{ id: res.entry.id, entry_time: res.entry.entry_time, note: res.entry.note, author_name: currentUserName, lane_id: laneId }, ...prev])
+    }
   }
 
   function renderEntryCard(entry: Entry) {
@@ -545,6 +682,15 @@ export default function AccountabilityBoard({
         ) : entry.ics_role ? (
           <span className="shrink-0 text-xs font-semibold text-red-700">{icsRoleLabel(entry.ics_role)}</span>
         ) : null}
+        {isOfficerOrAbove && !entry.resource_id && resources.filter(r => r.status !== 'released').length > 0 && (
+          <select value="" onClick={e => e.stopPropagation()}
+            onChange={e => e.target.value && handleAttachToResource(entry.id, e.target.value)}
+            title="Attach to a resource's crew"
+            className="shrink-0 max-w-[90px] rounded border border-zinc-300 px-1 py-1 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
+            <option value="">+ Crew of…</option>
+            {resources.filter(r => r.status !== 'released').map(r => <option key={r.id} value={r.id}>{r.display_desc}</option>)}
+          </select>
+        )}
       </div>
     )
   }
@@ -656,6 +802,12 @@ export default function AccountabilityBoard({
             className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
             + Lane
           </button>
+          {nimsMode && (
+            <button type="button" onClick={() => setResourceFormOpen(true)}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">
+              + Resource
+            </button>
+          )}
           <button type="button" disabled={parSaving} onClick={handlePAR}
             className="ml-auto rounded-lg bg-zinc-800 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-900 disabled:opacity-50 transition-colors">
             {parDone ? '✓ PAR Recorded' : parSaving ? 'Recording...' : 'PAR'}
@@ -666,6 +818,51 @@ export default function AccountabilityBoard({
       {scannerOpen && (
         <div className="mb-4">
           <QRScanner onScan={handleScan} onClose={() => setScannerOpen(false)} hint="Scan FireOps7 QR or Salamander PDF417" />
+        </div>
+      )}
+
+      {resourceFormOpen && (
+        <div className="mb-4 rounded-xl border border-zinc-200 bg-white p-4 space-y-2">
+          <p className="text-sm font-semibold text-zinc-900">Check In Resource</p>
+          <select value={resourceApparatusId} onChange={e => { setResourceApparatusId(e.target.value); if (e.target.value) setResourceDescription('') }}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+            <option value="">— Pick your own apparatus (optional) —</option>
+            {fleetApparatus.map(a => <option key={a.id} value={a.id}>{a.unit_number}</option>)}
+          </select>
+          {!resourceApparatusId && (
+            <input value={resourceDescription} onChange={e => setResourceDescription(e.target.value)}
+              placeholder="Or describe it (e.g. Engine 32, mutual aid)"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <select value={resourceKind} onChange={e => setResourceKind(e.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+              <option value="">Kind —</option>
+              {RESOURCE_KINDS.map(k => <option key={k} value={k}>{k}</option>)}
+              <option value="Other">Other…</option>
+            </select>
+            <select value={resourceTypeTier} onChange={e => setResourceTypeTier(e.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm">
+              <option value="">Type tier (optional)</option>
+              {RESOURCE_TYPE_TIERS.map(t => <option key={t} value={t}>Type {t}</option>)}
+            </select>
+          </div>
+          {resourceKind === 'Other' && (
+            <input value={resourceKindOther} onChange={e => setResourceKindOther(e.target.value)}
+              placeholder="Describe the kind" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          )}
+          <input value={resourceAgency} onChange={e => setResourceAgency(e.target.value)}
+            placeholder="Agency (if outside/mutual aid)" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+          <div className="flex gap-2">
+            <button type="button" disabled={resourceSaving} onClick={handleCheckInResource}
+              className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+              {resourceSaving ? 'Checking in…' : 'Check In'}
+            </button>
+            <button type="button" onClick={() => setResourceFormOpen(false)}
+              className="rounded-lg border border-zinc-200 px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-50">
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -764,6 +961,33 @@ export default function AccountabilityBoard({
           </div>
         </div>
       )}
+
+      {movingResourceId && (() => {
+        const resource = resources.find(r => r.id === movingResourceId)
+        if (!resource) return null
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+              <p className="font-semibold text-zinc-900 mb-1">{resource.display_desc}</p>
+              <p className="text-sm text-zinc-500 mb-4">Move this resource (and its attached crew) to which lane?</p>
+              <div className="flex flex-col gap-2 mb-3">
+                {lanes.map(l => (
+                  <button key={l.id} type="button" onClick={() => handleMoveResource(resource.id, l.id)}
+                    className={`w-full rounded-lg border px-4 py-2.5 text-sm font-medium text-left transition-colors ${
+                      resource.lane_id === l.id ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-zinc-200 hover:bg-zinc-50 text-zinc-700'
+                    }`}>
+                    {l.name}{resource.lane_id === l.id ? ' ✓' : ''}
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={() => setMovingResourceId(null)}
+                className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {manualOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
@@ -903,7 +1127,9 @@ export default function AccountabilityBoard({
 
       <div className="flex flex-col gap-4">
         {visibleLanes.map(lane => {
-          const inLane = activeEntries.filter(e => e.lane_id === lane.id)
+          const resourcesInLane = resources.filter(r => r.lane_id === lane.id && r.status !== 'released')
+          const inLane = activeEntries.filter(e => e.lane_id === lane.id && !e.resource_id)
+          const totalInLane = activeEntries.filter(e => e.lane_id === lane.id).length + resourcesInLane.length
           return (
             <div key={lane.id} className="rounded-xl border border-zinc-200 bg-zinc-50 overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-2 bg-zinc-100 border-b border-zinc-200">
@@ -929,10 +1155,49 @@ export default function AccountabilityBoard({
                 ) : lane.work_assignment ? (
                   <span className="flex-1 min-w-0 truncate text-xs italic text-zinc-500">{lane.work_assignment}</span>
                 ) : <span className="flex-1" />}
-                <span className="text-xs text-zinc-400 shrink-0">{inLane.length}</span>
+                <span className="text-xs text-zinc-400 shrink-0">{totalInLane}</span>
+                {isOfficerOrAbove && (
+                  <button type="button" disabled={stampSaving} onClick={() => handleLogLaneStamp(lane.id)}
+                    title="Log a 214 stamp for just this lane's current crew"
+                    className="shrink-0 rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 transition-colors">
+                    214
+                  </button>
+                )}
+                {isOfficerOrAbove && (
+                  <button type="button" onClick={() => handleDeleteLane(lane, totalInLane > 0)}
+                    title={totalInLane > 0 ? 'Move everyone out before deleting' : 'Delete lane'}
+                    className="shrink-0 text-zinc-300 hover:text-red-600 disabled:opacity-30 text-sm leading-none px-0.5">
+                    ✕
+                  </button>
+                )}
               </div>
+              {resourcesInLane.map(resource => {
+                const crew = activeEntries.filter(e => e.resource_id === resource.id)
+                return (
+                  <div key={resource.id} className="mx-3 mt-3 rounded-lg border border-blue-200 bg-blue-50 overflow-hidden">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 border-b border-blue-200">
+                      <span className="text-xs font-bold text-blue-900 shrink-0">{resource.display_desc}</span>
+                      {resource.kind && <span className="text-xs text-blue-700 shrink-0">· {resource.kind}{resource.type_tier ? ` (Type ${resource.type_tier})` : ''}</span>}
+                      {resource.raw_agency && <span className="text-xs text-blue-700 shrink-0">({resource.raw_agency})</span>}
+                      <span className="text-xs text-blue-500 shrink-0 ml-auto">{crew.length} crew</span>
+                      {isOfficerOrAbove && (
+                        <button type="button" onClick={() => setMovingResourceId(resource.id)}
+                          className="shrink-0 text-xs font-semibold text-blue-700 hover:underline">Move</button>
+                      )}
+                      {isOfficerOrAbove && (
+                        <button type="button" onClick={() => handleReleaseResource(resource.id)}
+                          className="shrink-0 text-xs font-semibold text-zinc-500 hover:text-red-600">Release</button>
+                      )}
+                    </div>
+                    <div className="p-2 flex flex-col gap-1.5">
+                      {crew.length === 0 && <p className="text-xs text-blue-400 text-center py-1">No crew attached</p>}
+                      {crew.map(entry => <div key={entry.id}>{renderEntryCard(entry)}</div>)}
+                    </div>
+                  </div>
+                )
+              })}
               <div className="p-3 flex flex-col gap-2 min-h-[48px]">
-                {inLane.length === 0 && <p className="text-xs text-zinc-400 text-center py-2">Empty</p>}
+                {inLane.length === 0 && resourcesInLane.length === 0 && <p className="text-xs text-zinc-400 text-center py-2">Empty</p>}
                 {inLane.map(entry => (
                   <div key={entry.id} className="flex items-center gap-1.5">
                     {isOfficerOrAbove ? (
@@ -1017,16 +1282,28 @@ export default function AccountabilityBoard({
             {noteSaving ? '...' : 'Add'}
           </button>
         </div>
+        {lanes.length > 0 && (
+          <select value={activityLogFilter} onChange={e => setActivityLogFilter(e.target.value)}
+            className="mb-2 rounded-lg border border-zinc-300 px-2 py-1 text-xs focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
+            <option value="all">All lanes</option>
+            {lanes.map(l => <option key={l.id} value={l.id}>{l.name} only</option>)}
+          </select>
+        )}
         <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
-          {activityLog.length === 0 && <p className="text-xs text-zinc-400 text-center py-2">No activity logged yet.</p>}
-          {activityLog.map(a => (
-            <div key={a.id} className="text-xs text-zinc-600 border-b border-zinc-100 pb-1.5 last:border-0">
-              <span className="font-mono text-zinc-400">
-                {new Date(a.entry_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-              </span>
-              {' · '}<span className="font-medium text-zinc-700">{a.author_name}</span>{' — '}{a.note}
-            </div>
-          ))}
+          {(() => {
+            const filtered = activityLogFilter === 'all' ? activityLog : activityLog.filter(a => a.lane_id === activityLogFilter)
+            if (filtered.length === 0) return <p className="text-xs text-zinc-400 text-center py-2">No activity logged yet.</p>
+            return filtered.map(a => (
+              <div key={a.id} className="text-xs text-zinc-600 border-b border-zinc-100 pb-1.5 last:border-0">
+                <span className="font-mono text-zinc-400">
+                  {new Date(a.entry_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </span>
+                {' · '}<span className="font-medium text-zinc-700">{a.author_name}</span>
+                {a.lane_id && <span className="text-zinc-400"> ({lanes.find(l => l.id === a.lane_id)?.name ?? 'lane'})</span>}
+                {' — '}{a.note}
+              </div>
+            ))
+          })()}
         </div>
       </div>
     </div>

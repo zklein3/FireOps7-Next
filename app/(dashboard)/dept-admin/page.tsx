@@ -22,7 +22,7 @@ export default async function DeptAdminPage() {
     { count: pendingSetupCount },
   ] = await Promise.all([
     adminClient.from('departments')
-      .select('module_iso, module_neris, module_medical, module_fuel_storage, public_site_enabled')
+      .select('module_iso, module_neris, module_medical, module_fuel_storage, module_ics, public_site_enabled')
       .eq('id', departmentId)
       .single(),
     adminClient.from('department_personnel')
@@ -38,6 +38,7 @@ export default async function DeptAdminPage() {
   const moduleIso = (deptFlags as any)?.module_iso ?? false
   const moduleNeris = (deptFlags as any)?.module_neris ?? false
   const moduleMedical = (deptFlags as any)?.module_medical ?? false
+  const moduleIcs = (deptFlags as any)?.module_ics ?? false
   const moduleFuelStorage = (deptFlags as any)?.module_fuel_storage ?? false
   const publicSiteEnabled = (deptFlags as any)?.public_site_enabled ?? false
   const hasPendingSetup = (pendingSetupCount ?? 0) > 0
@@ -90,6 +91,13 @@ export default async function DeptAdminPage() {
           description="Configure accountability lanes — default, ICS/NIMS Mode, and Active Violence profiles"
           href="/dept-admin/accountability"
         />
+        {moduleIcs && (
+          <HubCard
+            title="ICS Defaults"
+            description="Default radio channels (ICS 205) and medical plan contacts (ICS 206), copied into every new operational period"
+            href="/dept-admin/ics-defaults"
+          />
+        )}
         <HubCard
           title="Kiosk Devices"
           description="Set up a station tablet for scan-in/scan-out presence tracking"

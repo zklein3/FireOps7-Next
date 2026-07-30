@@ -56,9 +56,28 @@ export default async function AccountabilityBoardPage({
 
   const { data: entriesRaw } = await adminClient
     .from('accountability_entries')
-    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref')
+    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id')
     .eq('board_id', boardId)
     .order('checked_in_at')
+
+  const { data: resourcesRaw } = await adminClient
+    .from('accountability_resources')
+    .select('id, lane_id, apparatus_id, raw_description, raw_agency, kind, type_tier, status, checked_in_at, released_at')
+    .eq('board_id', boardId)
+    .order('checked_in_at')
+
+  const resourceApparatusIds = [...new Set((resourcesRaw ?? []).map(r => r.apparatus_id).filter(Boolean))] as string[]
+  const { data: resourceApparatusRaw } = resourceApparatusIds.length > 0
+    ? await adminClient.from('apparatus').select('id, unit_number').in('id', resourceApparatusIds)
+    : { data: [] }
+  const resourceApparatusUnitById = Object.fromEntries((resourceApparatusRaw ?? []).map(a => [a.id, a.unit_number]))
+  const resources = (resourcesRaw ?? []).map(r => ({
+    ...r,
+    display_desc: r.apparatus_id ? (resourceApparatusUnitById[r.apparatus_id] ?? '—') : (r.raw_description ?? r.kind ?? '—'),
+  }))
+
+  const { data: fleetApparatus } = await adminClient
+    .from('apparatus').select('id, unit_number').eq('department_id', department_id).eq('active', true).order('unit_number')
 
   // Activity log
   const { data: activityLogRaw } = await adminClient
@@ -179,6 +198,8 @@ export default async function AccountabilityBoardPage({
         initialIsActiveViolence={board.is_active_violence}
         initialNimsMode={board.nims_mode}
         initialActivityLog={activityLog}
+        initialResources={resources}
+        fleetApparatus={fleetApparatus ?? []}
         currentUserName={[me.first_name, me.last_name].filter(Boolean).join(' ') || '—'}
       />
     </div>

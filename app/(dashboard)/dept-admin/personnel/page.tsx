@@ -16,7 +16,7 @@ export default async function PersonnelHubPage() {
   // Personnel data
   const { data: deptPersonnelRaw } = await adminClient
     .from('department_personnel')
-    .select('id, system_role, signup_status, active, employee_number, hire_date, role_id, personnel_id')
+    .select('id, system_role, signup_status, active, employee_number, hire_date, role_id, personnel_id, shift_id')
     .eq('department_id', department_id)
     .order('system_role')
 
@@ -33,6 +33,10 @@ export default async function PersonnelHubPage() {
   const personnelMap = Object.fromEntries((personnelData ?? []).map(p => [p.id, p]))
   const roleMap = Object.fromEntries((roleData ?? []).map(r => [r.id, r]))
 
+  const { data: shifts } = await adminClient
+    .from('department_shifts').select('id, name, sort_order, active').eq('department_id', department_id).order('sort_order')
+  const shiftMap = Object.fromEntries((shifts ?? []).map(s => [s.id, s]))
+
   const personnel = (deptPersonnelRaw ?? []).map(dp => ({
     id: dp.id,
     system_role: dp.system_role,
@@ -41,8 +45,10 @@ export default async function PersonnelHubPage() {
     employee_number: dp.employee_number,
     hire_date: dp.hire_date,
     role_id: dp.role_id,
+    shift_id: dp.shift_id,
     personnel: personnelMap[dp.personnel_id] ?? null,
     personnel_roles: dp.role_id ? (roleMap[dp.role_id] ?? null) : null,
+    shift_name: dp.shift_id ? (shiftMap[dp.shift_id]?.name ?? null) : null,
   }))
 
   const { data: roles } = await adminClient
@@ -63,6 +69,7 @@ export default async function PersonnelHubPage() {
     <PersonnelHubClient
       personnel={personnel}
       roles={roles ?? []}
+      shifts={(shifts ?? []).filter(s => s.active)}
       departmentName={department_name}
       departmentId={department_id}
       excuseTypes={excuseTypes ?? []}

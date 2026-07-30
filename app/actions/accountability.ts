@@ -196,6 +196,36 @@ export async function addBoardLane(boardId: string, name: string) {
   return { success: true, lane: row }
 }
 
+// Refuses if anyone active is still in the lane — reassign them first rather than
+// silently orphaning an assignment. Empty lanes only.
+export async function deleteLane(laneId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+
+  const { data: laneRows } = await ctx.adminClient
+    .from('accountability_lanes').select('board_id').eq('id', laneId)
+  const boardId = laneRows?.[0]?.board_id
+  if (!boardId) return { error: 'Lane not found.' }
+
+  const { data: boardRows } = await ctx.adminClient
+    .from('accountability_boards').select('department_id').eq('id', boardId)
+  if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
+
+  const { count } = await ctx.adminClient
+    .from('accountability_entries').select('id', { count: 'exact', head: true })
+    .eq('lane_id', laneId).is('released_at', null)
+  if (count && count > 0) return { error: 'Move everyone out of this lane before deleting it.' }
+
+  const { count: logCount } = await ctx.adminClient
+    .from('accountability_activity_log').select('id', { count: 'exact', head: true }).eq('lane_id', laneId)
+  if (logCount && logCount > 0) return { error: 'This lane has 214 log entries against it — its history stays intact, so it can\'t be deleted.' }
+
+  const { error: dbErr } = await ctx.adminClient.from('accountability_lanes').delete().eq('id', laneId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
 // ─── Entry actions ────────────────────────────────────────────────────────────
 
 export async function checkInPerson(
@@ -204,7 +234,8 @@ export async function checkInPerson(
   personnelId: string | null,
   rawName: string | null,
   rawDept: string | null,
-  tagRef: string | null = null
+  tagRef: string | null = null,
+  resourceId: string | null = null,
 ) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
@@ -212,17 +243,80 @@ export async function checkInPerson(
 
   const { data: row, error: dbErr } = await ctx.adminClient
     .from('accountability_entries')
-    .insert({ board_id: boardId, lane_id: laneId, personnel_id: personnelId, raw_name: rawName, raw_dept: rawDept, tag_ref: tagRef, added_by: ctx.me.id })
-    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref').single()
+    .insert({ board_id: boardId, lane_id: laneId, personnel_id: personnelId, raw_name: rawName, raw_dept: rawDept, tag_ref: tagRef, added_by: ctx.me.id, resource_id: resourceId })
+    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id').single()
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true, entry: row }
 }
 
+// Moving a person individually is a deliberate split from their resource/crew —
+// clears resource_id so they're no longer implicitly dragged along when that
+// resource later moves lanes. Moving the resource itself (moveResourceToLane)
+// is the "whole unit moves together" path.
 export async function movePersonToLane(entryId: string, laneId: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
   const { error: dbErr } = await ctx.adminClient
-    .from('accountability_entries').update({ lane_id: laneId }).eq('id', entryId)
+    .from('accountability_entries').update({ lane_id: laneId, resource_id: null }).eq('id', entryId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
+// ─── Resource actions ─────────────────────────────────────────────────────────
+
+export async function checkInResource(
+  boardId: string,
+  laneId: string | null,
+  apparatusId: string | null,
+  description: string | null,
+  agency: string | null,
+  kind: string | null,
+  typeTier: string | null = null,
+) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!apparatusId && !description) return { error: 'Must provide apparatus or a description.' }
+
+  const { data: row, error: dbErr } = await ctx.adminClient
+    .from('accountability_resources')
+    .insert({ board_id: boardId, lane_id: laneId, apparatus_id: apparatusId, raw_description: description, raw_agency: agency, kind, type_tier: typeTier, created_by: ctx.me.id })
+    .select('id, lane_id, apparatus_id, raw_description, raw_agency, kind, type_tier, status, checked_in_at, released_at').single()
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true, resource: row }
+}
+
+// Moves the resource and cascades to every crew member still attached to it —
+// the "whole unit moves together" mechanic. Anyone previously detached (moved
+// individually) doesn't move, since their resource_id is already null.
+export async function moveResourceToLane(resourceId: string, laneId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_resources').update({ lane_id: laneId }).eq('id', resourceId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  const { error: crewErr } = await ctx.adminClient
+    .from('accountability_entries').update({ lane_id: laneId }).eq('resource_id', resourceId)
+  if (crewErr) { await logError(crewErr.message, '/accountability'); return { error: crewErr.message } }
+  return { success: true }
+}
+
+export async function releaseResource(resourceId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_resources').update({ status: 'released', released_at: new Date().toISOString() }).eq('id', resourceId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
+export async function attachPersonnelToResource(entryId: string, resourceId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const { data: resourceRows } = await ctx.adminClient
+    .from('accountability_resources').select('lane_id').eq('id', resourceId)
+  const laneId = resourceRows?.[0]?.lane_id ?? null
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_entries').update({ resource_id: resourceId, lane_id: laneId }).eq('id', entryId)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true }
 }

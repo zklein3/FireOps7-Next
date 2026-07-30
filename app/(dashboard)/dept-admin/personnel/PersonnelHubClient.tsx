@@ -10,21 +10,24 @@ const TABS = [
 ]
 
 interface Role { id: string; name: string; is_officer: boolean; sort_order: number }
+interface Shift { id: string; name: string; sort_order: number; active: boolean }
 interface PersonnelRecord {
   id: string; system_role: string; signup_status: string; active: boolean
-  employee_number: string | null; hire_date: string | null; role_id: string | null
+  employee_number: string | null; hire_date: string | null; role_id: string | null; shift_id: string | null
   personnel: { id: string; first_name: string; last_name: string; email: string; signup_status: string } | null
   personnel_roles: { name: string; is_officer: boolean } | null
+  shift_name: string | null
 }
 interface ExcuseType { id: string; excuse_name: string; active: boolean }
 interface Requirement { id: string; event_type: string; minimum_percentage: number; period: string; active: boolean }
 
 export default function PersonnelHubClient({
-  personnel, roles, departmentName, departmentId,
+  personnel, roles, shifts, departmentName, departmentId,
   excuseTypes, requirements,
 }: {
   personnel: PersonnelRecord[]
   roles: Role[]
+  shifts: Shift[]
   departmentName: string
   departmentId: string
   excuseTypes: ExcuseType[]
@@ -81,6 +84,7 @@ export default function PersonnelHubClient({
             <DeptPersonnelClient
               personnel={personnel}
               roles={roles}
+              shifts={shifts}
               departmentName={departmentName}
               departmentId={departmentId}
             />

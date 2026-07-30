@@ -247,8 +247,82 @@ export async function openOperationalPeriod(icsIncidentId: string) {
     }
   }
 
+  // Snapshot the department's ICS 205/206 defaults — configured once in Dept
+  // Admin, copied in per period, then independently editable from there.
+  const { data: channelDefaults } = await ctx.adminClient
+    .from('department_radio_channels').select('channel_name, assignment').eq('department_id', ctx.departmentId).eq('active', true).order('sort_order')
+  if (channelDefaults && channelDefaults.length > 0) {
+    await ctx.adminClient.from('ics_radio_channels').insert(channelDefaults.map(c => ({
+      ics_operational_period_id: period.id, channel_name: c.channel_name, assignment: c.assignment,
+    })))
+  }
+
+  const { data: medicalDefaults } = await ctx.adminClient
+    .from('department_medical_plan_contacts').select('contact_type, name, phone, address').eq('department_id', ctx.departmentId).eq('active', true).order('sort_order')
+  if (medicalDefaults && medicalDefaults.length > 0) {
+    await ctx.adminClient.from('ics_medical_plan_entries').insert(medicalDefaults.map(m => ({
+      ics_operational_period_id: period.id, contact_type: m.contact_type, name: m.name, phone: m.phone, address: m.address,
+    })))
+  }
+
   revalidatePath(`/ics/${icsIncidentId}`)
   return { success: true, id: period.id as string }
+}
+
+// ─── ICS 205 / 206 — period-scoped, editable after the snapshot ──────────────
+
+export async function addRadioChannelToPeriod(periodId: string, icsIncidentId: string, channelName: string, assignment: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const allowed = await hasStandingAccess(ctx.adminClient, icsIncidentId, ctx.departmentId)
+  if (!allowed) return { error: 'Not authorized on this incident.' }
+  if (!channelName.trim()) return { error: 'Channel name is required.' }
+
+  const { error: dbErr } = await ctx.adminClient
+    .from('ics_radio_channels').insert({ ics_operational_period_id: periodId, channel_name: channelName.trim(), assignment: assignment.trim() || null })
+  if (dbErr) { await logError(dbErr.message, '/ics'); return { error: dbErr.message } }
+  revalidatePath(`/ics/${icsIncidentId}`)
+  return { success: true }
+}
+
+export async function removeRadioChannelFromPeriod(id: string, icsIncidentId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const allowed = await hasStandingAccess(ctx.adminClient, icsIncidentId, ctx.departmentId)
+  if (!allowed) return { error: 'Not authorized on this incident.' }
+  const { error: dbErr } = await ctx.adminClient.from('ics_radio_channels').delete().eq('id', id)
+  if (dbErr) { await logError(dbErr.message, '/ics'); return { error: dbErr.message } }
+  revalidatePath(`/ics/${icsIncidentId}`)
+  return { success: true }
+}
+
+export async function addMedicalPlanEntryToPeriod(
+  periodId: string, icsIncidentId: string,
+  contactType: 'hospital' | 'ambulance' | 'aid_station' | 'other', name: string, phone: string, address: string,
+) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const allowed = await hasStandingAccess(ctx.adminClient, icsIncidentId, ctx.departmentId)
+  if (!allowed) return { error: 'Not authorized on this incident.' }
+  if (!name.trim()) return { error: 'Name is required.' }
+
+  const { error: dbErr } = await ctx.adminClient
+    .from('ics_medical_plan_entries')
+    .insert({ ics_operational_period_id: periodId, contact_type: contactType, name: name.trim(), phone: phone.trim() || null, address: address.trim() || null })
+  if (dbErr) { await logError(dbErr.message, '/ics'); return { error: dbErr.message } }
+  revalidatePath(`/ics/${icsIncidentId}`)
+  return { success: true }
+}
+
+export async function removeMedicalPlanEntryFromPeriod(id: string, icsIncidentId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const allowed = await hasStandingAccess(ctx.adminClient, icsIncidentId, ctx.departmentId)
+  if (!allowed) return { error: 'Not authorized on this incident.' }
+  const { error: dbErr } = await ctx.adminClient.from('ics_medical_plan_entries').delete().eq('id', id)
+  if (dbErr) { await logError(dbErr.message, '/ics'); return { error: dbErr.message } }
+  revalidatePath(`/ics/${icsIncidentId}`)
+  return { success: true }
 }
 
 export async function updateOperationalPeriod(periodId: string, icsIncidentId: string, fields: { objectives?: string; safety_message?: string; weather?: string; narrative?: string }) {

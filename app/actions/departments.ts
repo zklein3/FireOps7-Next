@@ -73,6 +73,35 @@ export async function saveDeptInspectionSettings(formData: FormData) {
   return { success: true }
 }
 
+// Jurisdiction is a standing, sys-admin-configured relationship (EM director over
+// fire/police, say) — deliberately not self-service, since it's not a per-incident
+// invite (see app/actions/ics.ts's ics_incident_agencies for that), it's a durable
+// oversight relationship that shouldn't be set up unilaterally by either side.
+export async function addJurisdiction(parentDepartmentId: string, childDepartmentId: string) {
+  const authErr = await assertSysAdmin()
+  if (authErr) return { error: authErr }
+  if (parentDepartmentId === childDepartmentId) return { error: 'A department cannot have jurisdiction over itself.' }
+
+  const adminClient = createAdminClient()
+  const { error } = await adminClient
+    .from('department_jurisdictions')
+    .insert({ parent_department_id: parentDepartmentId, child_department_id: childDepartmentId })
+  if (error) { await logError(error.message, '/admin/dept'); return { error: error.message } }
+  revalidatePath(`/admin/dept/${parentDepartmentId}`)
+  return { success: true }
+}
+
+export async function removeJurisdiction(id: string, departmentId: string) {
+  const authErr = await assertSysAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+  const { error } = await adminClient.from('department_jurisdictions').delete().eq('id', id)
+  if (error) { await logError(error.message, '/admin/dept'); return { error: error.message } }
+  revalidatePath(`/admin/dept/${departmentId}`)
+  return { success: true }
+}
+
 export async function updateDepartmentModules(
   departmentId: string,
   modules: { module_operations?: boolean; module_iso?: boolean; module_neris?: boolean; module_medical?: boolean; module_medical_controlled?: boolean; module_fuel_storage?: boolean; module_ics?: boolean; public_site_enabled?: boolean }

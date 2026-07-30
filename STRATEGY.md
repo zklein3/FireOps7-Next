@@ -144,14 +144,14 @@ Off by default — explicitly inactive until admin toggles it on per department.
 - **Session/visibility wrinkle:** the added department's members are logged into their own department context, not the owning dept's — they need a "Shared With Your Department" list on their own dashboard showing ICS incidents where their dept appears in `ics_incident_agencies`, rather than a full department-context switch.
 - **Access level:** view the incident + self-log their own ICS 214 activity entries for their assigned position (mirrors existing event/training self check-in). Cannot close anyone else's portion or the incident itself.
 
-**Standing jurisdiction — EM oversight (2026-07-29, distinct from the ad hoc grant above):**
-- New `department_jurisdictions` table (`parent_department_id`, `child_department_id`) — e.g. County EM as parent, Winslow Fire and Yutan PD as children. Sys-admin configured, standing, not per-incident.
+**Standing jurisdiction — EM oversight (2026-07-29, distinct from the ad hoc grant above) — SHIPPED ✅ (admin UI 2026-07-30):**
+- `department_jurisdictions` table (`parent_department_id`, `child_department_id`) — e.g. County EM as parent, Winslow Fire and Yutan PD as children. Sys-admin configured via a new **Jurisdiction** tab on `/admin/dept/[id]` (`JurisdictionTab.tsx`, `addJurisdiction`/`removeJurisdiction` in `app/actions/departments.ts`) — standing, not per-incident, deliberately not self-service by either side.
 - **Scoped strictly to interoperability tables** — `ics_incidents` (+ children), `iso_mutual_aid_agreements`, LEOP documents, and general document shares. Zero visibility or access into a child department's personnel, training, non-ICS incidents, inventory, or apparatus records. EM is a peer collaborator on the shared interoperability layer, not an overseer of the department — EM is not "the boss."
 - **Admin-level edit rights within that scope** (not read-only — corrected from an earlier read-only default). EM can edit ICS forms, mutual aid agreements, LEOP, and shared documents for departments in its jurisdiction, same as if they were a participant.
 - **"Should consult" handled as audit-trail visibility, not a hard approval gate.** Every edit made by a non-owning department shows who made it and when (e.g. "Edited by Cass County EM — 2026-07-29") — no approval workflow, just transparency so the owning department always sees EM's fingerprints on their own document.
 - This is separate from, and does not require, a Transfer of Command — jurisdiction never grants command authority, only standing edit access to the shared documents.
 
-**Transfer of Command (2026-07-29):** a real NIMS concept — command formally passing from the initial IC to another department (e.g. County EM taking over once a county emergency is declared), logged rather than implicit.
+**Transfer of Command (2026-07-29) — SHIPPED ✅ (UI 2026-07-30):** a real NIMS concept — command formally passing from the initial IC to another department (e.g. County EM taking over once a county emergency is declared), logged rather than implicit. UI lives on the ICS incident page under Participating Departments — owner-only, picks another active participant, confirms, calls the existing `transferCommand` action.
 - `ics_incidents` has a mutable **current owning department**, not a permanent value fixed at creation.
 - `ics_command_transfers` log (`from_department_id`, `to_department_id`, `transferred_at`, `transferred_by`, notes) — every handoff is a timestamped record.
 - Whoever currently owns it has full authority (edit, close, grant access). The previous owner drops to the same access level a granted/invited department has — still involved, no longer in command.
@@ -183,6 +183,20 @@ Off by default — explicitly inactive until admin toggles it on per department.
 - Instructions built into every form field — no guessing required
 - Printable ICS chart for command post use
 - Not scoped for actual build yet — this is architecture only, captured ahead of a real pilot per the same reasoning as the rest of the EM vertical above. A lot has converged here (2026-07-26 through 2026-07-29) — this is close to build-ready, but shift assignments (needed for real 203/204 forward planning) and the resource-kind vocabulary (needed for 204) are the two pieces most likely to need their own design pass before writing schema.
+
+### Build session 2026-07-30 — SHIPPED ✅
+
+Everything above this note was architecture. This session actually built the module:
+
+- **Core ICS module** — `module_ics` flag, `ics_incidents` (mutable owning department for Transfer of Command), `ics_operational_periods`, `ics_incident_participants` (per-agency close lifecycle, derived incident status), `ics_assignments`/`ics_resources` (203/204, snapshot-then-editable), `/ics` pages, "Open ICS Packet" entry point from an accountability board.
+- **Accountability board — NIMS Mode + Active Violence** — both toggles moved to the page header; each mode ensures its own lane profile (built-in preset, dept-customizable in Dept Admin → Accountability, three tabs: Default/ICS/Active Violence); empty off-mode lanes hide themselves, occupied ones never do; live lane renaming; lane delete (blocked if occupied or has 214 history).
+- **ICS 211 + 214** — 211 is a live, unfiltered read of the board's check-in list. 214 got a "Log 214" button that stamps current positions (optionally lane-scoped, for a supervisor logging just their own unit) plus a manual-note merge — blank notes just log the stamp.
+- **Equipment/resource tracker** — `accountability_resources`, two-tier (own apparatus or raw description), crew attachment via `accountability_entries.resource_id`, moving a resource cascades to its attached crew, moving a person individually detaches them (deliberate split support). Resource-kind vocabulary (`lib/resource-kinds.ts`) shared across verticals + optional NIMS Type I–IV tier.
+- **Shift assignments** — `department_shifts` + `department_personnel.shift_id`, deliberately just a standing "who's on this shift" assignment, not a rotation-calendar engine (real fire shift patterns vary too much to model generically). ICS 203 gets a "Pre-fill from shift roster" button — the actual fix for the forward-planning gap.
+- **ICS 205/206** — `department_radio_channels` / `department_medical_plan_contacts` (Dept Admin → ICS Defaults), snapshotted into `ics_radio_channels`/`ics_medical_plan_entries` per period, same pattern as 203/204.
+- **Jurisdiction admin UI** — `/admin/dept/[id]` → Jurisdiction tab, sys-admin only, add/remove child departments.
+- **Transfer of Command UI** — button on the ICS incident page, owner-only, picks another active participant.
+- **Not built**: LEOP builder, general document sharing. Both are genuinely large net-new features (LEOP needs the inspection-template-builder-style section/versioning system; document sharing needs a documents table + the same grant shape as `ics_incident_agencies`) — deliberately not attempted in this pass rather than half-building them.
 
 ## Infrastructure & Scaling Plan
 

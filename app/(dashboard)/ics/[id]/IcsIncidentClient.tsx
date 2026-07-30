@@ -7,20 +7,24 @@ import PageNavBar from '@/components/PageNavBar'
 import {
   openOperationalPeriod, updateOperationalPeriod, addParticipant, closeParticipantPortion,
   reopenIcsIncident, transferCommand, addAssignment, removeAssignment, addResource, removeResource,
+  addRadioChannelToPeriod, removeRadioChannelFromPeriod, addMedicalPlanEntryToPeriod, removeMedicalPlanEntryFromPeriod,
 } from '@/app/actions/ics'
 import { reopenBoard } from '@/app/actions/accountability'
+import { prefillAssignmentsFromShift } from '@/app/actions/shifts'
 
 type Participant = { id: string; department_id: string; status: string; department_name: string; added_at: string; closed_at: string | null }
 type Period = { id: string; period_number: number; start_at: string; end_at: string | null; objectives: string | null; safety_message: string | null; weather: string | null; narrative: string | null }
 type Assignment = { id: string; display_name: string; raw_agency: string | null; ics_role: string | null; lane_label: string | null }
 type Resource = { id: string; display_desc: string | null; raw_agency: string | null; lane_label: string | null; status: string }
+type RadioChannel = { id: string; channel_name: string; assignment: string | null }
+type MedicalPlanEntry = { id: string; contact_type: string; name: string; phone: string | null; address: string | null }
 type CheckIn = { display_name: string; raw_dept: string | null; ics_role: string | null; checked_in_at: string; released_at: string | null }
 type ActivityLogEntry = { entry_time: string; note: string; author_name: string }
 
 export default function IcsIncidentClient({
   incident, currentDepartmentId, isOwner, isJurisdictionParent, isOfficerOrAbove,
   participants, periods, latestPeriod, assignments, resources, checkIns, activityLog,
-  hasLinkedBoard, linkedBoardStatus, allDepartments,
+  hasLinkedBoard, linkedBoardStatus, allDepartments, shifts, radioChannels, medicalPlanEntries,
 }: {
   incident: { id: string; title: string; status: string; departmentId: string; departmentName: string; linkedAccountabilityBoardId: string | null }
   currentDepartmentId: string
@@ -37,6 +41,9 @@ export default function IcsIncidentClient({
   hasLinkedBoard: boolean
   linkedBoardStatus: string | null
   allDepartments: { id: string; name: string }[]
+  shifts: { id: string; name: string }[]
+  radioChannels: RadioChannel[]
+  medicalPlanEntries: MedicalPlanEntry[]
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -45,8 +52,22 @@ export default function IcsIncidentClient({
   const [safetyMessage, setSafetyMessage] = useState(latestPeriod?.safety_message ?? '')
   const [weather, setWeather] = useState(latestPeriod?.weather ?? '')
   const [addDeptId, setAddDeptId] = useState('')
+  const [transferToDeptId, setTransferToDeptId] = useState('')
   const [newAssignment, setNewAssignment] = useState({ raw_name: '', raw_agency: '', ics_role: '', lane_label: '' })
   const [newResource, setNewResource] = useState({ kind: '', raw_agency: '', lane_label: '' })
+  const [newChannel, setNewChannel] = useState({ channel_name: '', assignment: '' })
+  const [newMedContact, setNewMedContact] = useState({ contact_type: 'hospital', name: '', phone: '', address: '' })
+  const [prefillShiftId, setPrefillShiftId] = useState('')
+  const [prefillSaving, setPrefillSaving] = useState(false)
+
+  async function handlePrefillFromShift() {
+    if (!prefillShiftId || !latestPeriod) return
+    setPrefillSaving(true); setError(null)
+    const res = await prefillAssignmentsFromShift(latestPeriod.id, incident.id, prefillShiftId)
+    setPrefillSaving(false)
+    if (res?.error) { setError(res.error); return }
+    router.refresh()
+  }
 
   const myParticipant = participants.find(p => p.department_id === currentDepartmentId)
 
@@ -137,8 +158,30 @@ export default function IcsIncidentClient({
             </button>
           </div>
         )}
-        {isOwner && myParticipant && (
-          <p className="mt-2 text-xs text-zinc-400">Owning department can transfer command to another participant via Transfer of Command (not yet in this UI — see STRATEGY.md).</p>
+        {isOwner && isOfficerOrAbove && participants.filter(p => p.department_id !== incident.departmentId).length > 0 && (
+          <div className="mt-3 pt-3 border-t border-zinc-100">
+            <p className="text-xs text-zinc-500 mb-1.5">Transfer of Command — hands full authority (including closing the incident) to another participant.</p>
+            <div className="flex items-center gap-2">
+              <select value={transferToDeptId} onChange={e => setTransferToDeptId(e.target.value)}
+                className="flex-1 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm">
+                <option value="">Transfer command to…</option>
+                {participants.filter(p => p.department_id !== incident.departmentId).map(p => (
+                  <option key={p.department_id} value={p.department_id}>{p.department_name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => {
+                  if (!transferToDeptId) return
+                  if (!confirm(`Transfer command of this incident to ${participants.find(p => p.department_id === transferToDeptId)?.department_name}?`)) return
+                  run(() => transferCommand(incident.id, transferToDeptId))
+                }}
+                disabled={busy || !transferToDeptId}
+                className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-900 disabled:opacity-50 transition-colors"
+              >
+                Transfer
+              </button>
+            </div>
+          </div>
         )}
       </section>
 
@@ -197,6 +240,19 @@ export default function IcsIncidentClient({
           {/* ICS 203 — Assignments */}
           <section className="rounded-xl border border-zinc-200 bg-white p-4">
             <h2 className="text-sm font-semibold text-zinc-900 mb-3">ICS 203 — Organization Assignment List</h2>
+            {shifts.length > 0 && (
+              <div className="mb-3 flex items-center gap-2 rounded-lg bg-zinc-50 border border-zinc-200 p-2">
+                <select value={prefillShiftId} onChange={e => setPrefillShiftId(e.target.value)}
+                  className="flex-1 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm">
+                  <option value="">Pre-fill from shift roster…</option>
+                  {shifts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <button onClick={handlePrefillFromShift} disabled={prefillSaving || !prefillShiftId}
+                  className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-900 disabled:opacity-50 transition-colors">
+                  {prefillSaving ? 'Adding…' : 'Pre-fill'}
+                </button>
+              </div>
+            )}
             <div className="space-y-1 mb-3">
               {assignments.length === 0 && <p className="text-sm text-zinc-400">No assignments yet.</p>}
               {assignments.map(a => (
@@ -244,6 +300,68 @@ export default function IcsIncidentClient({
               className="mt-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50 transition-colors"
             >
               Add resource
+            </button>
+          </section>
+
+          {/* ICS 205 — Radio Communications Plan */}
+          <section className="rounded-xl border border-zinc-200 bg-white p-4">
+            <h2 className="text-sm font-semibold text-zinc-900 mb-3">ICS 205 — Radio Communications Plan</h2>
+            <div className="space-y-1 mb-3">
+              {radioChannels.length === 0 && <p className="text-sm text-zinc-400">No channels yet.</p>}
+              {radioChannels.map(c => (
+                <div key={c.id} className="flex items-center justify-between text-sm border-b border-zinc-50 py-1">
+                  <span className="text-zinc-700">{c.channel_name}{c.assignment ? ` — ${c.assignment}` : ''}</span>
+                  <button onClick={() => run(() => removeRadioChannelFromPeriod(c.id, incident.id))} className="text-xs text-red-600 hover:underline">Remove</button>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input placeholder="Channel" value={newChannel.channel_name} onChange={e => setNewChannel(s => ({ ...s, channel_name: e.target.value }))} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" />
+              <input placeholder="Assignment" value={newChannel.assignment} onChange={e => setNewChannel(s => ({ ...s, assignment: e.target.value }))} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" />
+            </div>
+            <button
+              onClick={() => run(async () => { const r = await addRadioChannelToPeriod(latestPeriod.id, incident.id, newChannel.channel_name, newChannel.assignment); if (!r?.error) setNewChannel({ channel_name: '', assignment: '' }); return r })}
+              disabled={busy || !newChannel.channel_name.trim()}
+              className="mt-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50 transition-colors"
+            >
+              Add channel
+            </button>
+          </section>
+
+          {/* ICS 206 — Medical Plan */}
+          <section className="rounded-xl border border-zinc-200 bg-white p-4">
+            <h2 className="text-sm font-semibold text-zinc-900 mb-3">ICS 206 — Medical Plan</h2>
+            <div className="space-y-1 mb-3">
+              {medicalPlanEntries.length === 0 && <p className="text-sm text-zinc-400">No contacts yet.</p>}
+              {medicalPlanEntries.map(m => (
+                <div key={m.id} className="flex items-center justify-between text-sm border-b border-zinc-50 py-1">
+                  <span className="text-zinc-700">
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 mr-2">{m.contact_type.replace('_', ' ')}</span>
+                    {m.name}{m.phone ? ` — ${m.phone}` : ''}
+                  </span>
+                  <button onClick={() => run(() => removeMedicalPlanEntryFromPeriod(m.id, incident.id))} className="text-xs text-red-600 hover:underline">Remove</button>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <select value={newMedContact.contact_type} onChange={e => setNewMedContact(s => ({ ...s, contact_type: e.target.value }))} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm">
+                <option value="hospital">Hospital</option>
+                <option value="ambulance">Ambulance</option>
+                <option value="aid_station">Aid Station</option>
+                <option value="other">Other</option>
+              </select>
+              <input placeholder="Name" value={newMedContact.name} onChange={e => setNewMedContact(s => ({ ...s, name: e.target.value }))} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input placeholder="Phone" value={newMedContact.phone} onChange={e => setNewMedContact(s => ({ ...s, phone: e.target.value }))} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" />
+              <input placeholder="Address" value={newMedContact.address} onChange={e => setNewMedContact(s => ({ ...s, address: e.target.value }))} className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm" />
+            </div>
+            <button
+              onClick={() => run(async () => { const r = await addMedicalPlanEntryToPeriod(latestPeriod.id, incident.id, newMedContact.contact_type as any, newMedContact.name, newMedContact.phone, newMedContact.address); if (!r?.error) setNewMedContact({ contact_type: 'hospital', name: '', phone: '', address: '' }); return r })}
+              disabled={busy || !newMedContact.name.trim()}
+              className="mt-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50 transition-colors"
+            >
+              Add contact
             </button>
           </section>
         </>
