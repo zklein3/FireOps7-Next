@@ -36,6 +36,41 @@ export type ParsedRunSheet = {
   }[]
 }
 
+// Collapses duplicate mutual_aid entries for the same agency into one — a safety net in case the
+// model still splits an agency's placeholder header and its real unit header into two entries.
+function mergeMutualAidByAgency(rows: NonNullable<ParsedRunSheet['mutual_aid']>): NonNullable<ParsedRunSheet['mutual_aid']> {
+  const normalize = (name: string) => name.trim().toLowerCase().replace(/\s+department$/, '').replace(/\s+/g, ' ')
+  const merged: Record<string, NonNullable<ParsedRunSheet['mutual_aid']>[number]> = {}
+
+  for (const row of rows) {
+    const key = normalize(row.department_name || '')
+    if (!key) continue
+    const existing = merged[key]
+    if (!existing) {
+      merged[key] = { ...row }
+      continue
+    }
+    // Prefer the longer/more complete-looking department name
+    if (row.department_name.length > existing.department_name.length) existing.department_name = row.department_name
+    if (row.apparatus_description && !existing.apparatus_description?.includes(row.apparatus_description)) {
+      existing.apparatus_description = existing.apparatus_description
+        ? `${existing.apparatus_description}, ${row.apparatus_description}`
+        : row.apparatus_description
+    }
+    if (row.personnel_count && (!existing.personnel_count || row.personnel_count > existing.personnel_count)) {
+      existing.personnel_count = row.personnel_count
+    }
+    if (row.arrival_time && (!existing.arrival_time || row.arrival_time < existing.arrival_time)) {
+      existing.arrival_time = row.arrival_time
+    }
+    if (row.departure_time && (!existing.departure_time || row.departure_time > existing.departure_time)) {
+      existing.departure_time = row.departure_time
+    }
+  }
+
+  return Object.values(merged)
+}
+
 export async function parseRunSheet(formData: FormData): Promise<{ data?: ParsedRunSheet; error?: string }> {
   const file = formData.get('pdf') as File | null
   if (!file) return { error: 'No file provided.' }
@@ -46,11 +81,16 @@ export async function parseRunSheet(formData: FormData): Promise<{ data?: Parsed
   const apparatusUnits: string[] = apparatusJson ? JSON.parse(apparatusJson) : []
 
   const apparatusContext = apparatusUnits.length > 0
-    ? `\nThis department's apparatus unit numbers are: ${apparatusUnits.join(', ')}. In the CFS, these units may appear with a department prefix (e.g. unit "11" may appear as "WIN11", unit "24" as "WIN24"). Only include an entry in the "apparatus" array if BOTH are true: (a) its numeric suffix matches one of these unit numbers, AND (b) it has its own "Enroute" or "Arrived" line for THIS specific unit in the Unit Response Times section. A unit that is merely paged/assigned/recommended somewhere on the CFS but has no Enroute or Arrived line of its own was NOT actually on the run — do not include it, even if its number matches. In the apparatus array, return the plain unit number exactly as listed above (e.g. "11" not "WIN11").
+    ? `\nThis department's apparatus unit numbers are: ${apparatusUnits.join(', ')}. In the CFS, these units may appear with a department prefix (e.g. unit "11" may appear as "WIN11", unit "24" as "WIN24").
 
-Do not confuse an agency-level radio identifier or department name (e.g. "WINFIRE", "HOOPFIRE" — these refer to a whole department, not a specific vehicle) with a unit number. Only real apparatus/vehicle designators (Engine, Truck, Squad, Tanker, Rescue, Brush, etc. + a number) count as units. If personnel responded in a personal vehicle (POV) rather than department apparatus, do not invent an apparatus entry for them.
+**Step 1 — map agencies using the "Responders" section on page 1.** Each line there pairs a unit/agency identifier with an agency abbreviation (rightmost column, e.g. "HPR", "WIN"). Use this to determine which identifiers belong to this department (matching its own prefix) versus an outside agency.
 
-Any responding unit that does NOT match one of this department's own unit numbers is a mutual aid / outside agency unit (a different fire department, EMS agency, or law enforcement agency assisting on this call) — do NOT put those in "apparatus". Instead, list each outside agency in the "mutual_aid" array, using their actual apparatus designator if printed (e.g. "Squad 12"), not just the agency's radio callsign. Group units by their agency/department (identifiable by a different prefix, or an agency name printed elsewhere in the unit list or narrative) — one mutual_aid entry per outside agency, with their unit(s) noted in apparatus_description (e.g. "Engine 4, Tanker 12"). If a unit's agency can't be determined at all, skip it rather than guessing.`
+**Step 2 — classify each header in "Unit Response Times".** Some headers are a whole-agency dispatch placeholder, not a specific vehicle — recognizable because the identifier is just the agency callsign with no unit number (e.g. "WINFIRE", "HPRFIRE" — literally "<prefix>FIRE" with nothing else), and its lines are typically just Assign/Off Duty with no real Enroute/Arrived. Other headers are an actual responding unit — they include a number and/or explicit apparatus type (e.g. "HPR12", "WIN24", "Squad 1", "Engine 4").
+   - For THIS department: only include a unit in "apparatus" if its identifier is a real numbered unit (not an agency placeholder) matching one of the unit numbers above, AND it has its own genuine Enroute or Arrived line. If the only entry for this department is an agency placeholder header (e.g. only "WINFIRE", no numbered unit) — that means personnel responded without a specific piece of apparatus (e.g. by POV) — do NOT invent an apparatus entry, leave "apparatus" empty for this department.
+   - For an OUTSIDE agency: if a real numbered/typed unit header exists (e.g. "HPR12"), use that one for the mutual_aid entry's apparatus_description and times, and ignore that agency's placeholder header entirely (do not double-count it, do not use its times). If the outside agency has ONLY an agency placeholder header with no numbered unit, still add one mutual_aid entry for them (they assisted, e.g. by POV or command staff) but leave apparatus_description blank, and pull arrival_time/departure_time from that placeholder header since it's the only data available.
+   - Return exactly ONE mutual_aid entry per outside agency — never split one agency across multiple entries even if it has multiple headers.
+
+**Never fabricate.** Every unit_number, apparatus_description, personnel_count, and timestamp you return must be text or digits literally printed in the document. Do not guess a truck's type or number from convention (e.g. don't turn "HPR12" into "Squad 10" or any other invented name) — if the document only gives you the identifier "HPR12" with no separate human-readable name, use "HPR12" as printed. If a detail isn't explicitly present in the document, omit that field rather than estimate or guess it.`
     : ''
 
   try {
@@ -129,7 +169,7 @@ Return a JSON object (all fields optional, omit if not found):
   ],
   "mutual_aid": [
     {
-      "department_name": "outside agency/department name as printed (e.g. 'Flagstaff Fire') — if only a unit prefix is visible with no full name, use the prefix (e.g. 'FLG')",
+      "department_name": "outside agency/department name exactly as printed (e.g. 'Hooper Fire') — do not append words like 'Department' unless they're actually printed; if only a prefix is visible with no full name, use the prefix (e.g. 'FLG')",
       "apparatus_description": "their unit(s) as printed, e.g. 'Engine 4' or 'FLG-Engine4, FLG-Tanker12'",
       "personnel_count": number of personnel if listed, otherwise omit,
       "arrival_time": "YYYY-MM-DDTHH:mm — from that unit's Enroute/Arrived line in Unit Response Times, if present",
@@ -137,8 +177,6 @@ Return a JSON object (all fields optional, omit if not found):
     }
   ]
 }
-
-Only include department units that have their own Enroute or Arrived time in the Unit Response Times section — a unit number appearing elsewhere on the CFS (assigned/recommended lists, narrative mentions) with no Enroute/Arrived line of its own means it did NOT actually respond and must be omitted from "apparatus" entirely. Outside-agency (mutual aid) units should be included in "mutual_aid" — pull their arrival_time/departure_time from their own Unit Response Times entry whenever one exists; only omit those times if the outside unit truly has no such entry on this CFS.
 
 Return only valid JSON, no markdown or explanation.`,
           },
@@ -150,6 +188,7 @@ Return only valid JSON, no markdown or explanation.`,
     // Strip markdown code fences if present
     const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
     const data = JSON.parse(cleaned) as ParsedRunSheet
+    if (data.mutual_aid?.length) data.mutual_aid = mergeMutualAidByAgency(data.mutual_aid)
     return { data }
   } catch (err: any) {
     await logError(err, 'parse-run-sheet')
