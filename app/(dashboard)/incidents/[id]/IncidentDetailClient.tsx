@@ -211,6 +211,9 @@ export default function IncidentDetailClient({
 
     // Write apparatus — update existing rows, add new ones
     for (const unit of d.apparatus ?? []) {
+      // Guard against false-positive matches (e.g. a unit merely listed/paged but never
+      // actually enroute) — require an actual response timestamp before treating it as on the run.
+      if (!unit.enroute_at && !unit.on_scene_at) continue
       const numericSuffix = unit.unit_number.replace(/^[A-Za-z]+/, '')
       const deptMatch = deptApparatus.find(a =>
         a.unit_number.toUpperCase() === unit.unit_number.toUpperCase() ||

@@ -176,6 +176,9 @@ export default function NewIncidentClient({
     if (d.apparatus?.length) {
       const matched: ApparatusEntry[] = []
       for (const unit of d.apparatus) {
+        // Guard against false-positive matches (e.g. a unit merely listed/paged but never
+        // actually enroute) — require an actual response timestamp before treating it as on the run.
+        if (!unit.enroute_at && !unit.on_scene_at) continue
         // Strip leading alpha prefix (e.g. "WIN11" → "11") to handle CAD agency prefixes
         const numericSuffix = unit.unit_number.replace(/^[A-Za-z]+/, '')
         const found = apparatus.find(a =>

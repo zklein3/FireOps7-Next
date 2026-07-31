@@ -46,9 +46,11 @@ export async function parseRunSheet(formData: FormData): Promise<{ data?: Parsed
   const apparatusUnits: string[] = apparatusJson ? JSON.parse(apparatusJson) : []
 
   const apparatusContext = apparatusUnits.length > 0
-    ? `\nThis department's apparatus unit numbers are: ${apparatusUnits.join(', ')}. In the CFS, these units may appear with a department prefix (e.g. unit "11" may appear as "WIN11", unit "24" as "WIN24"). Only include entries in the "apparatus" array that match one of these unit numbers (by that numeric suffix). In the apparatus array, return the plain unit number exactly as listed above (e.g. "11" not "WIN11").
+    ? `\nThis department's apparatus unit numbers are: ${apparatusUnits.join(', ')}. In the CFS, these units may appear with a department prefix (e.g. unit "11" may appear as "WIN11", unit "24" as "WIN24"). Only include an entry in the "apparatus" array if BOTH are true: (a) its numeric suffix matches one of these unit numbers, AND (b) it has its own "Enroute" or "Arrived" line for THIS specific unit in the Unit Response Times section. A unit that is merely paged/assigned/recommended somewhere on the CFS but has no Enroute or Arrived line of its own was NOT actually on the run — do not include it, even if its number matches. In the apparatus array, return the plain unit number exactly as listed above (e.g. "11" not "WIN11").
 
-Any responding unit that does NOT match one of these unit numbers is a mutual aid / outside agency unit (a different fire department, EMS agency, or law enforcement agency assisting on this call) — do NOT put those in "apparatus". Instead, list each outside agency in the "mutual_aid" array. Group units by their agency/department (identifiable by a different prefix, or an agency name printed elsewhere in the unit list or narrative) — one mutual_aid entry per outside agency, with their unit(s) noted in apparatus_description (e.g. "Engine 4, Tanker 12"). If a unit's agency can't be determined at all, skip it rather than guessing.`
+Do not confuse an agency-level radio identifier or department name (e.g. "WINFIRE", "HOOPFIRE" — these refer to a whole department, not a specific vehicle) with a unit number. Only real apparatus/vehicle designators (Engine, Truck, Squad, Tanker, Rescue, Brush, etc. + a number) count as units. If personnel responded in a personal vehicle (POV) rather than department apparatus, do not invent an apparatus entry for them.
+
+Any responding unit that does NOT match one of this department's own unit numbers is a mutual aid / outside agency unit (a different fire department, EMS agency, or law enforcement agency assisting on this call) — do NOT put those in "apparatus". Instead, list each outside agency in the "mutual_aid" array, using their actual apparatus designator if printed (e.g. "Squad 12"), not just the agency's radio callsign. Group units by their agency/department (identifiable by a different prefix, or an agency name printed elsewhere in the unit list or narrative) — one mutual_aid entry per outside agency, with their unit(s) noted in apparatus_description (e.g. "Engine 4, Tanker 12"). If a unit's agency can't be determined at all, skip it rather than guessing.`
     : ''
 
   try {
@@ -136,7 +138,7 @@ Return a JSON object (all fields optional, omit if not found):
   ]
 }
 
-Only include department units that have an Enroute or Arrived time in the Unit Response Times section. Outside-agency (mutual aid) units should be included in "mutual_aid" even if they only appear in the unit list without full Unit Response Times entries.
+Only include department units that have their own Enroute or Arrived time in the Unit Response Times section — a unit number appearing elsewhere on the CFS (assigned/recommended lists, narrative mentions) with no Enroute/Arrived line of its own means it did NOT actually respond and must be omitted from "apparatus" entirely. Outside-agency (mutual aid) units should be included in "mutual_aid" — pull their arrival_time/departure_time from their own Unit Response Times entry whenever one exists; only omit those times if the outside unit truly has no such entry on this CFS.
 
 Return only valid JSON, no markdown or explanation.`,
           },
