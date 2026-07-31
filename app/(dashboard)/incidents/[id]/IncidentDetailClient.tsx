@@ -233,6 +233,23 @@ export default function IncidentDetailClient({
       }
     }
 
+    // Write mutual aid — add outside-agency units, skip ones already recorded by department name
+    for (const ma of d.mutual_aid ?? []) {
+      if (!ma.department_name) continue
+      const already = mutualAid.some(m => m.external_department_name.toLowerCase() === ma.department_name.toLowerCase())
+      if (already) continue
+      const mfd = new FormData()
+      mfd.set('incident_id', incident.id)
+      mfd.set('external_department_name', ma.department_name)
+      mfd.set('role', 'received_aid')
+      mfd.set('apparatus_description', ma.apparatus_description || '')
+      mfd.set('personnel_count', ma.personnel_count ? String(ma.personnel_count) : '')
+      mfd.set('arrival_time', ma.arrival_time || '')
+      mfd.set('departure_time', ma.departure_time || '')
+      mfd.set('notes', '')
+      await addMutualAid(mfd)
+    }
+
     setImportSuccess(true)
     setIsParsing(false)
     router.refresh()

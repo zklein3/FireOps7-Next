@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createIncident } from '@/app/actions/incidents'
+import { addMutualAid } from '@/app/actions/iso'
 import { parseRunSheet } from '@/app/actions/parse-run-sheet'
 import type { ParsedRunSheet } from '@/app/actions/parse-run-sheet'
 import { lookupZip } from '@/lib/zip-lookup'
@@ -35,6 +36,15 @@ type PersonnelEntry = {
   personnel_id: string
   apparatus_id: string
   role: string
+}
+
+type MutualAidEntry = {
+  external_department_name: string
+  role: string
+  apparatus_description: string
+  personnel_count: string
+  arrival_time: string
+  departure_time: string
 }
 
 export default function NewIncidentClient({
@@ -91,6 +101,13 @@ export default function NewIncidentClient({
   const [personnelRows, setPersonnelRows] = useState<PersonnelEntry[]>([])
   const [showAddPersonnel, setShowAddPersonnel] = useState(false)
   const [newPersonnel, setNewPersonnel] = useState<PersonnelEntry>({ personnel_id: myPersonnelId, apparatus_id: '', role: 'crew' })
+
+  // Mutual aid rows (outside agencies — from import or manual add)
+  const [mutualAidRows, setMutualAidRows] = useState<MutualAidEntry[]>([])
+  const [showAddMutualAid, setShowAddMutualAid] = useState(false)
+  const [newMutualAid, setNewMutualAid] = useState<MutualAidEntry>({
+    external_department_name: '', role: 'received_aid', apparatus_description: '', personnel_count: '', arrival_time: '', departure_time: '',
+  })
 
   const isFireType = incidentType === 'fire'
 
@@ -180,8 +197,26 @@ export default function NewIncidentClient({
       if (matched.length > 0) setApparatusRows(matched)
     }
 
+    if (d.mutual_aid?.length) {
+      setMutualAidRows(d.mutual_aid.filter(ma => ma.department_name).map(ma => ({
+        external_department_name: ma.department_name,
+        role: 'received_aid',
+        apparatus_description: ma.apparatus_description || '',
+        personnel_count: ma.personnel_count ? String(ma.personnel_count) : '',
+        arrival_time: ma.arrival_time || '',
+        departure_time: ma.departure_time || '',
+      })))
+    }
+
     setImportSuccess(true)
     setIsParsing(false)
+  }
+
+  function addMutualAidRow() {
+    if (!newMutualAid.external_department_name.trim()) return
+    setMutualAidRows(prev => [...prev, { ...newMutualAid }])
+    setNewMutualAid({ external_department_name: '', role: 'received_aid', apparatus_description: '', personnel_count: '', arrival_time: '', departure_time: '' })
+    setShowAddMutualAid(false)
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -209,6 +244,12 @@ export default function NewIncidentClient({
       const pfd = new FormData()
       Object.entries(row).forEach(([k, v]) => pfd.set(k, v))
       await addIncidentPersonnel(incidentId, pfd)
+    }
+    for (const row of mutualAidRows) {
+      const mfd = new FormData()
+      mfd.set('incident_id', incidentId)
+      Object.entries(row).forEach(([k, v]) => mfd.set(k, v))
+      await addMutualAid(mfd)
     }
 
     router.push(`/incidents/${incidentId}`)
@@ -492,6 +533,70 @@ export default function NewIncidentClient({
               <div className="flex gap-2">
                 <button type="button" onClick={addApparatusRow} disabled={!newApparatus.apparatus_id} className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50">Add Unit</button>
                 <button type="button" onClick={() => setShowAddApparatus(false)} className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-100">Cancel</button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Mutual Aid */}
+        <section className="rounded-xl bg-white border border-zinc-200 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-zinc-900">Mutual Aid</h2>
+            <button type="button" onClick={() => setShowAddMutualAid(true)} className="text-xs font-semibold text-red-700 hover:underline">+ Add</button>
+          </div>
+
+          {mutualAidRows.length === 0 && !showAddMutualAid && (
+            <p className="text-sm text-zinc-400">No outside agencies added yet.</p>
+          )}
+
+          {mutualAidRows.map((row, idx) => (
+            <div key={idx} className="flex items-center justify-between rounded-lg border border-zinc-200 px-4 py-3 bg-zinc-50">
+              <div>
+                <p className="text-sm font-semibold text-zinc-800">{row.external_department_name}</p>
+                <p className="text-xs text-zinc-500">{row.role === 'gave_aid' ? 'We Gave Aid' : 'We Received Aid'}{row.apparatus_description ? ` · ${row.apparatus_description}` : ''}</p>
+              </div>
+              <button type="button" onClick={() => setMutualAidRows(prev => prev.filter((_, i) => i !== idx))} className="text-xs text-red-600 hover:underline">Remove</button>
+            </div>
+          ))}
+
+          {showAddMutualAid && (
+            <div className="rounded-lg border border-zinc-200 p-4 space-y-3 bg-zinc-50">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Department Name</label>
+                  <input value={newMutualAid.external_department_name} onChange={e => setNewMutualAid(p => ({ ...p, external_department_name: e.target.value }))} placeholder="e.g. Flagstaff Fire" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Role</label>
+                  <select value={newMutualAid.role} onChange={e => setNewMutualAid(p => ({ ...p, role: e.target.value }))} className={inputCls}>
+                    <option value="gave_aid">We Gave Aid</option>
+                    <option value="received_aid">We Received Aid</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Apparatus Sent/Received</label>
+                  <input value={newMutualAid.apparatus_description} onChange={e => setNewMutualAid(p => ({ ...p, apparatus_description: e.target.value }))} placeholder="e.g. Engine 1, Tanker 2" className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Personnel Count</label>
+                  <input type="number" min="0" value={newMutualAid.personnel_count} onChange={e => setNewMutualAid(p => ({ ...p, personnel_count: e.target.value }))} className={inputCls} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Arrival Time</label>
+                  <input type="datetime-local" value={newMutualAid.arrival_time} onChange={e => setNewMutualAid(p => ({ ...p, arrival_time: e.target.value }))} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Departure Time</label>
+                  <input type="datetime-local" value={newMutualAid.departure_time} onChange={e => setNewMutualAid(p => ({ ...p, departure_time: e.target.value }))} className={inputCls} />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={addMutualAidRow} disabled={!newMutualAid.external_department_name.trim()} className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50">Add</button>
+                <button type="button" onClick={() => setShowAddMutualAid(false)} className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-100">Cancel</button>
               </div>
             </div>
           )}
