@@ -518,19 +518,33 @@ export async function checkInPerson(
   tagRef: string | null = null,
   resourceId: string | null = null,
   guestAccessTier: 'self' | 'admin' | null = null,
+  guestToken?: string,
 ) {
-  const ctx = await getContext()
-  if (!ctx) return { error: 'Not authenticated.' }
+  const adminClient = createAdminClient()
+  const actor = await resolveActor(adminClient, boardId, guestToken)
+  if (!actor) return { error: 'Not authorized.' }
+  // A guest-self link is scoped to their own single entry — they can't add other people.
+  // A guest-admin has full board control but no visibility into this department's actual
+  // personnel roster, so they can only ever check someone in by name, never by personnel_id.
+  if (actor.kind === 'guest_self') return { error: 'Not authorized.' }
+  if (actor.kind === 'guest_admin' && personnelId) return { error: 'Not authorized.' }
   if (!personnelId && !rawName) return { error: 'Must provide personnel or name.' }
   // A card-based access grant only means anything if there's an actual card to recognize
   // on a future scan — a pure hand-typed name with no tag has nothing to look up.
   const tier = tagRef ? guestAccessTier : null
 
-  const { data: row, error: dbErr } = await ctx.adminClient
+  const { data: row, error: dbErr } = await adminClient
     .from('accountability_entries')
-    .insert({ board_id: boardId, lane_id: laneId, personnel_id: personnelId, raw_name: rawName, raw_dept: rawDept, tag_ref: tagRef, added_by: ctx.me.id, resource_id: resourceId, guest_access_tier: tier })
+    .insert({
+      board_id: boardId, lane_id: laneId, personnel_id: personnelId, raw_name: rawName, raw_dept: rawDept,
+      tag_ref: tagRef, added_by: actor.kind === 'officer' ? actor.personnelId : null, resource_id: resourceId, guest_access_tier: tier,
+    })
     .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id, guest_access_tier').single()
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+
+  if (actor.kind === 'guest_admin') {
+    await logGuestAction(adminClient, boardId, actor.label, `Checked in ${rawName ?? 'a new entry'}${rawDept ? ` (${rawDept})` : ''}.`)
+  }
   return { success: true, entry: row }
 }
 
