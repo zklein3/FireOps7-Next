@@ -954,7 +954,7 @@ export default function AccountabilityBoard({
 
       {movingEntry && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <p className="font-semibold text-zinc-900 mb-1">{movingEntry.display_name}</p>
             <p className="text-sm text-zinc-500 mb-4">Move to which lane?</p>
             <div className="flex flex-col gap-2 mb-3">
@@ -1017,7 +1017,7 @@ export default function AccountabilityBoard({
 
       {guestLinkEntryId && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <p className="font-semibold text-zinc-900 mb-1">Self-Move Access</p>
             <p className="text-xs text-zinc-500 mb-4">
               No FireOps7 account needed. They can view and move only their own entry (and their resource/crew, if attached) — nothing else on this board. Access ends when this board closes.
@@ -1047,7 +1047,7 @@ export default function AccountabilityBoard({
         if (!resource) return null
         return (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
               <p className="font-semibold text-zinc-900 mb-1">{resource.display_desc}</p>
               <p className="text-sm text-zinc-500 mb-4">Move this resource (and its attached crew) to which lane?</p>
               <div className="flex flex-col gap-2 mb-3">
@@ -1071,7 +1071,7 @@ export default function AccountabilityBoard({
 
       {manualOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <p className="font-semibold text-zinc-900 mb-4">Add Person Manually</p>
             <div className="flex flex-col gap-3 mb-4">
               <div>
@@ -1113,7 +1113,7 @@ export default function AccountabilityBoard({
 
       {editingEntryId && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <p className="font-semibold text-zinc-900 mb-4">Edit Name</p>
             <div className="flex flex-col gap-3 mb-4">
               <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
@@ -1135,7 +1135,7 @@ export default function AccountabilityBoard({
 
       {nameTagOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <p className="font-semibold text-zinc-900 mb-1">Name This Tag</p>
             <p className="text-xs text-zinc-500 mb-4">This is a rapid tag — it doesn&apos;t carry a name. Enter who it was handed to for this incident.</p>
             <div className="flex flex-col gap-3 mb-4">
@@ -1168,7 +1168,7 @@ export default function AccountabilityBoard({
 
       {mergeCandidate && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <p className="font-semibold text-zinc-900 mb-1">Same Person?</p>
             <p className="text-sm text-zinc-600 mb-4">
               <strong>{mergeCandidate.existingName}</strong> is already {mergeCandidate.wasReleased ? 'on this board (released)' : 'checked in'} under a quick tag.

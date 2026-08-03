@@ -197,7 +197,7 @@ export default function BoardHeader({
 
       {linkOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <p className="font-semibold text-zinc-900 mb-4">Link Board To</p>
             {linkError && <p className="text-sm text-red-600 mb-3">{linkError}</p>}
             <div className="flex gap-2 mb-4">
@@ -233,7 +233,7 @@ export default function BoardHeader({
 
       {guestOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <p className="font-semibold text-zinc-900 mb-1">Guest Access</p>
             <p className="text-xs text-zinc-500 mb-4">
               No FireOps7 account needed — the link itself is the credential. Full board control (view everyone, create/edit lanes, move people and resources). Access ends automatically when this board closes, or immediately if you revoke below.
