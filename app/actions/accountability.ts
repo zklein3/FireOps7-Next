@@ -5,6 +5,7 @@ import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 import { ALL_ICS_ROLE_VALUES, icsRoleLabel, ICS_MODE_LANES, ACTIVE_VIOLENCE_LANES } from '@/lib/ics-roles'
+import { createBoardGuestToken, verifyBoardGuestTokenSignature } from '@/lib/board-guest-token'
 
 async function getContext() {
   const ctx = await getCurrentDepartmentContext()
@@ -14,6 +15,199 @@ async function getContext() {
     me: { id: ctx.personnelId },
     dept: { department_id: ctx.departmentId, system_role: ctx.systemRole },
     adminClient,
+  }
+}
+
+// ─── Guest access (no FireOps7 account — see lib/board-guest-token.ts) ────────
+//
+// Resolves who's calling an action: a normal logged-in dept member ('officer'), a
+// Tier 2 guest-admin link scoped to the whole board, or a Tier 1 guest-self link
+// scoped to one accountability_entries row. Guest tokens are only ever honored
+// while the board is 'active' and hasn't had its guest links revoked — this is
+// checked live on every call, not just once, so closing the board or hitting
+// "Revoke Guest Access" cuts a guest off immediately.
+type Actor =
+  | { kind: 'officer'; departmentId: string; personnelId: string; systemRole: string | null }
+  | { kind: 'guest_admin'; boardId: string; label: string }
+  | { kind: 'guest_self'; boardId: string; entryId: string; label: string }
+
+async function resolveActor(
+  adminClient: ReturnType<typeof createAdminClient>,
+  boardId: string,
+  guestToken?: string | null,
+): Promise<Actor | null> {
+  if (guestToken) {
+    const payload = verifyBoardGuestTokenSignature(guestToken)
+    if (!payload || payload.boardId !== boardId) return null
+
+    const { data: boardRows } = await adminClient
+      .from('accountability_boards').select('status, guest_links_revoked_at').eq('id', boardId)
+    const board = boardRows?.[0]
+    if (!board || board.status !== 'active') return null
+    if (board.guest_links_revoked_at && payload.issuedAt <= new Date(board.guest_links_revoked_at).getTime()) return null
+
+    if (payload.kind === 'admin') return { kind: 'guest_admin', boardId, label: payload.label }
+    return { kind: 'guest_self', boardId, entryId: payload.entryId, label: payload.label }
+  }
+
+  const ctx = await getContext()
+  if (!ctx) return null
+  const { data: boardRows } = await adminClient.from('accountability_boards').select('department_id').eq('id', boardId)
+  if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return null
+  return { kind: 'officer', departmentId: ctx.dept.department_id, personnelId: ctx.me.id, systemRole: ctx.dept.system_role }
+}
+
+// Guest edits get an explicit trail in the same 214 log an officer's manual notes go into — a
+// guest has no account, so this is the only record of who actually made a given change.
+async function logGuestAction(adminClient: ReturnType<typeof createAdminClient>, boardId: string, label: string, note: string) {
+  await adminClient.from('accountability_activity_log').insert({ board_id: boardId, note: `[Guest — ${label}] ${note}` })
+}
+
+export async function generateSelfMoveGuestLink(entryId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+
+  const { data: entryRows } = await ctx.adminClient
+    .from('accountability_entries').select('board_id, raw_name, raw_dept, personnel_id').eq('id', entryId)
+  const entry = entryRows?.[0]
+  if (!entry) return { error: 'Entry not found.' }
+
+  const { data: boardRows } = await ctx.adminClient.from('accountability_boards').select('department_id').eq('id', entry.board_id)
+  if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
+
+  let label = entry.raw_name ?? 'Guest'
+  if (entry.personnel_id) {
+    const { data: p } = await ctx.adminClient.from('personnel').select('first_name, last_name').eq('id', entry.personnel_id).single()
+    if (p) label = `${p.first_name} ${p.last_name}`
+  }
+  if (entry.raw_dept) label = `${label} (${entry.raw_dept})`
+
+  const token = createBoardGuestToken({ kind: 'self', boardId: entry.board_id, entryId, label })
+  return { success: true, token }
+}
+
+export async function generateBoardGuestAdminLink(boardId: string, guestLabel: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  if (!guestLabel.trim()) return { error: 'Enter a name for this guest.' }
+
+  const { data: boardRows } = await ctx.adminClient.from('accountability_boards').select('department_id').eq('id', boardId)
+  if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
+
+  const token = createBoardGuestToken({ kind: 'admin', boardId, label: guestLabel.trim() })
+  return { success: true, token }
+}
+
+export async function revokeGuestLinks(boardId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_boards').update({ guest_links_revoked_at: new Date().toISOString() })
+    .eq('id', boardId).eq('department_id', ctx.dept.department_id)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  revalidatePath(`/accountability/${boardId}`)
+  return { success: true }
+}
+
+// Public read for the unauthenticated /board-guest/[token] page — no ctx, the token is the
+// entire authorization. Returns just one entry's slice for a Tier 1 self link, or the full
+// board for a Tier 2 admin link.
+export async function getGuestBoardState(token: string) {
+  const payload = verifyBoardGuestTokenSignature(token)
+  if (!payload) return { error: 'This link is invalid or has expired.' }
+
+  const adminClient = createAdminClient()
+  const { data: boardRows } = await adminClient
+    .from('accountability_boards')
+    .select('id, title, board_date, status, guest_links_revoked_at, department_id')
+    .eq('id', payload.boardId)
+  const board = boardRows?.[0]
+  if (!board) return { error: 'Board not found.' }
+  if (board.status !== 'active') return { error: 'This board has been closed. Guest access has ended.' }
+  if (board.guest_links_revoked_at && payload.issuedAt <= new Date(board.guest_links_revoked_at).getTime()) {
+    return { error: 'Guest access to this board has been revoked.' }
+  }
+
+  const { data: deptRows } = await adminClient.from('departments').select('name').eq('id', board.department_id)
+  const departmentName = deptRows?.[0]?.name ?? null
+
+  if (payload.kind === 'self') {
+    const { data: entryRows } = await adminClient
+      .from('accountability_entries')
+      .select('id, lane_id, personnel_id, raw_name, raw_dept, status, ics_role, released_at, resource_id')
+      .eq('id', payload.entryId)
+    const entry = entryRows?.[0]
+    if (!entry) return { error: 'Your entry was not found on this board.' }
+
+    let resource: { id: string; lane_id: string | null; raw_description: string | null; kind: string | null; apparatus_id: string | null; status: string } | null = null
+    if (entry.resource_id) {
+      const { data: resRows } = await adminClient
+        .from('accountability_resources')
+        .select('id, lane_id, raw_description, kind, apparatus_id, status')
+        .eq('id', entry.resource_id)
+      resource = resRows?.[0] ?? null
+    }
+
+    const { data: lanes } = await adminClient
+      .from('accountability_lanes').select('id, name, sort_order').eq('board_id', board.id).order('sort_order')
+
+    return {
+      success: true as const,
+      kind: 'self' as const,
+      board: { id: board.id, title: board.title, departmentName },
+      label: payload.label,
+      entry,
+      resource,
+      lanes: lanes ?? [],
+    }
+  }
+
+  const { data: lanes } = await adminClient
+    .from('accountability_lanes').select('id, name, sort_order, leader_entry_id, work_assignment, profile').eq('board_id', board.id).order('sort_order')
+
+  const { data: entriesRaw } = await adminClient
+    .from('accountability_entries')
+    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id')
+    .eq('board_id', board.id)
+    .order('checked_in_at')
+
+  const { data: resourcesRaw } = await adminClient
+    .from('accountability_resources')
+    .select('id, lane_id, apparatus_id, raw_description, raw_agency, kind, type_tier, status, checked_in_at, released_at')
+    .eq('board_id', board.id)
+    .order('checked_in_at')
+
+  const resourceApparatusIds = [...new Set((resourcesRaw ?? []).map(r => r.apparatus_id).filter(Boolean))] as string[]
+  const { data: resourceApparatusRaw } = resourceApparatusIds.length > 0
+    ? await adminClient.from('apparatus').select('id, unit_number').in('id', resourceApparatusIds)
+    : { data: [] }
+  const resourceApparatusUnitById = Object.fromEntries((resourceApparatusRaw ?? []).map(a => [a.id, a.unit_number]))
+  const resources = (resourcesRaw ?? []).map(r => ({
+    ...r,
+    display_desc: r.apparatus_id ? (resourceApparatusUnitById[r.apparatus_id] ?? '—') : (r.raw_description ?? r.kind ?? '—'),
+  }))
+
+  const personnelIds = [...new Set((entriesRaw ?? []).map(e => e.personnel_id).filter(Boolean))] as string[]
+  const { data: personnelRaw } = personnelIds.length > 0
+    ? await adminClient.from('personnel').select('id, first_name, last_name').in('id', personnelIds)
+    : { data: [] }
+  const nameMap = Object.fromEntries((personnelRaw ?? []).map(p => [p.id, `${p.first_name} ${p.last_name}`]))
+
+  const entries = (entriesRaw ?? []).map(e => ({
+    ...e,
+    display_name: e.personnel_id ? (nameMap[e.personnel_id] ?? '—') : (e.raw_name ?? '—'),
+  }))
+
+  return {
+    success: true as const,
+    kind: 'admin' as const,
+    board: { id: board.id, title: board.title, departmentName },
+    label: payload.label,
+    lanes: lanes ?? [],
+    entries,
+    resources,
   }
 }
 
@@ -178,21 +372,25 @@ export async function initBoardLanes(boardId: string) {
   return { success: true, lanes: inserted ?? [] }
 }
 
-export async function addBoardLane(boardId: string, name: string) {
-  const ctx = await getContext()
-  if (!ctx) return { error: 'Not authenticated.' }
+export async function addBoardLane(boardId: string, name: string, guestToken?: string) {
+  const adminClient = createAdminClient()
+  const actor = await resolveActor(adminClient, boardId, guestToken)
+  if (!actor) return { error: 'Not authorized.' }
+  if (actor.kind === 'guest_self') return { error: 'Not authorized.' }
   if (!name.trim()) return { error: 'Name required.' }
 
-  const { data: existing } = await ctx.adminClient
+  const { data: existing } = await adminClient
     .from('accountability_lanes').select('sort_order')
     .eq('board_id', boardId).order('sort_order', { ascending: false }).limit(1)
   const nextOrder = (existing?.[0]?.sort_order ?? -1) + 1
 
-  const { data: row, error: dbErr } = await ctx.adminClient
+  const { data: row, error: dbErr } = await adminClient
     .from('accountability_lanes')
     .insert({ board_id: boardId, name: name.trim(), sort_order: nextOrder })
     .select('id, name, sort_order, leader_entry_id, work_assignment, profile').single()
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+
+  if (actor.kind === 'guest_admin') await logGuestAction(adminClient, boardId, actor.label, `Created lane "${row.name}".`)
   return { success: true, lane: row }
 }
 
@@ -253,12 +451,26 @@ export async function checkInPerson(
 // clears resource_id so they're no longer implicitly dragged along when that
 // resource later moves lanes. Moving the resource itself (moveResourceToLane)
 // is the "whole unit moves together" path.
-export async function movePersonToLane(entryId: string, laneId: string) {
-  const ctx = await getContext()
-  if (!ctx) return { error: 'Not authenticated.' }
-  const { error: dbErr } = await ctx.adminClient
+export async function movePersonToLane(entryId: string, laneId: string, guestToken?: string) {
+  const adminClient = createAdminClient()
+  const { data: entryRows } = await adminClient
+    .from('accountability_entries').select('board_id, raw_name').eq('id', entryId)
+  const entry = entryRows?.[0]
+  if (!entry) return { error: 'Entry not found.' }
+
+  const actor = await resolveActor(adminClient, entry.board_id, guestToken)
+  if (!actor) return { error: 'Not authorized.' }
+  if (actor.kind === 'guest_self' && actor.entryId !== entryId) return { error: 'Not authorized.' }
+
+  const { data: laneRows } = await adminClient.from('accountability_lanes').select('name').eq('id', laneId)
+  const { error: dbErr } = await adminClient
     .from('accountability_entries').update({ lane_id: laneId, resource_id: null }).eq('id', entryId)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+
+  if (actor.kind !== 'officer') {
+    const who = entry.raw_name ?? 'a crew member'
+    await logGuestAction(adminClient, entry.board_id, actor.label, `Moved ${who} to ${laneRows?.[0]?.name ?? 'a lane'}.`)
+  }
   return { success: true }
 }
 
@@ -288,15 +500,35 @@ export async function checkInResource(
 // Moves the resource and cascades to every crew member still attached to it —
 // the "whole unit moves together" mechanic. Anyone previously detached (moved
 // individually) doesn't move, since their resource_id is already null.
-export async function moveResourceToLane(resourceId: string, laneId: string) {
-  const ctx = await getContext()
-  if (!ctx) return { error: 'Not authenticated.' }
-  const { error: dbErr } = await ctx.adminClient
+export async function moveResourceToLane(resourceId: string, laneId: string, guestToken?: string) {
+  const adminClient = createAdminClient()
+  const { data: resourceRows } = await adminClient
+    .from('accountability_resources').select('board_id, raw_description, kind').eq('id', resourceId)
+  const resource = resourceRows?.[0]
+  if (!resource) return { error: 'Resource not found.' }
+
+  const actor = await resolveActor(adminClient, resource.board_id, guestToken)
+  if (!actor) return { error: 'Not authorized.' }
+  if (actor.kind === 'guest_self') {
+    // Engine boss moving their own rig moves the crew with it — but only the resource
+    // actually attached to their own entry, never someone else's.
+    const { data: myEntryRows } = await adminClient
+      .from('accountability_entries').select('resource_id').eq('id', actor.entryId)
+    if (myEntryRows?.[0]?.resource_id !== resourceId) return { error: 'Not authorized.' }
+  }
+
+  const { data: laneRows } = await adminClient.from('accountability_lanes').select('name').eq('id', laneId)
+  const { error: dbErr } = await adminClient
     .from('accountability_resources').update({ lane_id: laneId }).eq('id', resourceId)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
-  const { error: crewErr } = await ctx.adminClient
+  const { error: crewErr } = await adminClient
     .from('accountability_entries').update({ lane_id: laneId }).eq('resource_id', resourceId)
   if (crewErr) { await logError(crewErr.message, '/accountability'); return { error: crewErr.message } }
+
+  if (actor.kind !== 'officer') {
+    const who = resource.raw_description ?? resource.kind ?? 'a resource'
+    await logGuestAction(adminClient, resource.board_id, actor.label, `Moved ${who} and its crew to ${laneRows?.[0]?.name ?? 'a lane'}.`)
+  }
   return { success: true }
 }
 
@@ -355,14 +587,25 @@ export async function removeAccountabilityEntry(entryId: string) {
   return { success: true }
 }
 
-export async function releaseAccountabilityEntry(entryId: string) {
-  const ctx = await getContext()
-  if (!ctx) return { error: 'Not authenticated.' }
-  const { error: dbErr } = await ctx.adminClient
+export async function releaseAccountabilityEntry(entryId: string, guestToken?: string) {
+  const adminClient = createAdminClient()
+  const { data: entryRows } = await adminClient.from('accountability_entries').select('board_id, raw_name').eq('id', entryId)
+  const entry = entryRows?.[0]
+  if (!entry) return { error: 'Entry not found.' }
+
+  const actor = await resolveActor(adminClient, entry.board_id, guestToken)
+  if (!actor) return { error: 'Not authorized.' }
+  if (actor.kind === 'guest_self' && actor.entryId !== entryId) return { error: 'Not authorized.' }
+
+  const { error: dbErr } = await adminClient
     .from('accountability_entries')
     .update({ status: 'released', released_at: new Date().toISOString() })
     .eq('id', entryId)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+
+  if (actor.kind !== 'officer') {
+    await logGuestAction(adminClient, entry.board_id, actor.label, `Checked out ${entry.raw_name ?? 'a crew member'}.`)
+  }
   return { success: true }
 }
 
@@ -490,24 +733,25 @@ export async function setLaneLeader(laneId: string, entryId: string | null) {
 // Renames a live lane in place — entries reference lane_id, not the name, so
 // whoever's already checked in stays put. This is the NIMS-mode mechanic: relabel
 // "Interior Attack" to "Division A" without resetting anyone's assignment.
-export async function renameLane(laneId: string, name: string) {
-  const ctx = await getContext()
-  if (!ctx) return { error: 'Not authenticated.' }
-  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+export async function renameLane(laneId: string, name: string, guestToken?: string) {
   if (!name.trim()) return { error: 'Name is required.' }
 
-  const { data: laneRows } = await ctx.adminClient
-    .from('accountability_lanes').select('board_id').eq('id', laneId)
-  const boardId = laneRows?.[0]?.board_id
-  if (!boardId) return { error: 'Lane not found.' }
+  const adminClient = createAdminClient()
+  const { data: laneRows } = await adminClient
+    .from('accountability_lanes').select('board_id, name').eq('id', laneId)
+  const lane = laneRows?.[0]
+  if (!lane) return { error: 'Lane not found.' }
 
-  const { data: boardRows } = await ctx.adminClient
-    .from('accountability_boards').select('department_id').eq('id', boardId)
-  if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
+  const actor = await resolveActor(adminClient, lane.board_id, guestToken)
+  if (!actor) return { error: 'Not authorized.' }
+  if (actor.kind === 'officer' && !isOfficerOrAdmin(actor.systemRole)) return { error: 'Officer or admin only.' }
+  if (actor.kind === 'guest_self') return { error: 'Not authorized.' }
 
-  const { error: dbErr } = await ctx.adminClient
+  const { error: dbErr } = await adminClient
     .from('accountability_lanes').update({ name: name.trim() }).eq('id', laneId)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+
+  if (actor.kind === 'guest_admin') await logGuestAction(adminClient, lane.board_id, actor.label, `Renamed lane "${lane.name}" to "${name.trim()}".`)
   return { success: true }
 }
 

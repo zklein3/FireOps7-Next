@@ -10,6 +10,7 @@ import {
   setBoardIcsFields, setEntryIcsRole, setLaneLeader, setLaneWorkAssignment, addActivityLogEntry, logBoardStamp, renameLane,
   releaseAccountabilityEntry, reactivateAccountabilityEntry, linkAccountabilityEntryToPersonnel,
   checkInResource, moveResourceToLane, releaseResource, attachPersonnelToResource,
+  generateSelfMoveGuestLink,
 } from '@/app/actions/accountability'
 import { ICS_COMMAND_ROLES, ICS_ACTIVE_VIOLENCE_ROLES, icsRoleLabel } from '@/lib/ics-roles'
 import { RESOURCE_KINDS, RESOURCE_TYPE_TIERS } from '@/lib/resource-kinds'
@@ -145,6 +146,27 @@ export default function AccountabilityBoard({
   const [savingLane, setSavingLane] = useState(false)
 
   const [movingEntryId, setMovingEntryId] = useState<string | null>(null)
+
+  const [guestLinkEntryId, setGuestLinkEntryId] = useState<string | null>(null)
+  const [guestLinkUrl, setGuestLinkUrl] = useState<string | null>(null)
+  const [guestLinkBusy, setGuestLinkBusy] = useState(false)
+  const [guestLinkCopied, setGuestLinkCopied] = useState(false)
+
+  async function handleGenerateGuestLink(entryId: string) {
+    setGuestLinkEntryId(entryId)
+    setGuestLinkUrl(null)
+    setGuestLinkCopied(false)
+    setGuestLinkBusy(true)
+    const result = await generateSelfMoveGuestLink(entryId)
+    setGuestLinkBusy(false)
+    if (!result.error && result.token) setGuestLinkUrl(`${window.location.origin}/board-guest/${result.token}`)
+  }
+
+  async function handleCopyGuestLink() {
+    if (!guestLinkUrl) return
+    await navigator.clipboard.writeText(guestLinkUrl)
+    setGuestLinkCopied(true)
+  }
 
   const [manualOpen, setManualOpen] = useState(false)
   const [manualPersonnelId, setManualPersonnelId] = useState('')
@@ -942,6 +964,12 @@ export default function AccountabilityBoard({
               className="w-full mb-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition-colors">
               Release (Left Scene)
             </button>
+            {!movingEntry.personnel_id && (
+              <button type="button" onClick={() => { handleGenerateGuestLink(movingEntry.id); setMovingEntryId(null) }}
+                className="w-full mb-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors">
+                Grant Self-Move Access…
+              </button>
+            )}
             <div className="flex gap-2">
               {!movingEntry.personnel_id && (
                 <button type="button" onClick={() => openEditName(movingEntry)}
@@ -958,6 +986,33 @@ export default function AccountabilityBoard({
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {guestLinkEntryId && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <p className="font-semibold text-zinc-900 mb-1">Self-Move Access</p>
+            <p className="text-xs text-zinc-500 mb-4">
+              No FireOps7 account needed. They can view and move only their own entry (and their resource/crew, if attached) — nothing else on this board. Access ends when this board closes.
+            </p>
+            {guestLinkBusy && <p className="text-sm text-zinc-500">Generating…</p>}
+            {guestLinkUrl && (
+              <>
+                <div className="mb-4 rounded-lg bg-zinc-50 border border-zinc-200 px-3 py-2 text-xs text-zinc-700 break-all">
+                  {guestLinkUrl}
+                </div>
+                <button type="button" onClick={handleCopyGuestLink}
+                  className="w-full mb-2 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800">
+                  {guestLinkCopied ? 'Copied ✓' : 'Copy Link'}
+                </button>
+              </>
+            )}
+            <button type="button" onClick={() => setGuestLinkEntryId(null)}
+              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">
+              Done
+            </button>
           </div>
         </div>
       )}
