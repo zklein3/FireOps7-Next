@@ -143,7 +143,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { items: [{ href: '/reports', label: 'Reports' }] },
   ] : [
     { items: [{ href: '/dashboard', label: 'Dashboard' }] },
-    ...(moduleIcs ? [{ items: [{ href: '/ics', label: 'ICS' }] }] : []),
+    ...(moduleIcs ? [
+      { items: [{ href: '/accountability', label: 'Accountability' }] },
+      { items: [{ href: '/ics', label: 'ICS' }] },
+    ] : []),
     { items: [{ href: '/personnel', label: 'Personnel' }] },
     { items: [{ href: '/training', label: 'Training' }] },
     { items: [{ href: '/reports', label: 'Reports' }] },
