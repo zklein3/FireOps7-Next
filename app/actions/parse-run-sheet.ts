@@ -71,6 +71,21 @@ function mergeMutualAidByAgency(rows: NonNullable<ParsedRunSheet['mutual_aid']>)
   return Object.values(merged)
 }
 
+// Belt-and-suspenders filter: the model has been observed slipping the requesting department's own
+// placeholder header (e.g. "WINFIRE") into mutual_aid despite prompt instructions not to. Since CAD
+// radio prefixes are conventionally the first few letters of the department's own name (WIN for
+// Winslow, HPR for Hooper), treat a mutual_aid row as our own department if its name shares that
+// prefix or matches outright, and drop it — it's not an outside agency.
+function looksLikeOwnDepartment(candidateName: string, ownDepartmentName: string): boolean {
+  const clean = (s: string) => s.toUpperCase().replace(/[^A-Z]/g, '')
+  const candidate = clean(candidateName)
+  const own = clean(ownDepartmentName)
+  if (!candidate || !own) return false
+  if (candidate === own) return true
+  const prefixLen = 3
+  return candidate.length >= prefixLen && own.length >= prefixLen && candidate.slice(0, prefixLen) === own.slice(0, prefixLen)
+}
+
 export async function parseRunSheet(formData: FormData): Promise<{ data?: ParsedRunSheet; error?: string }> {
   const file = formData.get('pdf') as File | null
   if (!file) return { error: 'No file provided.' }
@@ -79,18 +94,19 @@ export async function parseRunSheet(formData: FormData): Promise<{ data?: Parsed
 
   const apparatusJson = formData.get('apparatus_units') as string | null
   const apparatusUnits: string[] = apparatusJson ? JSON.parse(apparatusJson) : []
+  const departmentName = (formData.get('department_name') as string | null)?.trim() || ''
 
   const apparatusContext = apparatusUnits.length > 0
-    ? `\nThis department's apparatus unit numbers are: ${apparatusUnits.join(', ')}. In the CFS, these units may appear with a department prefix (e.g. unit "11" may appear as "WIN11", unit "24" as "WIN24").
+    ? `\nThis department is${departmentName ? ` "${departmentName}" —` : ''} its own apparatus unit numbers are: ${apparatusUnits.join(', ')}. In the CFS, these units may appear with a department prefix (e.g. unit "11" may appear as "WIN11", unit "24" as "WIN24").
 
-**Step 1 — map agencies using the "Responders" section on page 1.** Each line there pairs a unit/agency identifier with an agency abbreviation (rightmost column, e.g. "HPR", "WIN"). Use this to determine which identifiers belong to this department (matching its own prefix) versus an outside agency.
+**Step 1 — identify which "Responders" line (page 1) is THIS department.**${departmentName ? ` Find the line whose printed agency name matches or clearly corresponds to "${departmentName}" (it may be abbreviated, e.g. "Winslow Fire Department" printed as "WINFIRE" / prefix "WIN").` : ' Each line pairs a unit/agency identifier with an agency abbreviation (rightmost column).'} Every OTHER agency/department name on that Responders list is a genuinely outside agency — a candidate for "mutual_aid".
 
-**Step 2 — classify each header in "Unit Response Times".** Some headers are a whole-agency dispatch placeholder, not a specific vehicle — recognizable because the identifier is just the agency callsign with no unit number (e.g. "WINFIRE", "HPRFIRE" — literally "<prefix>FIRE" with nothing else), and its lines are typically just Assign/Off Duty with no real Enroute/Arrived. Other headers are an actual responding unit — they include a number and/or explicit apparatus type (e.g. "HPR12", "WIN24", "Squad 1", "Engine 4").
-   - For THIS department: only include a unit in "apparatus" if its identifier is a real numbered unit (not an agency placeholder) matching one of the unit numbers above, AND it has its own genuine Enroute or Arrived line. If the only entry for this department is an agency placeholder header (e.g. only "WINFIRE", no numbered unit) — that means personnel responded without a specific piece of apparatus (e.g. by POV) — do NOT invent an apparatus entry, leave "apparatus" empty for this department.
-   - For an OUTSIDE agency: if a real numbered/typed unit header exists (e.g. "HPR12"), use that one for the mutual_aid entry's apparatus_description and times, and ignore that agency's placeholder header entirely (do not double-count it, do not use its times). If the outside agency has ONLY an agency placeholder header with no numbered unit, still add one mutual_aid entry for them (they assisted, e.g. by POV or command staff) but leave apparatus_description blank, and pull arrival_time/departure_time from that placeholder header since it's the only data available.
+**Step 2 — classify each header in "Unit Response Times".** Some headers are a whole-agency dispatch placeholder, not a specific vehicle — recognizable because the identifier is just an agency callsign with no unit number (e.g. "WINFIRE", "HPRFIRE" — literally "<prefix>FIRE" with nothing else), and its lines are typically just Assign/Off Duty with no real Enroute/Arrived. Other headers are an actual responding unit — they include a number and/or explicit apparatus type (e.g. "HPR12", "WIN24", "Squad 1", "Engine 4").
+   - **This department's own headers — including its own placeholder header (e.g. "WINFIRE") — must NEVER appear in "mutual_aid" under any circumstances.** Only include a unit in "apparatus" if its identifier is a real numbered unit matching one of the unit numbers above AND it has its own genuine Enroute or Arrived line. If this department's only entry is its own placeholder header with no numbered unit, that means its personnel responded without a specific piece of apparatus (e.g. by POV) — omit it entirely from both "apparatus" and "mutual_aid".
+   - For an agency confirmed as OUTSIDE this department in Step 1: if a real numbered/typed unit header exists for them (e.g. "HPR12"), use that one for the mutual_aid entry's apparatus_description and times, and ignore that agency's own placeholder header entirely (do not double-count it, do not use its times). If that outside agency has ONLY a placeholder header with no numbered unit, still add one mutual_aid entry for them (they assisted, e.g. by POV or command staff) but leave apparatus_description blank, and pull arrival_time/departure_time from that placeholder header since it's the only data available.
    - Return exactly ONE mutual_aid entry per outside agency — never split one agency across multiple entries even if it has multiple headers.
 
-**Never fabricate.** Every unit_number, apparatus_description, personnel_count, and timestamp you return must be text or digits literally printed in the document. Do not guess a truck's type or number from convention (e.g. don't turn "HPR12" into "Squad 10" or any other invented name) — if the document only gives you the identifier "HPR12" with no separate human-readable name, use "HPR12" as printed. If a detail isn't explicitly present in the document, omit that field rather than estimate or guess it.`
+**Never fabricate — this is critical.** Every unit_number, apparatus_description, personnel_count, and timestamp you return must be text or digits literally printed in the document. Do NOT guess a truck's type or number from convention or habit — for example, if the document only shows the identifier "HPR12" with no separate human-readable apparatus name printed anywhere, apparatus_description must be exactly "HPR12", never an invented name like "Squad 10" or "Squad 12". Do NOT default personnel_count to a typical crew size (2, 3, 4) — only include it if an actual number is printed in the document for that unit; otherwise omit the field entirely. When in doubt, omit rather than guess.`
     : ''
 
   try {
@@ -188,6 +204,9 @@ Return only valid JSON, no markdown or explanation.`,
     // Strip markdown code fences if present
     const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
     const data = JSON.parse(cleaned) as ParsedRunSheet
+    if (data.mutual_aid?.length && departmentName) {
+      data.mutual_aid = data.mutual_aid.filter(m => !looksLikeOwnDepartment(m.department_name, departmentName))
+    }
     if (data.mutual_aid?.length) data.mutual_aid = mergeMutualAidByAgency(data.mutual_aid)
     return { data }
   } catch (err: any) {

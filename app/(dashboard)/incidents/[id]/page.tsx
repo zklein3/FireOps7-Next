@@ -162,6 +162,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
       nerisRecord={nerisRecord ?? null}
       moduleNeris={moduleNeris}
       signatureRoster={signatureRoster}
+      departmentName={ctx.departmentName ?? ''}
     />
   )
 }

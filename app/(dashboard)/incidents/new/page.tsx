@@ -48,6 +48,7 @@ export default async function NewIncidentPage() {
       myPersonnelId={me.id}
       myName={`${me.first_name} ${me.last_name}`}
       moduleNeris={moduleNeris}
+      departmentName={ctx.departmentName ?? ''}
     />
   )
 }

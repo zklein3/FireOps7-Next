@@ -100,6 +100,7 @@ export default function IncidentDetailClient({
   nerisRecord,
   moduleNeris,
   signatureRoster,
+  departmentName,
 }: {
   incident: any
   incidentApparatus: ApparatusRow[]
@@ -114,6 +115,7 @@ export default function IncidentDetailClient({
   nerisRecord: { id: string; neris_status: string; completed_at: string | null; neris_submission_id: string | null } | null
   moduleNeris: boolean
   signatureRoster: { sig_id: string; personnel_id: string; signed_at: string | null; has_signature: boolean; name: string }[]
+  departmentName: string
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -179,6 +181,7 @@ export default function IncidentDetailClient({
     const fd = new FormData()
     fd.set('pdf', file)
     fd.set('apparatus_units', JSON.stringify(deptApparatus.map(a => a.unit_number)))
+    fd.set('department_name', departmentName)
     const result = await parseRunSheet(fd)
 
     if (result.error) { setImportError(result.error); setIsParsing(false); return }

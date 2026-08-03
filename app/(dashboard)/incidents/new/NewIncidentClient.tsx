@@ -53,12 +53,14 @@ export default function NewIncidentClient({
   myPersonnelId,
   myName,
   moduleNeris,
+  departmentName,
 }: {
   apparatus: Apparatus[]
   personnel: Personnel[]
   myPersonnelId: string
   myName: string
   moduleNeris: boolean
+  departmentName: string
 }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -152,6 +154,7 @@ export default function NewIncidentClient({
     const fd = new FormData()
     fd.append('pdf', file)
     fd.append('apparatus_units', JSON.stringify(apparatus.map(a => a.unit_number)))
+    fd.append('department_name', departmentName)
     const result = await parseRunSheet(fd)
 
     if (result.error) { setImportError(result.error); setIsParsing(false); return }
