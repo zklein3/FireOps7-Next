@@ -135,6 +135,17 @@ export default function LoginForm({ next, theme = MUNIOPS_THEME }: { next?: stri
           </button>
         </form>
 
+        {/* Card-based board access — no account needed, see /board-guest/scan */}
+        <Link
+          href="/board-guest/scan"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition-colors"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 7V5a1 1 0 011-1h2M4 17v2a1 1 0 001 1h2m10-14h2a1 1 0 011 1v2m-1 10h-2 2a1 1 0 001-1v-2M7 7h1v1H7V7zm9 0h1v1h-1V7zM7 16h1v1H7v-1zm9 0h1v1h-1v-1z" />
+          </svg>
+          Have an accountability card? Scan to access your board
+        </Link>
+
         <p className="mt-6 text-center text-xs text-zinc-400">
           Don&apos;t have an account? Contact your department administrator.
         </p>
