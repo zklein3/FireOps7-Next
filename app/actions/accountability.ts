@@ -87,6 +87,30 @@ export async function generateSelfMoveGuestLink(entryId: string) {
   return { success: true, token }
 }
 
+// Sets (or clears) the card-based access tier on an already-checked-in entry — the tier
+// picker in the Name Tag flow only offers this at the moment a card is first named, so this
+// is the "come back later and grant it" path: re-open an existing card's entry and set it here
+// instead. Only meaningful on entries that actually have a tag_ref (an actual physical card) —
+// there's nothing for /board-guest/scan to recognize on a hand-typed, card-less entry.
+export async function setEntryAccessTier(entryId: string, tier: 'self' | 'admin' | null) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+
+  const { data: entryRows } = await ctx.adminClient
+    .from('accountability_entries').select('board_id, tag_ref').eq('id', entryId)
+  const entry = entryRows?.[0]
+  if (!entry) return { error: 'Entry not found.' }
+  if (!entry.tag_ref) return { error: 'This entry has no card associated with it.' }
+
+  const { data: boardRows } = await ctx.adminClient.from('accountability_boards').select('department_id').eq('id', entry.board_id)
+  if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
+
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_entries').update({ guest_access_tier: tier }).eq('id', entryId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
 export async function generateBoardGuestAdminLink(boardId: string, guestLabel: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }

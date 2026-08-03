@@ -10,7 +10,7 @@ import {
   setBoardIcsFields, setEntryIcsRole, setLaneLeader, setLaneWorkAssignment, addActivityLogEntry, logBoardStamp, renameLane,
   releaseAccountabilityEntry, reactivateAccountabilityEntry, linkAccountabilityEntryToPersonnel,
   checkInResource, moveResourceToLane, releaseResource, attachPersonnelToResource,
-  generateSelfMoveGuestLink,
+  generateSelfMoveGuestLink, setEntryAccessTier,
 } from '@/app/actions/accountability'
 import { ICS_COMMAND_ROLES, ICS_ACTIVE_VIOLENCE_ROLES, icsRoleLabel } from '@/lib/ics-roles'
 import { RESOURCE_KINDS, RESOURCE_TYPE_TIERS } from '@/lib/resource-kinds'
@@ -147,6 +147,16 @@ export default function AccountabilityBoard({
   const [guestLinkUrl, setGuestLinkUrl] = useState<string | null>(null)
   const [guestLinkBusy, setGuestLinkBusy] = useState(false)
   const [guestLinkCopied, setGuestLinkCopied] = useState(false)
+
+  const [accessTierSaving, setAccessTierSaving] = useState(false)
+
+  async function handleSetAccessTier(entryId: string, tier: 'self' | 'admin' | null) {
+    setAccessTierSaving(true)
+    const result = await setEntryAccessTier(entryId, tier)
+    setAccessTierSaving(false)
+    if (result?.error) { setError(result.error); return }
+    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, guest_access_tier: tier } : e))
+  }
 
   async function handleGenerateGuestLink(entryId: string) {
     setGuestLinkEntryId(entryId)
@@ -963,6 +973,22 @@ export default function AccountabilityBoard({
               className="w-full mb-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition-colors">
               Release (Left Scene)
             </button>
+            {movingEntry.tag_ref && (
+              <div className="w-full mb-2 rounded-lg border border-zinc-200 p-3">
+                <label className="block text-xs font-medium text-zinc-500 mb-1 uppercase tracking-wide">Card Access</label>
+                <select
+                  value={movingEntry.guest_access_tier ?? ''}
+                  disabled={accessTierSaving}
+                  onChange={e => handleSetAccessTier(movingEntry.id, (e.target.value || null) as 'self' | 'admin' | null)}
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                >
+                  <option value="">Tracking only — no self-access</option>
+                  <option value="self">Self-move — they can move only themselves/their resource</option>
+                  <option value="admin">Planning / Command — full board control on this device</option>
+                </select>
+                <p className="mt-1 text-xs text-zinc-400">Scanning this card at fireops7.com/board-guest/scan will get them straight to this board with whatever's picked above.</p>
+              </div>
+            )}
             {!movingEntry.personnel_id && (
               <button type="button" onClick={() => { handleGenerateGuestLink(movingEntry.id); setMovingEntryId(null) }}
                 className="w-full mb-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors">
