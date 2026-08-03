@@ -1,8 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/browser'
+import { BrowserCodeReader, BrowserMultiFormatReader } from '@zxing/browser'
 import type { IScannerControls } from '@zxing/browser'
+
+// Remembers the last camera picked on this device (e.g. an external webcam over a
+// laptop's built-in selfie camera) so switching only has to happen once per machine.
+const LAST_DEVICE_KEY = 'fireops7_qr_scanner_device_id'
 
 export default function QRScanner({
   onScan,
@@ -15,6 +19,10 @@ export default function QRScanner({
 }) {
   const [error, setError] = useState('')
   const [photoError, setPhotoError] = useState('')
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
+  const [deviceId, setDeviceId] = useState<string | undefined>(() =>
+    typeof window === 'undefined' ? undefined : localStorage.getItem(LAST_DEVICE_KEY) ?? undefined
+  )
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const controlsRef = useRef<IScannerControls | null>(null)
   const detectedRef = useRef(false)
@@ -42,7 +50,7 @@ export default function QRScanner({
 
       try {
         controlsRef.current = await reader.decodeFromVideoDevice(
-          undefined,
+          deviceId,
           videoRef.current,
           (result, err) => {
             if (result && !detectedRef.current) {
@@ -56,6 +64,9 @@ export default function QRScanner({
             }
           }
         )
+        // Device labels are blank until permission is granted — only populated now.
+        const list = await BrowserCodeReader.listVideoInputDevices()
+        setDevices(list)
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
         if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('notallowed')) {
@@ -67,7 +78,16 @@ export default function QRScanner({
     }
 
     start()
-  }, [stop])
+  }, [stop, deviceId])
+
+  function handleSwitchCamera() {
+    if (devices.length < 2) return
+    const currentIndex = devices.findIndex(d => d.deviceId === deviceId)
+    const next = devices[(currentIndex + 1) % devices.length]
+    stop()
+    setDeviceId(next.deviceId)
+    localStorage.setItem(LAST_DEVICE_KEY, next.deviceId)
+  }
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -130,6 +150,13 @@ export default function QRScanner({
         <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {photoError}
         </div>
+      )}
+
+      {devices.length > 1 && (
+        <button type="button" onClick={handleSwitchCamera}
+          className="mt-3 w-full rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100">
+          Switch Camera
+        </button>
       )}
 
       <button type="button" onClick={() => fileInputRef.current?.click()}
