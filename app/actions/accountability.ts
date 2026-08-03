@@ -175,7 +175,10 @@ export async function resolveCardForBoardAccess(raw: string) {
 
 // Public read for the unauthenticated /board-guest/[token] page — no ctx, the token is the
 // entire authorization. Returns just one entry's slice for a Tier 1 self link, or the full
-// board for a Tier 2 admin link.
+// board for a Tier 2 admin link. Re-derives the CURRENT tier/mode from the database on every
+// call rather than trusting what was true when the token was minted — an officer upgrading,
+// downgrading, or revoking a card's access, or flipping NIMS/Active Violence mode, takes effect
+// on the guest's next poll with no new link or re-scan needed.
 export async function getGuestBoardState(token: string) {
   const payload = verifyBoardGuestTokenSignature(token)
   if (!payload) return { error: 'This link is invalid or has expired.' }
@@ -183,7 +186,7 @@ export async function getGuestBoardState(token: string) {
   const adminClient = createAdminClient()
   const { data: boardRows } = await adminClient
     .from('accountability_boards')
-    .select('id, title, board_date, status, guest_links_revoked_at, department_id')
+    .select('id, title, board_date, status, guest_links_revoked_at, department_id, nims_mode, is_active_violence')
     .eq('id', payload.boardId)
   const board = boardRows?.[0]
   if (!board) return { error: 'Board not found.' }
@@ -194,14 +197,23 @@ export async function getGuestBoardState(token: string) {
 
   const { data: deptRows } = await adminClient.from('departments').select('name').eq('id', board.department_id)
   const departmentName = deptRows?.[0]?.name ?? null
+  const boardInfo = { id: board.id, title: board.title, departmentName, nimsMode: board.nims_mode as boolean, isActiveViolence: board.is_active_violence as boolean }
 
   if (payload.kind === 'self') {
     const { data: entryRows } = await adminClient
       .from('accountability_entries')
-      .select('id, lane_id, personnel_id, raw_name, raw_dept, status, ics_role, released_at, resource_id')
+      .select('id, lane_id, personnel_id, raw_name, raw_dept, status, ics_role, released_at, resource_id, guest_access_tier')
       .eq('id', payload.entryId)
     const entry = entryRows?.[0]
     if (!entry) return { error: 'Your entry was not found on this board.' }
+    if (entry.released_at) return { error: 'You\'ve been checked out of this board. Ask an officer to check you in again if that\'s not right.' }
+    if (!entry.guest_access_tier) return { error: 'Your board access has been turned off. Ask an officer to grant it again.' }
+
+    // An officer can upgrade an already-issued self link to full board access after the fact —
+    // reflect that live instead of requiring a new link.
+    if (entry.guest_access_tier === 'admin') {
+      return fetchGuestAdminState(adminClient, board, boardInfo, payload.label)
+    }
 
     let resource: { id: string; lane_id: string | null; raw_description: string | null; kind: string | null; apparatus_id: string | null; status: string } | null = null
     if (entry.resource_id) {
@@ -213,12 +225,12 @@ export async function getGuestBoardState(token: string) {
     }
 
     const { data: lanes } = await adminClient
-      .from('accountability_lanes').select('id, name, sort_order').eq('board_id', board.id).order('sort_order')
+      .from('accountability_lanes').select('id, name, sort_order, profile').eq('board_id', board.id).order('sort_order')
 
     return {
       success: true as const,
       kind: 'self' as const,
-      board: { id: board.id, title: board.title, departmentName },
+      board: boardInfo,
       label: payload.label,
       entry,
       resource,
@@ -226,6 +238,15 @@ export async function getGuestBoardState(token: string) {
     }
   }
 
+  return fetchGuestAdminState(adminClient, board, boardInfo, payload.label)
+}
+
+async function fetchGuestAdminState(
+  adminClient: ReturnType<typeof createAdminClient>,
+  board: { id: string },
+  boardInfo: { id: string; title: string; departmentName: string | null; nimsMode: boolean; isActiveViolence: boolean },
+  label: string,
+) {
   const { data: lanes } = await adminClient
     .from('accountability_lanes').select('id, name, sort_order, leader_entry_id, work_assignment, profile').eq('board_id', board.id).order('sort_order')
 
@@ -265,8 +286,8 @@ export async function getGuestBoardState(token: string) {
   return {
     success: true as const,
     kind: 'admin' as const,
-    board: { id: board.id, title: board.title, departmentName },
-    label: payload.label,
+    board: boardInfo,
+    label,
     lanes: lanes ?? [],
     entries,
     resources,
