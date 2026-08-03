@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import QRScanner from '@/components/QRScanner'
-import { parseSalamanderCard, parseFireOps7Card, isFireOps7Card, salamanderCanonicalKey } from '@/lib/salamander'
+import { parseSalamanderCard, parseFireOps7Card, isFireOps7Card, salamanderCanonicalKey, hashRaw } from '@/lib/salamander'
 import {
   initBoardLanes, addBoardLane, deleteLane,
   checkInPerson, movePersonToLane, removeAccountabilityEntry, updateEntryName, recordPAR, saveDebugScan,
@@ -30,6 +30,7 @@ interface Entry {
   released_at: string | null
   tag_ref: string | null
   resource_id: string | null
+  guest_access_tier: string | null
 }
 interface QrToken { personnel_id: string; token_type: string; token_value: string; display_name: string }
 interface EntryRow {
@@ -45,6 +46,7 @@ interface EntryRow {
   released_at: string | null
   tag_ref: string | null
   resource_id: string | null
+  guest_access_tier: string | null
 }
 interface Resource {
   id: string
@@ -63,12 +65,6 @@ interface Resource {
 // Stable, non-cryptographic fingerprint for a scanned rapid tag's raw payload — used only to
 // recognize "this is the same physical tag" across scans (including after a reload), never
 // stored as the raw bytes themselves (which can contain control chars Postgres text can choke on).
-function hashRaw(raw: string): string {
-  let h = 0
-  for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) | 0
-  return `RT${(h >>> 0).toString(36)}`
-}
-
 // Last name + first initial, not the full string — catches "Zak Klein" vs. "Zachary Klein"
 // (nickname on a hand-typed quick tag vs. the real card's full name). A wrong trigger just
 // costs one extra "No, different person" click, so it's fine to run loose here.
@@ -192,6 +188,7 @@ export default function AccountabilityBoard({
   const [nameTagOpen, setNameTagOpen] = useState(false)
   const [tagName, setTagName] = useState('')
   const [tagDept, setTagDept] = useState('')
+  const [tagAccessTier, setTagAccessTier] = useState<'' | 'self' | 'admin'>('')
   const [tagSaving, setTagSaving] = useState(false)
   const pendingTagRawRef = useRef<string | null>(null)
 
@@ -256,7 +253,7 @@ export default function AccountabilityBoard({
     async function refetchBoardState() {
       const [{ data: entryRows }, { data: laneRows }, { data: logRows }, { data: resourceRows }] = await Promise.all([
         supabase.from('accountability_entries')
-          .select('id, board_id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id')
+          .select('id, board_id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id, guest_access_tier')
           .eq('board_id', boardId).order('checked_in_at'),
         supabase.from('accountability_lanes')
           .select('id, name, sort_order, leader_entry_id, work_assignment, profile')
@@ -518,13 +515,15 @@ export default function AccountabilityBoard({
     const name = tagName.trim()
     const dept = tagDept.trim() || null
     const tagRef = pendingTagRawRef.current ? hashRaw(pendingTagRawRef.current) : null
-    const res = await checkInPerson(boardId, laneId, null, name, dept, tagRef)
+    const tier = tagAccessTier || null
+    const res = await checkInPerson(boardId, laneId, null, name, dept, tagRef, null, tier)
     setTagSaving(false)
     if (res?.error) { setError(res.error); return }
     if (res.entry) {
       setEntries(prev => [...prev, { ...res.entry, display_name: name, display_dept: dept ?? '' }])
     }
     pendingTagRawRef.current = null
+    setTagAccessTier('')
     setNameTagOpen(false)
   }
 
@@ -1118,13 +1117,23 @@ export default function AccountabilityBoard({
                 placeholder="Name" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
               <input value={tagDept} onChange={e => setTagDept(e.target.value)}
                 placeholder="Agency / Department (optional)" className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1 uppercase tracking-wide">Card Access (optional)</label>
+                <select value={tagAccessTier} onChange={e => setTagAccessTier(e.target.value as '' | 'self' | 'admin')}
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
+                  <option value="">Tracking only — no self-access</option>
+                  <option value="self">Self-move — they can move only themselves/their resource</option>
+                  <option value="admin">Planning / Command — full board control on this device</option>
+                </select>
+                <p className="mt-1 text-xs text-zinc-400">If they scan this same card at fireops7.com/board-guest/scan, it'll get them straight to this board with the access picked above — no link to send.</p>
+              </div>
             </div>
             <div className="flex gap-2">
               <button type="button" disabled={tagSaving || !tagName.trim()} onClick={handleNameTag}
                 className="flex-1 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
                 {tagSaving ? 'Saving...' : 'Check In'}
               </button>
-              <button type="button" onClick={() => { setNameTagOpen(false); pendingTagRawRef.current = null }}
+              <button type="button" onClick={() => { setNameTagOpen(false); pendingTagRawRef.current = null; setTagAccessTier('') }}
                 className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">Cancel</button>
             </div>
           </div>

@@ -56,7 +56,7 @@ export default async function AccountabilityBoardPage({
 
   const { data: entriesRaw } = await adminClient
     .from('accountability_entries')
-    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id')
+    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id, guest_access_tier')
     .eq('board_id', boardId)
     .order('checked_in_at')
 

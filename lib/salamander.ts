@@ -89,3 +89,17 @@ export function parseFireOps7Card(raw: string): string | null {
 export function unescapeDebugRaw(sanitized: string): string {
   return sanitized.replace(/\\x([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
 }
+
+/**
+ * Stable (non-cryptographic) fingerprint for a raw scan — used to recognize "the same
+ * physical tag scanned again" for cards that don't carry a name (Salamander rapid/event
+ * tags). Not a security boundary: 32-bit hash space, collisions are theoretically possible.
+ * Shared between the accountability board (tag_ref matching) and the card-based board
+ * access lookup (app/actions/accountability.ts resolveCardForBoardAccess) so both compute
+ * the identical value for the identical physical card.
+ */
+export function hashRaw(raw: string): string {
+  let h = 0
+  for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) | 0
+  return `RT${(h >>> 0).toString(36)}`
+}

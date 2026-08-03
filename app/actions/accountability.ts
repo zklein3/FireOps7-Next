@@ -6,6 +6,7 @@ import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 import { ALL_ICS_ROLE_VALUES, icsRoleLabel, ICS_MODE_LANES, ACTIVE_VIOLENCE_LANES } from '@/lib/ics-roles'
 import { createBoardGuestToken, verifyBoardGuestTokenSignature } from '@/lib/board-guest-token'
+import { hashRaw } from '@/lib/salamander'
 
 async function getContext() {
   const ctx = await getCurrentDepartmentContext()
@@ -109,6 +110,43 @@ export async function revokeGuestLinks(boardId: string) {
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   revalidatePath(`/accountability/${boardId}`)
   return { success: true }
+}
+
+// Public — no ctx, called from the unauthenticated /board-guest/scan page. A card only works
+// here if an officer already checked this exact physical tag in AND granted it an access tier
+// (see checkInPerson's guestAccessTier / the Name Tag flow) — scanning an unrecognized or
+// tracking-only card just says so, it never falls back to guessing who someone is.
+export async function resolveCardForBoardAccess(raw: string) {
+  const ref = hashRaw(raw)
+  const adminClient = createAdminClient()
+
+  const { data: entryRows } = await adminClient
+    .from('accountability_entries')
+    .select('id, board_id, raw_name, raw_dept, guest_access_tier, checked_in_at')
+    .eq('tag_ref', ref)
+    .not('guest_access_tier', 'is', null)
+    .is('released_at', null)
+    .order('checked_in_at', { ascending: false })
+
+  if (!entryRows?.length) {
+    return { error: 'This card isn\'t currently checked in with board access. Ask an officer to check you in first.' }
+  }
+
+  const boardIds = [...new Set(entryRows.map(e => e.board_id))]
+  const { data: activeBoards } = await adminClient
+    .from('accountability_boards').select('id').in('id', boardIds).eq('status', 'active')
+  const activeBoardIds = new Set((activeBoards ?? []).map(b => b.id))
+
+  const entry = entryRows.find(e => activeBoardIds.has(e.board_id))
+  if (!entry) return { error: 'The board this card was checked into is no longer active. Ask an officer to check you in again.' }
+
+  const label = entry.raw_name ? (entry.raw_dept ? `${entry.raw_name} (${entry.raw_dept})` : entry.raw_name) : 'Guest'
+
+  const token = entry.guest_access_tier === 'admin'
+    ? createBoardGuestToken({ kind: 'admin', boardId: entry.board_id, label })
+    : createBoardGuestToken({ kind: 'self', boardId: entry.board_id, entryId: entry.id, label })
+
+  return { success: true, token }
 }
 
 // Public read for the unauthenticated /board-guest/[token] page — no ctx, the token is the
@@ -434,15 +472,19 @@ export async function checkInPerson(
   rawDept: string | null,
   tagRef: string | null = null,
   resourceId: string | null = null,
+  guestAccessTier: 'self' | 'admin' | null = null,
 ) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
   if (!personnelId && !rawName) return { error: 'Must provide personnel or name.' }
+  // A card-based access grant only means anything if there's an actual card to recognize
+  // on a future scan — a pure hand-typed name with no tag has nothing to look up.
+  const tier = tagRef ? guestAccessTier : null
 
   const { data: row, error: dbErr } = await ctx.adminClient
     .from('accountability_entries')
-    .insert({ board_id: boardId, lane_id: laneId, personnel_id: personnelId, raw_name: rawName, raw_dept: rawDept, tag_ref: tagRef, added_by: ctx.me.id, resource_id: resourceId })
-    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id').single()
+    .insert({ board_id: boardId, lane_id: laneId, personnel_id: personnelId, raw_name: rawName, raw_dept: rawDept, tag_ref: tagRef, added_by: ctx.me.id, resource_id: resourceId, guest_access_tier: tier })
+    .select('id, lane_id, personnel_id, raw_name, raw_dept, status, checked_in_at, ics_role, released_at, tag_ref, resource_id, guest_access_tier').single()
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true, entry: row }
 }
