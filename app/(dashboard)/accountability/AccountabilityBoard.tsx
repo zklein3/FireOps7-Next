@@ -1012,7 +1012,7 @@ export default function AccountabilityBoard({
                   hint="Point the camera at their card"
                 />
               </div>
-            ) : movingEntry.tag_ref ? (
+            ) : (movingEntry.personnel_id || movingEntry.tag_ref) ? (
               <div className="w-full mb-2 rounded-lg border border-zinc-200 p-3">
                 <label className="block text-xs font-medium text-zinc-500 mb-1 uppercase tracking-wide">Card Access</label>
                 <select

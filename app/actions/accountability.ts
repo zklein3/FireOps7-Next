@@ -6,7 +6,7 @@ import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 import { ALL_ICS_ROLE_VALUES, icsRoleLabel, ICS_MODE_LANES, ACTIVE_VIOLENCE_LANES } from '@/lib/ics-roles'
 import { createBoardGuestToken, verifyBoardGuestTokenSignature } from '@/lib/board-guest-token'
-import { hashRaw } from '@/lib/salamander'
+import { hashRaw, isFireOps7Card, parseFireOps7Card, parseSalamanderCard, salamanderCanonicalKey } from '@/lib/salamander'
 
 async function getContext() {
   const ctx = await getCurrentDepartmentContext()
@@ -89,18 +89,19 @@ export async function generateSelfMoveGuestLink(entryId: string) {
 
 // Sets (or clears) the card-based access tier on an already-checked-in entry — the tier
 // picker in the Name Tag flow only offers this at the moment a card is first named, so this
-// is the "come back later and grant it" path: re-open an existing card's entry and set it here
-// instead. Only meaningful on entries that actually have a tag_ref (an actual physical card) —
-// there's nothing for /board-guest/scan to recognize on a hand-typed, card-less entry.
+// is the "come back later and grant it" path: re-open an existing entry and set it here
+// instead. Meaningful on a personnel-linked entry (resolveCardForBoardAccess matches those by
+// personnel_id, no tag_ref needed) or one with a tag_ref (an attached blank/quick tag) — there's
+// nothing for /board-guest/scan to recognize on a hand-typed, card-less, personnel-less entry.
 export async function setEntryAccessTier(entryId: string, tier: 'self' | 'admin' | null) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
 
   const { data: entryRows } = await ctx.adminClient
-    .from('accountability_entries').select('board_id, tag_ref').eq('id', entryId)
+    .from('accountability_entries').select('board_id, tag_ref, personnel_id').eq('id', entryId)
   const entry = entryRows?.[0]
   if (!entry) return { error: 'Entry not found.' }
-  if (!entry.tag_ref) return { error: 'This entry has no card associated with it.' }
+  if (!entry.tag_ref && !entry.personnel_id) return { error: 'This entry has no card or personnel record associated with it.' }
 
   const { data: boardRows } = await ctx.adminClient.from('accountability_boards').select('department_id').eq('id', entry.board_id)
   if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
@@ -168,20 +169,41 @@ export async function getGuestAccessStatus(boardId: string) {
 }
 
 // Public — no ctx, called from the unauthenticated /board-guest/scan page. A card only works
-// here if an officer already checked this exact physical tag in AND granted it an access tier
-// (see checkInPerson's guestAccessTier / the Name Tag flow) — scanning an unrecognized or
+// here if an officer checked this person in AND granted an access tier (see checkInPerson's
+// guestAccessTier / the Name Tag flow, or setEntryAccessTier) — scanning an unrecognized or
 // tracking-only card just says so, it never falls back to guessing who someone is.
+//
+// A personally-owned card (a real FireOps7 personal card, or a Salamander card already linked
+// to someone via personnel_qr_tokens) is matched by personnel_id, not by a per-entry tag_ref —
+// that identity is already permanent and known, so there's nothing to separately "attach" to
+// an entry first. Only a blank/quick tag (no personnel_qr_tokens link, checked in by hand-typed
+// name) has no other identity to match on and needs its physical tag_ref recognized instead.
 export async function resolveCardForBoardAccess(raw: string) {
-  const ref = hashRaw(raw)
   const adminClient = createAdminClient()
 
-  const { data: entryRows } = await adminClient
+  let personnelId: string | null = null
+  if (isFireOps7Card(raw)) {
+    personnelId = parseFireOps7Card(raw)
+  } else {
+    const card = parseSalamanderCard(raw)
+    if (card) {
+      const key = salamanderCanonicalKey(card)
+      const { data: tokenRows } = await adminClient
+        .from('personnel_qr_tokens').select('personnel_id').eq('token_type', 'salamander').eq('token_value', key)
+      personnelId = tokenRows?.[0]?.personnel_id ?? null
+    }
+  }
+
+  const query = adminClient
     .from('accountability_entries')
     .select('id, board_id, raw_name, raw_dept, guest_access_tier, checked_in_at')
-    .eq('tag_ref', ref)
     .not('guest_access_tier', 'is', null)
     .is('released_at', null)
     .order('checked_in_at', { ascending: false })
+
+  const { data: entryRows } = personnelId
+    ? await query.eq('personnel_id', personnelId)
+    : await query.eq('tag_ref', hashRaw(raw))
 
   if (!entryRows?.length) {
     return { error: 'This card isn\'t currently checked in with board access. Ask an officer to check you in first.' }
