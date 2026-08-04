@@ -8,6 +8,7 @@ import {
   openOperationalPeriod, updateOperationalPeriod, addParticipant, closeParticipantPortion,
   reopenIcsIncident, transferCommand, addAssignment, removeAssignment, addResource, removeResource,
   addRadioChannelToPeriod, removeRadioChannelFromPeriod, addMedicalPlanEntryToPeriod, removeMedicalPlanEntryFromPeriod,
+  deleteIcsIncident,
 } from '@/app/actions/ics'
 import { reopenBoard } from '@/app/actions/accountability'
 import { prefillAssignmentsFromShift } from '@/app/actions/shifts'
@@ -22,7 +23,7 @@ type CheckIn = { display_name: string; raw_dept: string | null; ics_role: string
 type ActivityLogEntry = { entry_time: string; note: string; author_name: string }
 
 export default function IcsIncidentClient({
-  incident, currentDepartmentId, isOwner, isJurisdictionParent, isOfficerOrAbove,
+  incident, currentDepartmentId, isOwner, isJurisdictionParent, isOfficerOrAbove, isAdmin,
   participants, periods, latestPeriod, assignments, resources, checkIns, activityLog,
   hasLinkedBoard, linkedBoardStatus, allDepartments, shifts, radioChannels, medicalPlanEntries,
 }: {
@@ -31,6 +32,7 @@ export default function IcsIncidentClient({
   isOwner: boolean
   isJurisdictionParent: boolean
   isOfficerOrAbove: boolean
+  isAdmin: boolean
   participants: Participant[]
   periods: Period[]
   latestPeriod: Period | null
@@ -59,6 +61,16 @@ export default function IcsIncidentClient({
   const [newMedContact, setNewMedContact] = useState({ contact_type: 'hospital', name: '', phone: '', address: '' })
   const [prefillShiftId, setPrefillShiftId] = useState('')
   const [prefillSaving, setPrefillSaving] = useState(false)
+  const [deleteConfirming, setDeleteConfirming] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+
+  async function handleDeleteIncident() {
+    setDeleteBusy(true); setError(null)
+    const res = await deleteIcsIncident(incident.id)
+    setDeleteBusy(false)
+    if (res?.error) { setError(res.error); setDeleteConfirming(false); return }
+    router.push('/ics')
+  }
 
   async function handlePrefillFromShift() {
     if (!prefillShiftId || !latestPeriod) return
@@ -113,6 +125,26 @@ export default function IcsIncidentClient({
             className="mt-2 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-900 transition-colors">
             Reopen (jurisdiction override)
           </button>
+        )}
+        {incident.status === 'closed' && isOwner && isAdmin && (
+          deleteConfirming ? (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs font-medium text-red-600">Delete this ICS incident for good?</span>
+              <button onClick={handleDeleteIncident} disabled={deleteBusy}
+                className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+                {deleteBusy ? '...' : 'Yes, delete'}
+              </button>
+              <button onClick={() => setDeleteConfirming(false)}
+                className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50">
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setDeleteConfirming(true)}
+              className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors">
+              Delete ICS Incident
+            </button>
+          )
         )}
       </div>
 

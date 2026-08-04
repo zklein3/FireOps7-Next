@@ -128,6 +128,27 @@ export async function reopenIcsIncident(icsIncidentId: string) {
   return { success: true }
 }
 
+// Permanent, admin-only, and only by the current owning department (per Transfer of Command --
+// whoever currently owns the incident has full authority). Every child table
+// (ics_operational_periods -> ics_assignments/ics_resources/ics_radio_channels/
+// ics_medical_plan_entries, plus ics_incident_participants/ics_command_transfers) cascades via
+// FK, so nothing else to clean up here -- this is also the one thing that unblocks deleting a
+// linked accountability_boards row, since that FK has no cascade in the other direction.
+export async function deleteIcsIncident(icsIncidentId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (ctx.systemRole !== 'admin') return { error: 'Admin only.' }
+  const { data: incident } = await ctx.adminClient.from('ics_incidents').select('department_id, status').eq('id', icsIncidentId).single()
+  if (!incident) return { error: 'Incident not found.' }
+  if (incident.department_id !== ctx.departmentId) return { error: 'Only the department currently owning this incident can delete it.' }
+  if (incident.status !== 'closed') return { error: 'Close the incident before deleting it.' }
+
+  const { error: dbErr } = await ctx.adminClient.from('ics_incidents').delete().eq('id', icsIncidentId)
+  if (dbErr) { await logError(dbErr.message, '/ics'); return { error: dbErr.message } }
+  revalidatePath('/ics')
+  return { success: true }
+}
+
 export async function transferCommand(icsIncidentId: string, toDepartmentId: string, notes?: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }

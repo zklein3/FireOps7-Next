@@ -120,6 +120,7 @@ export default async function IcsIncidentPage({ params }: { params: Promise<{ id
     .from('department_shifts').select('id, name').eq('department_id', departmentId).eq('active', true).order('sort_order')
 
   const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
+  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
   const isOwner = incident.department_id === departmentId
 
   return (
@@ -129,6 +130,7 @@ export default async function IcsIncidentPage({ params }: { params: Promise<{ id
       isOwner={isOwner}
       isJurisdictionParent={!!jurisdiction}
       isOfficerOrAbove={isOfficerOrAbove}
+      isAdmin={isAdmin}
       participants={participants}
       periods={periods ?? []}
       latestPeriod={latestPeriod}
