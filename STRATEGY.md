@@ -198,14 +198,11 @@ Everything above this note was architecture. This session actually built the mod
 - **Transfer of Command UI** — button on the ICS incident page, owner-only, picks another active participant.
 - **Not built**: LEOP builder, general document sharing. Both are genuinely large net-new features (LEOP needs the inspection-template-builder-style section/versioning system; document sharing needs a documents table + the same grant shape as `ics_incident_agencies`) — deliberately not attempted in this pass rather than half-building them.
 
-### Accountability board cleanup — needed, not yet built (flagged 2026-08-03)
+### Accountability board cleanup — SHIPPED ✅ (2026-08-04)
 
-`/accountability` lists every board a department has ever created, forever — Active and Closed are the only two states (`accountability_boards.status`), and "Closed" still shows in the list permanently, just visually deemphasized. There's no delete and no real archive. This became a real annoyance testing the new guest-access feature (§ "no-account guest access," shipped 2026-08-03) — throwaway drill/test boards pile up next to real incident boards with no way to get them out of the way.
+Flagged 2026-08-03 while testing guest access — `/accountability` listed every board a department had ever created, forever, with no delete and no real archive.
 
-Needs a real design pass, not just bolting on a delete button — a board being gone should mean different things depending on why:
-- **True mistake / test board** (like the ones created while testing this session) — hard delete makes sense, nothing worth keeping.
-- **A real drill or incident that's just old** — probably wants an actual **Archive** state distinct from Closed (hidden from the default list, still fully viewable/reportable on demand — same instinct as `neris_issue_dismissed`'s "stays visible, drops out of the default view" pattern elsewhere in this app), since 214/PAR history has audit value even for board data that's very old.
-- Cascade concerns before allowing hard delete: `accountability_entries`, `accountability_resources`, `accountability_par_checks`, `accountability_activity_log`, and (if `nims_mode` was ever on) a linked `ics_incidents` record via `linked_accountability_board_id` — deleting a board out from under an open ICS packet would orphan it.
+Built per the design captured here: **Archive** is a reversible state distinct from Closed (`accountability_boards.archived_at`, migration `add_accountability_board_archived_at`) — requires the board be closed first, hidden from the default list but fully viewable/reportable via a collapsed "Archived (N)" section (`ArchivedBoardsSection.tsx`), same instinct as `neris_issue_dismissed`. **Delete** is real and permanent, admin-only, requires closed status, and is blocked with a clear message if an `ics_incidents` row still links to the board via `linked_accountability_board_id` (that FK has no cascade, by design) — every other child table (`accountability_entries`/`resources`/`lanes`/`par_checks`/`activity_log`) already cascaded via FK, so no manual cleanup needed in code. `BoardCleanupActions.tsx` is the shared Archive/Restore + confirm-then-Delete control, used on both the board list and the board's own header. Reopening a board clears any archive too, since active+archived would otherwise show the same board in both sections.
 
 ## Infrastructure & Scaling Plan
 
