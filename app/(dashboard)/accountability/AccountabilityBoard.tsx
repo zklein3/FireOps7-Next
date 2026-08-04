@@ -834,11 +834,15 @@ export default function AccountabilityBoard({
   const releasedEntries = entries.filter(e => e.status === 'released')
     .sort((a, b) => new Date(b.released_at ?? 0).getTime() - new Date(a.released_at ?? 0).getTime())
 
-  // A lane never disappears if anyone's actually checked into it — only empty
+  // A lane never disappears if anyone/anything's actually checked into it — only empty
   // lanes get hidden/shown based on which mode(s) are currently active. Lanes with
-  // no profile (added ad hoc via + Lane) always show, regardless of mode.
+  // no profile (added ad hoc via + Lane) always show, regardless of mode. This is also
+  // the list used for every "move to lane" picker (modals, manual add), not just the
+  // board columns — a fire-mode board should only ever offer fire lanes, an ICS-mode
+  // board only its ICS lanes, etc., not every lane the board has ever had across modes.
   const visibleLanes = lanes.filter(lane => {
     if (activeEntries.some(e => e.lane_id === lane.id)) return true
+    if (resources.some(r => r.status !== 'released' && r.lane_id === lane.id)) return true
     if (lane.profile === 'default') return !nimsMode && !isActiveViolence
     if (lane.profile === 'ics') return nimsMode
     if (lane.profile === 'active_violence') return isActiveViolence
@@ -988,7 +992,7 @@ export default function AccountabilityBoard({
             <p className="font-semibold text-zinc-900 mb-1">{movingEntry.display_name}</p>
             <p className="text-sm text-zinc-500 mb-4">Move to which lane?</p>
             <div className="flex flex-col gap-2 mb-3">
-              {lanes.map(l => (
+              {visibleLanes.map(l => (
                 <button key={l.id} type="button" onClick={() => handleMove(movingEntry.id, l.id)}
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm font-medium text-left transition-colors ${
                     movingEntry.lane_id === l.id
@@ -1095,7 +1099,7 @@ export default function AccountabilityBoard({
               <p className="font-semibold text-zinc-900 mb-1">{resource.display_desc}</p>
               <p className="text-sm text-zinc-500 mb-4">Move this resource (and its attached crew) to which lane?</p>
               <div className="flex flex-col gap-2 mb-3">
-                {lanes.map(l => (
+                {visibleLanes.map(l => (
                   <button key={l.id} type="button" onClick={() => handleMoveResource(resource.id, l.id)}
                     className={`w-full rounded-lg border px-4 py-2.5 text-sm font-medium text-left transition-colors ${
                       resource.lane_id === l.id ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-zinc-200 hover:bg-zinc-50 text-zinc-700'
@@ -1139,7 +1143,7 @@ export default function AccountabilityBoard({
                 <select value={manualLaneId} onChange={e => setManualLaneId(e.target.value)}
                   className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
                   <option value="">Staging (default)</option>
-                  {lanes.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  {visibleLanes.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </div>
             </div>

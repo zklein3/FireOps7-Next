@@ -67,11 +67,13 @@ export default function BoardGuestAdminView({
   const activeResources = resources.filter(r => !r.released_at)
   const unattachedEntries = activeEntries.filter(e => !e.resource_id)
 
-  // Same rule as the officer board: a lane never disappears if anyone's actually checked into
-  // it — only empty lanes get hidden/shown based on which mode (default/NIMS/Active Violence)
-  // is currently active. The move-to dropdown still lists every lane, same as the officer view.
+  // Same rule as the officer board: a lane never disappears if anyone/anything's actually
+  // checked into it — only empty lanes get hidden/shown based on which mode (default/NIMS/
+  // Active Violence) is currently active. This is also the list every "move to lane" picker
+  // uses — a fire-mode board only offers fire lanes, an ICS-mode board only its ICS lanes, etc.
   const visibleLanes = lanes.filter(lane => {
     if (activeEntries.some(e => e.lane_id === lane.id)) return true
+    if (activeResources.some(r => r.lane_id === lane.id)) return true
     if (lane.profile === 'default') return !board.nimsMode && !board.isActiveViolence
     if (lane.profile === 'ics') return board.nimsMode
     if (lane.profile === 'active_violence') return board.isActiveViolence
@@ -454,7 +456,7 @@ export default function BoardGuestAdminView({
             <p className="font-semibold text-zinc-900 mb-1">{movingEntry.display_name}</p>
             <p className="text-sm text-zinc-500 mb-4">Move to which lane?</p>
             <div className="flex flex-col gap-2 mb-3">
-              {lanes.map(l => (
+              {visibleLanes.map(l => (
                 <button key={l.id} type="button" onClick={() => handleMoveEntry(movingEntry.id, l.id)}
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm font-medium text-left transition-colors ${
                     movingEntry.lane_id === l.id
@@ -483,7 +485,7 @@ export default function BoardGuestAdminView({
             <p className="font-semibold text-zinc-900 mb-1">{movingResource.display_desc}</p>
             <p className="text-sm text-zinc-500 mb-4">Move to which lane? (Moves its crew too.)</p>
             <div className="flex flex-col gap-2 mb-3">
-              {lanes.map(l => (
+              {visibleLanes.map(l => (
                 <button key={l.id} type="button" onClick={() => handleMoveResource(movingResource.id, l.id)}
                   className={`w-full rounded-lg border px-4 py-2.5 text-sm font-medium text-left transition-colors ${
                     movingResource.lane_id === l.id
