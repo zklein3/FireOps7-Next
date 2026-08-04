@@ -493,14 +493,71 @@ export async function closeBoard(boardId: string) {
 export async function reopenBoard(boardId: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
+  // Active and archived are contradictory states — reopening always clears any archive too,
+  // otherwise the board would show up in both the Active and Archived sections at once.
   const { error: dbErr } = await ctx.adminClient
     .from('accountability_boards')
-    .update({ status: 'active', closed_at: null })
+    .update({ status: 'active', closed_at: null, archived_at: null })
     .eq('id', boardId)
     .eq('department_id', ctx.dept.department_id)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   revalidatePath('/accountability')
   revalidatePath(`/accountability/${boardId}`)
+  return { success: true }
+}
+
+// ─── Board cleanup: archive / delete ───────────────────────────────────────────
+//
+// Archive is the "gone, but audit history still matters" path — drops out of the default
+// /accountability list, same instinct as neris_issue_dismissed elsewhere in this app, but stays
+// fully viewable/reportable on demand. Delete is the "true mistake, nothing worth keeping" path
+// -- hard, cascades via FK (accountability_entries/resources/lanes/par_checks/activity_log all
+// ON DELETE CASCADE) -- and is blocked outright if an ICS incident is linked to this board
+// (ics_incidents.linked_accountability_board_id has no cascade, by design: deleting a board out
+// from under an open ICS packet would orphan it).
+
+export async function archiveBoard(boardId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const { data: boardRows } = await ctx.adminClient
+    .from('accountability_boards').select('status').eq('id', boardId).eq('department_id', ctx.dept.department_id)
+  const board = boardRows?.[0]
+  if (!board) return { error: 'Board not found.' }
+  if (board.status !== 'closed') return { error: 'Close the board before archiving it.' }
+
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_boards').update({ archived_at: new Date().toISOString() }).eq('id', boardId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  revalidatePath('/accountability')
+  return { success: true }
+}
+
+export async function unarchiveBoard(boardId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const { error: dbErr } = await ctx.adminClient
+    .from('accountability_boards').update({ archived_at: null }).eq('id', boardId).eq('department_id', ctx.dept.department_id)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  revalidatePath('/accountability')
+  return { success: true }
+}
+
+export async function deleteBoard(boardId: string) {
+  const ctx = await getContext()
+  if (!ctx || ctx.dept.system_role !== 'admin') return { error: 'Admin only.' }
+  const { data: boardRows } = await ctx.adminClient
+    .from('accountability_boards').select('status').eq('id', boardId).eq('department_id', ctx.dept.department_id)
+  const board = boardRows?.[0]
+  if (!board) return { error: 'Board not found.' }
+  if (board.status === 'active') return { error: 'Close the board before deleting it.' }
+
+  const { data: icsRows } = await ctx.adminClient
+    .from('ics_incidents').select('id').eq('linked_accountability_board_id', boardId)
+  if (icsRows?.length) return { error: 'This board has a linked ICS incident — unlink or delete that first.' }
+
+  const { error: dbErr } = await ctx.adminClient.from('accountability_boards').delete().eq('id', boardId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  revalidatePath('/accountability')
   return { success: true }
 }
 

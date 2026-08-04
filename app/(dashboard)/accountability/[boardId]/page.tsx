@@ -22,6 +22,7 @@ export default async function AccountabilityBoardPage({
 
   const department_id = ctx.departmentId
   const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
+  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
 
   const { data: deptFlags } = await adminClient.from('departments').select('module_ics').eq('id', department_id).single()
   const moduleIcs = deptFlags?.module_ics ?? false
@@ -32,7 +33,7 @@ export default async function AccountabilityBoardPage({
 
   const { data: board } = await adminClient
     .from('accountability_boards')
-    .select('id, title, board_date, status, linked_incident_id, linked_training_event_id, linked_event_instance_id, objectives, safety_message, weather, is_active_violence, nims_mode')
+    .select('id, title, board_date, status, archived_at, linked_incident_id, linked_training_event_id, linked_event_instance_id, objectives, safety_message, weather, is_active_violence, nims_mode')
     .eq('id', boardId)
     .eq('department_id', department_id)
     .single()
@@ -174,9 +175,11 @@ export default async function AccountabilityBoardPage({
         title={board.title}
         boardDate={board.board_date}
         status={board.status}
+        archivedAt={board.archived_at}
         linkedIncidentId={linkedIncidentId}
         linkedIncidentLabel={linkedIncidentLabel}
         isOfficerOrAbove={isOfficerOrAbove}
+        isAdmin={isAdmin}
         incidentOptions={incidentOptions}
         moduleIcs={moduleIcs}
         existingIcsIncidentId={existingIcsIncident?.id ?? null}

@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import Link from 'next/link'
 import GuestAccessControl from './GuestAccessControl'
+import BoardCleanupActions from './BoardCleanupActions'
+import ArchivedBoardsSection from './ArchivedBoardsSection'
 
 export default async function AccountabilityHubPage() {
   const adminClient = createAdminClient()
@@ -17,10 +19,10 @@ export default async function AccountabilityHubPage() {
 
   const { data: boards } = await adminClient
     .from('accountability_boards')
-    .select('id, title, board_date, status, linked_incident_id, created_at')
+    .select('id, title, board_date, status, linked_incident_id, created_at, archived_at')
     .eq('department_id', department_id)
     .order('created_at', { ascending: false })
-    .limit(50)
+    .limit(200)
 
   // Fetch entry counts per board
   const boardIds = (boards ?? []).map(b => b.id)
@@ -48,8 +50,10 @@ export default async function AccountabilityHubPage() {
   }
 
   const active = (boards ?? []).filter(b => b.status === 'active')
-  const closed = (boards ?? []).filter(b => b.status === 'closed')
+  const closed = (boards ?? []).filter(b => b.status === 'closed' && !b.archived_at)
+  const archived = (boards ?? []).filter(b => !!b.archived_at)
   const isOfficerOrAbove = ctx.systemRole === 'officer' || ctx.systemRole === 'admin' || ctx.isSysAdmin
+  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
 
   return (
     <div className="max-w-2xl">
@@ -120,28 +124,38 @@ export default async function AccountabilityHubPage() {
                     const count = countMap[board.id] ?? 0
                     const incNum = board.linked_incident_id ? incidentMap[board.linked_incident_id] : null
                     return (
-                      <Link key={board.id} href={`/accountability/${board.id}`}
-                        className="flex items-center px-5 py-4 gap-4 hover:bg-zinc-50 transition-colors">
-                        <div className="flex-1 min-w-0">
+                      <div key={board.id} className="flex items-center px-5 py-4 gap-4 hover:bg-zinc-50 transition-colors">
+                        <Link href={`/accountability/${board.id}`} className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-zinc-900 truncate">{board.title}</p>
                           <p className="text-xs text-zinc-400 mt-0.5">
                             {formatDate(board.board_date)}
                             {incNum && <span className="ml-2 text-zinc-500">· Incident {incNum}</span>}
                           </p>
-                        </div>
+                        </Link>
                         <div className="flex items-center gap-3 shrink-0">
                           {count > 0 && (
                             <span className="text-xs text-zinc-400">{count} logged</span>
                           )}
                           <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500">Closed</span>
-                          <span className="text-zinc-300">→</span>
+                          {isOfficerOrAbove && <BoardCleanupActions boardId={board.id} mode="closed" canDelete={isAdmin} />}
+                          <Link href={`/accountability/${board.id}`} className="text-zinc-300">→</Link>
                         </div>
-                      </Link>
+                      </div>
                     )
                   })}
                 </div>
               </div>
             </div>
+          )}
+
+          {isOfficerOrAbove && archived.length > 0 && (
+            <ArchivedBoardsSection
+              boards={archived}
+              countMap={countMap}
+              incidentMap={incidentMap}
+              canDelete={isAdmin}
+              formatDate={formatDate}
+            />
           )}
         </div>
       )}

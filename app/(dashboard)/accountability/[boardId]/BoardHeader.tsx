@@ -5,15 +5,18 @@ import { useRouter } from 'next/navigation'
 import { closeBoard, reopenBoard, updateBoardLink, setBoardIcsFields } from '@/app/actions/accountability'
 import { createIcsIncident } from '@/app/actions/ics'
 import GuestAccessControl from '../GuestAccessControl'
+import BoardCleanupActions from '../BoardCleanupActions'
 
 export default function BoardHeader({
   boardId,
   title,
   boardDate,
   status,
+  archivedAt,
   linkedIncidentId,
   linkedIncidentLabel,
   isOfficerOrAbove,
+  isAdmin,
   incidentOptions,
   moduleIcs,
   existingIcsIncidentId,
@@ -24,9 +27,11 @@ export default function BoardHeader({
   title: string
   boardDate: string
   status: string
+  archivedAt: string | null
   linkedIncidentId: string | null
   linkedIncidentLabel: string | null
   isOfficerOrAbove: boolean
+  isAdmin: boolean
   incidentOptions: { id: string; label: string }[]
   moduleIcs: boolean
   existingIcsIncidentId: string | null
@@ -95,7 +100,7 @@ export default function BoardHeader({
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
                 status === 'active' ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-500'
               }`}>
-                {status === 'active' ? 'Active' : 'Closed'}
+                {status === 'active' ? 'Active' : archivedAt ? 'Archived' : 'Closed'}
               </span>
             </div>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -130,6 +135,14 @@ export default function BoardHeader({
               }`}>
               {toggling ? '...' : status === 'active' ? 'Close' : 'Reopen'}
             </button>
+            {status === 'closed' && (
+              <BoardCleanupActions
+                boardId={boardId}
+                mode={archivedAt ? 'archived' : 'closed'}
+                canDelete={isAdmin}
+                redirectAfterDelete="/accountability"
+              />
+            )}
           </div>
         )}
       </div>
