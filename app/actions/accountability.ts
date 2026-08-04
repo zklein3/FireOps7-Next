@@ -703,7 +703,7 @@ export async function updateEntryName(entryId: string, rawName: string, rawDept:
 // recognized card that was checked in before entries stored tag_ref for that path, or someone's
 // card simply changing. Without this, an already-on-board entry can never pick up a card scan
 // after the fact; the person would have to check out and back in to get one attached.
-export async function attachCardToEntry(entryId: string, tagRef: string) {
+export async function attachCardToEntry(entryId: string, tagRef: string, tier?: 'self' | 'admin' | null) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
   if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
@@ -713,7 +713,9 @@ export async function attachCardToEntry(entryId: string, tagRef: string) {
   const { data: boardRows } = await ctx.adminClient.from('accountability_boards').select('department_id').eq('id', entry.board_id)
   if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
 
-  const { error: dbErr } = await ctx.adminClient.from('accountability_entries').update({ tag_ref: tagRef }).eq('id', entryId)
+  const update: Record<string, unknown> = { tag_ref: tagRef }
+  if (tier !== undefined) update.guest_access_tier = tier
+  const { error: dbErr } = await ctx.adminClient.from('accountability_entries').update(update).eq('id', entryId)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true }
 }

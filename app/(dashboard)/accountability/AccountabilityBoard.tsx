@@ -149,6 +149,10 @@ export default function AccountabilityBoard({
   const [guestLinkCopied, setGuestLinkCopied] = useState(false)
 
   const [accessTierSaving, setAccessTierSaving] = useState(false)
+  const [attachCardOpen, setAttachCardOpen] = useState(false)
+  const [attachCardBusy, setAttachCardBusy] = useState(false)
+
+  useEffect(() => { setAttachCardOpen(false) }, [movingEntryId])
 
   async function handleSetAccessTier(entryId: string, tier: 'self' | 'admin' | null) {
     setAccessTierSaving(true)
@@ -156,6 +160,21 @@ export default function AccountabilityBoard({
     setAccessTierSaving(false)
     if (result?.error) { setError(result.error); return }
     setEntries(prev => prev.map(e => e.id === entryId ? { ...e, guest_access_tier: tier } : e))
+  }
+
+  // One-step "grant board access" for an entry that has no card attached yet (e.g. checked in
+  // by picking their name from the roster rather than scanning them in) -- scans their physical
+  // card right here and attaches + grants self-tier in one action, instead of requiring them to
+  // separately be re-scanned via the main board scanner first.
+  async function handleAttachCardScan(raw: string) {
+    setAttachCardOpen(false)
+    if (!movingEntryId) return
+    setAttachCardBusy(true)
+    const tagRef = hashRaw(raw)
+    const result = await attachCardToEntry(movingEntryId, tagRef, 'self')
+    setAttachCardBusy(false)
+    if (result?.error) { setError(result.error); return }
+    setEntries(prev => prev.map(e => e.id === movingEntryId ? { ...e, tag_ref: tagRef, guest_access_tier: 'self' } : e))
   }
 
   async function handleGenerateGuestLink(entryId: string) {
@@ -984,7 +1003,16 @@ export default function AccountabilityBoard({
               className="w-full mb-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition-colors">
               Release (Left Scene)
             </button>
-            {movingEntry.tag_ref && (
+            {attachCardOpen ? (
+              <div className="w-full mb-2 rounded-lg border border-zinc-200 p-3">
+                <p className="text-xs font-medium text-zinc-500 mb-2 uppercase tracking-wide">Scan Their Card</p>
+                <QRScanner
+                  onScan={handleAttachCardScan}
+                  onClose={() => setAttachCardOpen(false)}
+                  hint="Point the camera at their card"
+                />
+              </div>
+            ) : movingEntry.tag_ref ? (
               <div className="w-full mb-2 rounded-lg border border-zinc-200 p-3">
                 <label className="block text-xs font-medium text-zinc-500 mb-1 uppercase tracking-wide">Card Access</label>
                 <select
@@ -999,6 +1027,11 @@ export default function AccountabilityBoard({
                 </select>
                 <p className="mt-1 text-xs text-zinc-400">Scanning this card at fireops7.com/board-guest/scan will get them straight to this board with whatever's picked above.</p>
               </div>
+            ) : (
+              <button type="button" disabled={attachCardBusy} onClick={() => setAttachCardOpen(true)}
+                className="w-full mb-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors disabled:opacity-50">
+                {attachCardBusy ? 'Saving…' : 'Scan Card to Enable Board Access'}
+              </button>
             )}
             {!movingEntry.personnel_id && (
               <button type="button" onClick={() => { handleGenerateGuestLink(movingEntry.id); setMovingEntryId(null) }}
