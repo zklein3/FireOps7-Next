@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { getGuestBoardState } from '@/app/actions/accountability'
 import BoardGuestSelfView from './BoardGuestSelfView'
 import BoardGuestAdminView from './BoardGuestAdminView'
@@ -63,7 +64,13 @@ export default function BoardGuestClient({ token }: { token: string }) {
         <div className="rounded-xl bg-white shadow-sm border border-zinc-200 p-6 text-center">
           <div className="text-4xl mb-3">🔒</div>
           <h2 className="text-lg font-bold text-zinc-900 mb-1">Access Unavailable</h2>
-          <p className="text-sm text-zinc-500">{error ?? 'This link is no longer valid.'}</p>
+          <p className="text-sm text-zinc-500 mb-4">{error ?? 'This link is no longer valid.'}</p>
+          <Link
+            href="/board-guest/scan"
+            className="inline-block rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 transition-colors"
+          >
+            Scan a Card
+          </Link>
         </div>
       ) : state.kind === 'self' ? (
         <BoardGuestSelfView token={token} state={state} onChange={() => refresh(true)} />

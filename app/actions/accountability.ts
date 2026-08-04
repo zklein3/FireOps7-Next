@@ -124,16 +124,47 @@ export async function generateBoardGuestAdminLink(boardId: string, guestLabel: s
   return { success: true, token }
 }
 
+// Kills BOTH halves of guest access: the timestamp check blocks any already-issued link/token
+// (admin link, or a self-link opened before now), and clearing guest_access_tier on every entry
+// stops a physical card from being rescanned to mint a fresh one — resolveCardForBoardAccess only
+// looks at that column, not the timestamp, so without this second step a revoked card could just
+// be scanned again immediately afterward and hand back a brand-new, perfectly valid token.
 export async function revokeGuestLinks(boardId: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
   if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  const { data: boardRows } = await ctx.adminClient
+    .from('accountability_boards').select('id').eq('id', boardId).eq('department_id', ctx.dept.department_id)
+  if (!boardRows?.length) return { error: 'Not authorized.' }
+
   const { error: dbErr } = await ctx.adminClient
     .from('accountability_boards').update({ guest_links_revoked_at: new Date().toISOString() })
-    .eq('id', boardId).eq('department_id', ctx.dept.department_id)
+    .eq('id', boardId)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+
+  const { error: entriesErr } = await ctx.adminClient
+    .from('accountability_entries').update({ guest_access_tier: null }).eq('board_id', boardId)
+  if (entriesErr) { await logError(entriesErr.message, '/accountability'); return { error: entriesErr.message } }
+
   revalidatePath(`/accountability/${boardId}`)
+  revalidatePath('/accountability')
   return { success: true }
+}
+
+// Read-only status for the list page / header badge — is there anything to revoke right now?
+export async function getGuestAccessStatus(boardId: string) {
+  const ctx = await getContext()
+  if (!ctx) return { active: false }
+  const { data: boardRows } = await ctx.adminClient
+    .from('accountability_boards').select('id').eq('id', boardId).eq('department_id', ctx.dept.department_id)
+  if (!boardRows?.length) return { active: false }
+
+  const { count } = await ctx.adminClient
+    .from('accountability_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('board_id', boardId)
+    .not('guest_access_tier', 'is', null)
+  return { active: (count ?? 0) > 0 }
 }
 
 // Public — no ctx, called from the unauthenticated /board-guest/scan page. A card only works
@@ -668,12 +699,35 @@ export async function updateEntryName(entryId: string, rawName: string, rawDept:
 
 // A quick-tag entry (typed name, no personnel_id) is later confirmed to be the same person as
 // a real-card scan — link it in place instead of leaving two rows for one person on the board.
-export async function linkAccountabilityEntryToPersonnel(entryId: string, personnelId: string) {
+// Backfills tag_ref on an entry that's already checked in — covers re-scanning a personally-
+// recognized card that was checked in before entries stored tag_ref for that path, or someone's
+// card simply changing. Without this, an already-on-board entry can never pick up a card scan
+// after the fact; the person would have to check out and back in to get one attached.
+export async function attachCardToEntry(entryId: string, tagRef: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
+  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  const { data: entryRows } = await ctx.adminClient.from('accountability_entries').select('board_id').eq('id', entryId)
+  const entry = entryRows?.[0]
+  if (!entry) return { error: 'Entry not found.' }
+  const { data: boardRows } = await ctx.adminClient.from('accountability_boards').select('department_id').eq('id', entry.board_id)
+  if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return { error: 'Not authorized.' }
+
+  const { error: dbErr } = await ctx.adminClient.from('accountability_entries').update({ tag_ref: tagRef }).eq('id', entryId)
+  if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+  return { success: true }
+}
+
+export async function linkAccountabilityEntryToPersonnel(entryId: string, personnelId: string, tagRef?: string | null) {
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  const update: Record<string, unknown> = { personnel_id: personnelId, raw_name: null, raw_dept: null, status: 'on_scene', released_at: null }
+  // The card just scanned to trigger this merge is the person's real card — store its hash so
+  // it's recognized on future scans, replacing whatever tag (if any) the quick-tag entry had.
+  if (tagRef) update.tag_ref = tagRef
   const { error: dbErr } = await ctx.adminClient
     .from('accountability_entries')
-    .update({ personnel_id: personnelId, raw_name: null, raw_dept: null, status: 'on_scene', released_at: null })
+    .update(update)
     .eq('id', entryId)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
   return { success: true }

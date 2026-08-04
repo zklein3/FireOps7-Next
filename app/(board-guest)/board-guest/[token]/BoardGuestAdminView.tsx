@@ -102,8 +102,9 @@ export default function BoardGuestAdminView({
     const card = parseSalamanderCard(raw)
     if (card) {
       const name = `${card.firstName} ${card.lastName}`
+      const cardTagRef = hashRaw(raw)
       startTransition(async () => {
-        const result = await checkInPerson(board.id, stagingLaneId, null, name, card.department, null, null, null, token)
+        const result = await checkInPerson(board.id, stagingLaneId, null, name, card.department, cardTagRef, null, null, token)
         if (result?.error) { setError(result.error); return }
         onChange()
       })

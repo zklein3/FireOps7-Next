@@ -3,6 +3,7 @@ import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import Link from 'next/link'
+import GuestAccessControl from './GuestAccessControl'
 
 export default async function AccountabilityHubPage() {
   const adminClient = createAdminClient()
@@ -48,6 +49,7 @@ export default async function AccountabilityHubPage() {
 
   const active = (boards ?? []).filter(b => b.status === 'active')
   const closed = (boards ?? []).filter(b => b.status === 'closed')
+  const isOfficerOrAbove = ctx.systemRole === 'officer' || ctx.systemRole === 'admin' || ctx.isSysAdmin
 
   return (
     <div className="max-w-2xl">
@@ -81,15 +83,14 @@ export default async function AccountabilityHubPage() {
                     const count = countMap[board.id] ?? 0
                     const incNum = board.linked_incident_id ? incidentMap[board.linked_incident_id] : null
                     return (
-                      <Link key={board.id} href={`/accountability/${board.id}`}
-                        className="flex items-center px-5 py-4 gap-4 hover:bg-zinc-50 transition-colors">
-                        <div className="flex-1 min-w-0">
+                      <div key={board.id} className="flex items-center px-5 py-4 gap-4 hover:bg-zinc-50 transition-colors">
+                        <Link href={`/accountability/${board.id}`} className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-zinc-900 truncate">{board.title}</p>
                           <p className="text-xs text-zinc-400 mt-0.5">
                             {formatDate(board.board_date)}
                             {incNum && <span className="ml-2 text-zinc-500">· Incident {incNum}</span>}
                           </p>
-                        </div>
+                        </Link>
                         <div className="flex items-center gap-3 shrink-0">
                           {count > 0 ? (
                             <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
@@ -99,9 +100,10 @@ export default async function AccountabilityHubPage() {
                             <span className="text-xs text-zinc-400">Empty</span>
                           )}
                           <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Active</span>
-                          <span className="text-zinc-300">→</span>
+                          {isOfficerOrAbove && <GuestAccessControl boardId={board.id} />}
+                          <Link href={`/accountability/${board.id}`} className="text-zinc-300">→</Link>
                         </div>
-                      </Link>
+                      </div>
                     )
                   })}
                 </div>

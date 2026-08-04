@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import QRScanner from '@/components/QRScanner'
 import { resolveCardForBoardAccess } from '@/app/actions/accountability'
 
@@ -46,13 +47,23 @@ export default function BoardGuestScanPage() {
       )}
 
       {!scannerOpen && !checking && (
-        <button
-          type="button"
-          onClick={() => { setError(null); setScannerOpen(true) }}
-          className="w-full rounded-lg bg-red-700 px-4 py-3 text-sm font-semibold text-white hover:bg-red-800"
-        >
-          Scan Again
-        </button>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => { setError(null); setScannerOpen(true) }}
+            className="w-full rounded-lg bg-red-700 px-4 py-3 text-sm font-semibold text-white hover:bg-red-800"
+          >
+            Scan Again
+          </button>
+          {error && (
+            <Link
+              href="/login"
+              className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-center text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+            >
+              Back to Login
+            </Link>
+          )}
+        </div>
       )}
 
       {scannerOpen && (

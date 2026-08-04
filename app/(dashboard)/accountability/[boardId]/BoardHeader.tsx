@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { closeBoard, reopenBoard, updateBoardLink, setBoardIcsFields, generateBoardGuestAdminLink, revokeGuestLinks } from '@/app/actions/accountability'
+import { closeBoard, reopenBoard, updateBoardLink, setBoardIcsFields } from '@/app/actions/accountability'
 import { createIcsIncident } from '@/app/actions/ics'
+import GuestAccessControl from '../GuestAccessControl'
 
 export default function BoardHeader({
   boardId,
@@ -62,13 +63,6 @@ export default function BoardHeader({
   const [linkSaving, setLinkSaving] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
 
-  const [guestOpen, setGuestOpen] = useState(false)
-  const [guestName, setGuestName] = useState('')
-  const [guestLink, setGuestLink] = useState<string | null>(null)
-  const [guestError, setGuestError] = useState<string | null>(null)
-  const [guestBusy, setGuestBusy] = useState(false)
-  const [guestCopied, setGuestCopied] = useState(false)
-
   const formattedDate = new Date(boardDate + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   })
@@ -89,32 +83,6 @@ export default function BoardHeader({
     if (res?.error) { setLinkError(res.error); return }
     setLinkOpen(false)
     router.refresh()
-  }
-
-  async function handleGenerateGuestLink() {
-    setGuestBusy(true)
-    setGuestError(null)
-    setGuestCopied(false)
-    const result = await generateBoardGuestAdminLink(boardId, guestName)
-    setGuestBusy(false)
-    if (result.error) { setGuestError(result.error); return }
-    setGuestLink(`${window.location.origin}/board-guest/${result.token}`)
-  }
-
-  async function handleCopyGuestLink() {
-    if (!guestLink) return
-    await navigator.clipboard.writeText(guestLink)
-    setGuestCopied(true)
-  }
-
-  async function handleRevokeGuestLinks() {
-    setGuestBusy(true)
-    setGuestError(null)
-    const res = await revokeGuestLinks(boardId)
-    setGuestBusy(false)
-    if (res?.error) { setGuestError(res.error); return }
-    setGuestLink(null)
-    setGuestName('')
   }
 
   return (
@@ -153,12 +121,7 @@ export default function BoardHeader({
               className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 transition-colors shadow-sm">
               Link
             </button>
-            {status === 'active' && (
-              <button type="button" onClick={() => setGuestOpen(true)}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 transition-colors shadow-sm">
-                Guest Access
-              </button>
-            )}
+            {status === 'active' && <GuestAccessControl boardId={boardId} />}
             <button type="button" disabled={toggling} onClick={handleToggleStatus}
               className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors shadow-sm ${
                 status === 'active'
@@ -228,59 +191,6 @@ export default function BoardHeader({
         </div>
       )}
 
-      {guestOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
-            <p className="font-semibold text-zinc-900 mb-1">Guest Access</p>
-            <p className="text-xs text-zinc-500 mb-4">
-              No FireOps7 account needed — the link itself is the credential. Full board control (view everyone, create/edit lanes, move people and resources). Access ends automatically when this board closes, or immediately if you revoke below.
-            </p>
-            {guestError && <p className="text-sm text-red-600 mb-3">{guestError}</p>}
-
-            {!guestLink ? (
-              <>
-                <label className="mb-1 block text-xs font-medium text-zinc-700">Guest's name / agency</label>
-                <input
-                  value={guestName}
-                  onChange={e => setGuestName(e.target.value)}
-                  placeholder="e.g. Jane Doe, Cass County EM"
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm mb-4 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                />
-                <div className="flex gap-2">
-                  <button type="button" disabled={guestBusy || !guestName.trim()} onClick={handleGenerateGuestLink}
-                    className="flex-1 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
-                    {guestBusy ? 'Generating...' : 'Generate Link'}
-                  </button>
-                  <button type="button" onClick={() => setGuestOpen(false)}
-                    className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="mb-4 rounded-lg bg-zinc-50 border border-zinc-200 px-3 py-2 text-xs text-zinc-700 break-all">
-                  {guestLink}
-                </div>
-                <div className="flex gap-2 mb-3">
-                  <button type="button" onClick={handleCopyGuestLink}
-                    className="flex-1 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800">
-                    {guestCopied ? 'Copied ✓' : 'Copy Link'}
-                  </button>
-                  <button type="button" onClick={() => setGuestOpen(false)}
-                    className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">
-                    Done
-                  </button>
-                </div>
-                <button type="button" disabled={guestBusy} onClick={handleRevokeGuestLinks}
-                  className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
-                  Revoke All Guest Access
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </>
   )
 }

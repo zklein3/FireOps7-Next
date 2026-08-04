@@ -10,7 +10,7 @@ import {
   setBoardIcsFields, setEntryIcsRole, setLaneLeader, setLaneWorkAssignment, addActivityLogEntry, logBoardStamp, renameLane,
   releaseAccountabilityEntry, reactivateAccountabilityEntry, linkAccountabilityEntryToPersonnel,
   checkInResource, moveResourceToLane, releaseResource, attachPersonnelToResource,
-  generateSelfMoveGuestLink, setEntryAccessTier,
+  generateSelfMoveGuestLink, setEntryAccessTier, attachCardToEntry,
 } from '@/app/actions/accountability'
 import { ICS_COMMAND_ROLES, ICS_ACTIVE_VIOLENCE_ROLES, icsRoleLabel } from '@/lib/ics-roles'
 import { RESOURCE_KINDS, RESOURCE_TYPE_TIERS } from '@/lib/resource-kinds'
@@ -207,7 +207,7 @@ export default function AccountabilityBoard({
   // linking rather than auto-merging, since two different people can share a name.
   const [mergeCandidate, setMergeCandidate] = useState<{
     entryId: string; existingName: string; wasReleased: boolean
-    personnelId: string; newDisplayName: string; newDisplayDept: string
+    personnelId: string; newDisplayName: string; newDisplayDept: string; tagRef: string
   } | null>(null)
   const [mergeSaving, setMergeSaving] = useState(false)
 
@@ -441,13 +441,17 @@ export default function AccountabilityBoard({
     const isKnown = isFireOps7Card(raw) || !!parseSalamanderCard(raw)
     if (!isKnown) saveDebugScan(raw)
 
+    // Hash the raw scan regardless of card type — a personally-recognized card (FireOps7
+    // personal card, or a Salamander card matched to a known personnel_qr_tokens entry) needs
+    // this stored on its entry just as much as a blank tag does, otherwise there's nothing for
+    // setEntryAccessTier or /board-guest/scan to ever recognize on that physical card later.
+    const tagRef = hashRaw(raw)
     const resolved = resolveCard(raw)
 
     if (resolved.needsNaming) {
       // Match on tag_ref (persisted) rather than the session-only ref, so re-scanning the same
       // physical tag still finds its entry after a reload/board reopen instead of re-prompting.
-      const ref = hashRaw(raw)
-      const existingEntry = entries.find(e => e.tag_ref === ref)
+      const existingEntry = entries.find(e => e.tag_ref === tagRef)
       if (existingEntry) { setMovingEntryId(existingEntry.id); return }
       pendingTagRawRef.current = raw
       setTagName('')
@@ -461,6 +465,13 @@ export default function AccountabilityBoard({
       (!resolved.personnelId && e.raw_name === resolved.rawName && e.raw_dept === resolved.rawDept)
     )
     if (alreadyOn) {
+      // Backfills tag_ref on a re-scan when it's missing or stale — otherwise an entry checked
+      // in via a recognized card before this existed (or with a since-replaced card) can never
+      // pick one up short of checking out and back in.
+      if (alreadyOn.tag_ref !== tagRef) {
+        await attachCardToEntry(alreadyOn.id, tagRef)
+        setEntries(prev => prev.map(e => e.id === alreadyOn.id ? { ...e, tag_ref: tagRef } : e))
+      }
       setMovingEntryId(alreadyOn.id)
       return
     }
@@ -476,14 +487,14 @@ export default function AccountabilityBoard({
       if (nameMatch) {
         setMergeCandidate({
           entryId: nameMatch.id, existingName: nameMatch.display_name, wasReleased: nameMatch.status === 'released',
-          personnelId: resolved.personnelId, newDisplayName: resolved.displayName, newDisplayDept: resolved.displayDept,
+          personnelId: resolved.personnelId, newDisplayName: resolved.displayName, newDisplayDept: resolved.displayDept, tagRef,
         })
         return
       }
     }
 
     const laneId = stagingLane?.id ?? null
-    const res = await checkInPerson(boardId, laneId, resolved.personnelId, resolved.rawName, resolved.rawDept)
+    const res = await checkInPerson(boardId, laneId, resolved.personnelId, resolved.rawName, resolved.rawDept, tagRef)
     if (res?.error) { setError(res.error); return }
     if (res.entry) {
       setEntries(prev => [...prev, { ...res.entry, display_name: resolved.displayName, display_dept: resolved.displayDept }])
@@ -493,12 +504,12 @@ export default function AccountabilityBoard({
   async function handleConfirmMerge() {
     if (!mergeCandidate) return
     setMergeSaving(true)
-    const { entryId, personnelId, newDisplayName, newDisplayDept } = mergeCandidate
-    const res = await linkAccountabilityEntryToPersonnel(entryId, personnelId)
+    const { entryId, personnelId, newDisplayName, newDisplayDept, tagRef } = mergeCandidate
+    const res = await linkAccountabilityEntryToPersonnel(entryId, personnelId, tagRef)
     setMergeSaving(false)
     if (res?.error) { setError(res.error); return }
     setEntries(prev => prev.map(e => e.id === entryId
-      ? { ...e, personnel_id: personnelId, raw_name: null, raw_dept: null, status: 'on_scene', released_at: null, display_name: newDisplayName, display_dept: newDisplayDept }
+      ? { ...e, personnel_id: personnelId, raw_name: null, raw_dept: null, status: 'on_scene', released_at: null, display_name: newDisplayName, display_dept: newDisplayDept, tag_ref: tagRef }
       : e
     ))
     setMergeCandidate(null)
@@ -507,9 +518,9 @@ export default function AccountabilityBoard({
   async function handleDeclineMerge() {
     if (!mergeCandidate) return
     setMergeSaving(true)
-    const { personnelId, newDisplayName, newDisplayDept } = mergeCandidate
+    const { personnelId, newDisplayName, newDisplayDept, tagRef } = mergeCandidate
     const laneId = stagingLane?.id ?? null
-    const res = await checkInPerson(boardId, laneId, personnelId, null, null)
+    const res = await checkInPerson(boardId, laneId, personnelId, null, null, tagRef)
     setMergeSaving(false)
     if (res?.error) { setError(res.error); setMergeCandidate(null); return }
     if (res.entry) {
