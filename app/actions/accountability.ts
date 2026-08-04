@@ -336,6 +336,29 @@ async function fetchGuestAdminState(
     display_name: e.personnel_id ? (nameMap[e.personnel_id] ?? '—') : (e.raw_name ?? '—'),
   }))
 
+  // Command/Planning guests get the same 214 activity log the officer board shows — a guest's
+  // own stamps/notes are self-identifying (logBoardStamp/logGuestAction prefix the note text
+  // with "[Guest — label]" at write time, same convention as every other guest-authored entry
+  // on this board), so author_name only needs resolving for officer-authored rows.
+  const { data: activityLogRaw } = await adminClient
+    .from('accountability_activity_log')
+    .select('id, entry_time, note, author_personnel_id, lane_id')
+    .eq('board_id', board.id)
+    .order('entry_time', { ascending: false })
+    .limit(50)
+  const logAuthorIds = [...new Set((activityLogRaw ?? []).map(a => a.author_personnel_id).filter(Boolean))] as string[]
+  const { data: logAuthorsRaw } = logAuthorIds.length > 0
+    ? await adminClient.from('personnel').select('id, first_name, last_name').in('id', logAuthorIds)
+    : { data: [] }
+  const logAuthorNameById = Object.fromEntries((logAuthorsRaw ?? []).map(p => [p.id, `${p.first_name} ${p.last_name}`]))
+  const activityLog = (activityLogRaw ?? []).map(a => ({
+    id: a.id,
+    entry_time: a.entry_time,
+    note: a.note,
+    lane_id: a.lane_id,
+    author_name: a.author_personnel_id ? (logAuthorNameById[a.author_personnel_id] ?? '—') : null,
+  }))
+
   return {
     success: true as const,
     kind: 'admin' as const,
@@ -344,6 +367,7 @@ async function fetchGuestAdminState(
     lanes: lanes ?? [],
     entries,
     resources,
+    activityLog,
   }
 }
 
@@ -686,12 +710,28 @@ export async function moveResourceToLane(resourceId: string, laneId: string, gue
   return { success: true }
 }
 
-export async function releaseResource(resourceId: string) {
-  const ctx = await getContext()
-  if (!ctx) return { error: 'Not authenticated.' }
-  const { error: dbErr } = await ctx.adminClient
+export async function releaseResource(resourceId: string, guestToken?: string) {
+  const adminClient = createAdminClient()
+  const { data: resourceRows } = await adminClient
+    .from('accountability_resources').select('board_id, raw_description, kind').eq('id', resourceId)
+  const resource = resourceRows?.[0]
+  if (!resource) return { error: 'Resource not found.' }
+
+  const actor = await resolveActor(adminClient, resource.board_id, guestToken)
+  if (!actor) return { error: 'Not authorized.' }
+  if (actor.kind === 'guest_self') {
+    const { data: myEntryRows } = await adminClient.from('accountability_entries').select('resource_id').eq('id', actor.entryId)
+    if (myEntryRows?.[0]?.resource_id !== resourceId) return { error: 'Not authorized.' }
+  }
+
+  const { error: dbErr } = await adminClient
     .from('accountability_resources').update({ status: 'released', released_at: new Date().toISOString() }).eq('id', resourceId)
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
+
+  if (actor.kind !== 'officer') {
+    const who = resource.raw_description ?? resource.kind ?? 'a resource'
+    await logGuestAction(adminClient, resource.board_id, actor.label, `Released ${who}.`)
+  }
   return { success: true }
 }
 
@@ -956,14 +996,17 @@ export async function setLaneWorkAssignment(laneId: string, text: string) {
 
 // ─── Activity log ──────────────────────────────────────────────────────────────
 
-export async function addActivityLogEntry(boardId: string, note: string) {
-  const ctx = await getContext()
-  if (!ctx) return { error: 'Not authenticated.' }
+export async function addActivityLogEntry(boardId: string, note: string, guestToken?: string) {
+  const adminClient = createAdminClient()
+  const actor = await resolveActor(adminClient, boardId, guestToken)
+  if (!actor) return { error: 'Not authenticated.' }
+  if (actor.kind === 'guest_self') return { error: 'Not authorized.' }
   if (!note.trim()) return { error: 'Note required.' }
 
-  const { data: row, error: dbErr } = await ctx.adminClient
+  const noteText = actor.kind !== 'officer' ? `[Guest — ${actor.label}] ${note.trim()}` : note.trim()
+  const { data: row, error: dbErr } = await adminClient
     .from('accountability_activity_log')
-    .insert({ board_id: boardId, author_personnel_id: ctx.me.id, note: note.trim() })
+    .insert({ board_id: boardId, author_personnel_id: actor.kind === 'officer' ? actor.personnelId : null, note: noteText })
     .select('id, entry_time, note, author_personnel_id')
     .single()
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }
@@ -978,13 +1021,18 @@ export async function addActivityLogEntry(boardId: string, note: string) {
 // laneId narrows the stamp to one lane — a supervisor logging their own unit's 214
 // only stamps who's currently reporting to them, tagged so the activity log can be
 // filtered back down to just that lane later. Omit it for the old incident-wide stamp.
-export async function logBoardStamp(boardId: string, manualNote?: string, laneId?: string) {
-  const ctx = await getContext()
-  if (!ctx) return { error: 'Not authenticated.' }
+export async function logBoardStamp(boardId: string, manualNote?: string, laneId?: string, guestToken?: string) {
+  const adminClient = createAdminClient()
+  const actor = await resolveActor(adminClient, boardId, guestToken)
+  if (!actor) return { error: 'Not authenticated.' }
+  // 214 is a board-wide (or lane-scoped-but-still-board-visible) record, not one person's own
+  // status -- same restriction as every other board-wide guest action, a self-tier link only
+  // ever acts on its own entry.
+  if (actor.kind === 'guest_self') return { error: 'Not authorized.' }
 
-  const { data: lanes } = await ctx.adminClient
+  const { data: lanes } = await adminClient
     .from('accountability_lanes').select('id, name, sort_order').eq('board_id', boardId).order('sort_order')
-  let entriesQuery = ctx.adminClient
+  let entriesQuery = adminClient
     .from('accountability_entries')
     .select('personnel_id, raw_name, lane_id, ics_role')
     .eq('board_id', boardId)
@@ -994,7 +1042,7 @@ export async function logBoardStamp(boardId: string, manualNote?: string, laneId
 
   const personnelIds = [...new Set((entries ?? []).map(e => e.personnel_id).filter(Boolean))] as string[]
   const { data: personnelRaw } = personnelIds.length > 0
-    ? await ctx.adminClient.from('personnel').select('id, first_name, last_name').in('id', personnelIds)
+    ? await adminClient.from('personnel').select('id, first_name, last_name').in('id', personnelIds)
     : { data: [] }
   const nameById = Object.fromEntries((personnelRaw ?? []).map(p => [p.id, `${p.first_name} ${p.last_name}`]))
   const laneNameById = Object.fromEntries((lanes ?? []).map(l => [l.id, l.name]))
@@ -1020,11 +1068,12 @@ export async function logBoardStamp(boardId: string, manualNote?: string, laneId
   const stampText = laneId
     ? `ICS 214 stamp — ${parts.length > 0 ? parts[0] : `${laneNameById[laneId] ?? 'Lane'}: no one currently assigned`}`
     : `ICS 214 stamp — ${parts.length > 0 ? parts.join(' · ') : 'no one currently on scene'}`
-  const note = manualNote?.trim() ? `${manualNote.trim()} — ${stampText}` : stampText
+  const baseNote = manualNote?.trim() ? `${manualNote.trim()} — ${stampText}` : stampText
+  const note = actor.kind !== 'officer' ? `[Guest — ${actor.label}] ${baseNote}` : baseNote
 
-  const { data: row, error: dbErr } = await ctx.adminClient
+  const { data: row, error: dbErr } = await adminClient
     .from('accountability_activity_log')
-    .insert({ board_id: boardId, author_personnel_id: ctx.me.id, note, lane_id: laneId ?? null })
+    .insert({ board_id: boardId, author_personnel_id: actor.kind === 'officer' ? actor.personnelId : null, note, lane_id: laneId ?? null })
     .select('id, entry_time, note, author_personnel_id, lane_id')
     .single()
   if (dbErr) { await logError(dbErr.message, '/accountability'); return { error: dbErr.message } }

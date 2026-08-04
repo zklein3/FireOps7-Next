@@ -1,13 +1,17 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { addBoardLane, renameLane, movePersonToLane, moveResourceToLane, checkInPerson } from '@/app/actions/accountability'
+import {
+  addBoardLane, renameLane, movePersonToLane, moveResourceToLane, checkInPerson,
+  releaseAccountabilityEntry, releaseResource, logBoardStamp, addActivityLogEntry,
+} from '@/app/actions/accountability'
 import { parseSalamanderCard, isFireOps7Card, hashRaw } from '@/lib/salamander'
 import QRScanner from '@/components/QRScanner'
 
 type Lane = { id: string; name: string; sort_order: number; profile?: 'default' | 'ics' | 'active_violence' | null }
 type Entry = { id: string; lane_id: string | null; raw_name: string | null; display_name: string; status: string; released_at: string | null; resource_id: string | null; tag_ref?: string | null }
 type Resource = { id: string; lane_id: string | null; display_desc: string; status: string; released_at: string | null }
+type ActivityLogEntry = { id: string; entry_time: string; note: string; author_name: string | null; lane_id: string | null }
 
 export default function BoardGuestAdminView({
   token,
@@ -21,6 +25,7 @@ export default function BoardGuestAdminView({
     lanes: Lane[]
     entries: Entry[]
     resources: Resource[]
+    activityLog: ActivityLogEntry[]
   }
   onChange: () => void
 }) {
@@ -45,7 +50,18 @@ export default function BoardGuestAdminView({
   const [tagSaving, setTagSaving] = useState(false)
   const pendingTagRawRef = useRef<string | null>(null)
 
-  const { board, label, lanes, entries, resources } = state
+  // Tap-name-then-modal, same interaction as the officer board — replaces the old inline
+  // per-row lane dropdown so both surfaces work identically.
+  const [movingEntryId, setMovingEntryId] = useState<string | null>(null)
+  const [movingResourceId, setMovingResourceId] = useState<string | null>(null)
+
+  const [stampSaving, setStampSaving] = useState(false)
+  const [noteInput, setNoteInput] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
+
+  const { board, label, lanes, entries, resources, activityLog } = state
+  const movingEntry = movingEntryId ? entries.find(e => e.id === movingEntryId) : null
+  const movingResource = movingResourceId ? resources.find(r => r.id === movingResourceId) : null
 
   const activeEntries = entries.filter(e => !e.released_at)
   const activeResources = resources.filter(r => !r.released_at)
@@ -61,8 +77,6 @@ export default function BoardGuestAdminView({
     if (lane.profile === 'active_violence') return board.isActiveViolence
     return true
   })
-
-  const lanesWithUnassigned = [...lanes, { id: '__unassigned__', name: 'Unassigned', sort_order: 999999 }]
 
   function run(fn: () => Promise<{ error?: string } | undefined>) {
     setError(null)
@@ -97,14 +111,21 @@ export default function BoardGuestAdminView({
     setScannerOpen(false)
     setError(null)
 
+    // Check for "already on this board" first, regardless of card type — a card recognized here
+    // once (Salamander named, or a blank/rapid tag) carries the same tag_ref every time it's
+    // rescanned. Opens the manage modal to pick a lane, same as the officer board, instead of
+    // silently dumping them in Staging or creating a duplicate check-in.
+    const ref = hashRaw(raw)
+    const existing = entries.find(e => e.tag_ref === ref && !e.released_at)
+    if (existing) { setMovingEntryId(existing.id); return }
+
     // A Salamander card the guest has no personnel roster to match against — but if it's a
     // real card, the name/department are printed right on it, so check in with that directly.
     const card = parseSalamanderCard(raw)
     if (card) {
       const name = `${card.firstName} ${card.lastName}`
-      const cardTagRef = hashRaw(raw)
       startTransition(async () => {
-        const result = await checkInPerson(board.id, stagingLaneId, null, name, card.department, cardTagRef, null, null, token)
+        const result = await checkInPerson(board.id, stagingLaneId, null, name, card.department, ref, null, null, token)
         if (result?.error) { setError(result.error); return }
         onChange()
       })
@@ -112,30 +133,75 @@ export default function BoardGuestAdminView({
     }
 
     // A FireOps7 personal card encodes a real personnel_id this guest has no visibility into —
-    // there's nothing safe to show or check in without exposing department roster data.
+    // if it's not already on this board (checked above), there's nothing safe to show or check
+    // in without exposing department roster data.
     if (isFireOps7Card(raw)) {
       setError('This is a department member\'s personal card — ask an officer to check them in.')
       return
     }
 
-    // Blank/rapid tag — no name encoded. Re-scanning one already checked in on this board just
-    // moves it to Staging rather than creating a duplicate entry.
-    const ref = hashRaw(raw)
-    const existing = entries.find(e => e.tag_ref === ref && !e.released_at)
-    if (existing) {
-      startTransition(async () => {
-        const result = await movePersonToLane(existing.id, stagingLaneId ?? existing.lane_id ?? '', token)
-        if (result?.error) { setError(result.error); return }
-        onChange()
-      })
-      return
-    }
-
+    // Blank/rapid tag, never seen before — no name encoded, prompt for one.
     pendingTagRawRef.current = raw
     setTagName('')
     setTagDept('')
     setTagAccessTier('')
     setNameTagOpen(true)
+  }
+
+  function handleMoveEntry(entryId: string, laneId: string) {
+    setMovingEntryId(null)
+    startTransition(async () => {
+      const result = await movePersonToLane(entryId, laneId, token)
+      if (result?.error) { setError(result.error); return }
+      onChange()
+    })
+  }
+
+  function handleReleaseEntry(entryId: string) {
+    setMovingEntryId(null)
+    startTransition(async () => {
+      const result = await releaseAccountabilityEntry(entryId, token)
+      if (result?.error) { setError(result.error); return }
+      onChange()
+    })
+  }
+
+  function handleMoveResource(resourceId: string, laneId: string) {
+    setMovingResourceId(null)
+    startTransition(async () => {
+      const result = await moveResourceToLane(resourceId, laneId, token)
+      if (result?.error) { setError(result.error); return }
+      onChange()
+    })
+  }
+
+  function handleReleaseResource(resourceId: string) {
+    setMovingResourceId(null)
+    startTransition(async () => {
+      const result = await releaseResource(resourceId, token)
+      if (result?.error) { setError(result.error); return }
+      onChange()
+    })
+  }
+
+  async function handleLogStamp() {
+    setStampSaving(true)
+    setError(null)
+    const result = await logBoardStamp(board.id, undefined, undefined, token)
+    setStampSaving(false)
+    if (result?.error) { setError(result.error); return }
+    onChange()
+  }
+
+  async function handleAddNote() {
+    if (!noteInput.trim()) return
+    setNoteSaving(true)
+    setError(null)
+    const result = await addActivityLogEntry(board.id, noteInput.trim(), token)
+    setNoteSaving(false)
+    if (result?.error) { setError(result.error); return }
+    setNoteInput('')
+    onChange()
   }
 
   async function handleManualAdd() {
@@ -160,19 +226,6 @@ export default function BoardGuestAdminView({
     pendingTagRawRef.current = null
     setNameTagOpen(false)
     onChange()
-  }
-
-  function laneSelect(currentLaneId: string | null, onMove: (laneId: string) => void) {
-    return (
-      <select
-        value={currentLaneId ?? '__unassigned__'}
-        disabled={isPending}
-        onChange={e => { if (e.target.value !== '__unassigned__') onMove(e.target.value) }}
-        className="max-w-[45%] shrink-0 rounded-lg border border-zinc-300 px-2 py-1 text-xs text-zinc-700 disabled:opacity-50 sm:max-w-none"
-      >
-        {lanesWithUnassigned.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-      </select>
-    )
   }
 
   return (
@@ -247,23 +300,29 @@ export default function BoardGuestAdminView({
             {laneResources.map(resource => {
               const crew = entries.filter(e => e.resource_id === resource.id && !e.released_at)
               return (
-                <div key={resource.id} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 mb-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-800">{resource.display_desc}</p>
-                    {laneSelect(resource.lane_id, laneId => run(() => moveResourceToLane(resource.id, laneId, token)))}
-                  </div>
+                <button
+                  key={resource.id}
+                  type="button"
+                  onClick={() => setMovingResourceId(resource.id)}
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 mb-2 text-left hover:bg-zinc-100 transition-colors"
+                >
+                  <p className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-800">{resource.display_desc}</p>
                   {crew.length > 0 && (
                     <p className="text-xs text-zinc-500 mt-1">{crew.map(c => c.display_name).join(', ')}</p>
                   )}
-                </div>
+                </button>
               )
             })}
 
             {laneEntries.map(e => (
-              <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2 mb-2">
-                <p className="min-w-0 flex-1 truncate text-sm text-zinc-800">{e.display_name}</p>
-                {laneSelect(e.lane_id, laneId => run(() => movePersonToLane(e.id, laneId, token)))}
-              </div>
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => setMovingEntryId(e.id)}
+                className="w-full rounded-lg border border-zinc-200 px-3 py-2 mb-2 text-left text-sm text-zinc-800 hover:bg-zinc-50 transition-colors"
+              >
+                {e.display_name}
+              </button>
             ))}
           </div>
         )
@@ -289,6 +348,38 @@ export default function BoardGuestAdminView({
           + Add Lane
         </button>
       )}
+
+      <div className="rounded-xl border border-zinc-200 bg-white p-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Activity Log</p>
+          <button type="button" disabled={stampSaving} onClick={handleLogStamp}
+            className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 transition-colors">
+            {stampSaving ? 'Logging…' : 'Log 214'}
+          </button>
+        </div>
+        <div className="flex gap-2 mb-3">
+          <input value={noteInput} onChange={e => setNoteInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAddNote() }}
+            placeholder="Add a timestamped note..."
+            className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+          <button type="button" disabled={noteSaving || !noteInput.trim()} onClick={handleAddNote}
+            className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+            {noteSaving ? '...' : 'Add'}
+          </button>
+        </div>
+        <div className="max-h-64 overflow-y-auto space-y-2">
+          {activityLog.length === 0 && <p className="text-xs text-zinc-400">No entries yet.</p>}
+          {activityLog.map(a => (
+            <div key={a.id} className="text-xs border-b border-zinc-100 pb-2">
+              <p className="text-zinc-400">
+                {new Date(a.entry_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                {a.author_name && ` — ${a.author_name}`}
+              </p>
+              <p className="text-zinc-700 mt-0.5">{a.note}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <p className="text-center text-xs text-zinc-400">
         You can close this tab anytime — it doesn't end the board or check anyone out.
@@ -353,6 +444,64 @@ export default function BoardGuestAdminView({
               <button type="button" onClick={() => { setNameTagOpen(false); pendingTagRawRef.current = null; setTagAccessTier('') }}
                 className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">Cancel</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {movingEntry && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            <p className="font-semibold text-zinc-900 mb-1">{movingEntry.display_name}</p>
+            <p className="text-sm text-zinc-500 mb-4">Move to which lane?</p>
+            <div className="flex flex-col gap-2 mb-3">
+              {lanes.map(l => (
+                <button key={l.id} type="button" onClick={() => handleMoveEntry(movingEntry.id, l.id)}
+                  className={`w-full rounded-lg border px-4 py-2.5 text-sm font-medium text-left transition-colors ${
+                    movingEntry.lane_id === l.id
+                      ? 'border-red-300 bg-red-50 text-red-700'
+                      : 'border-zinc-200 hover:bg-zinc-50 text-zinc-700'
+                  }`}>
+                  {l.name}{movingEntry.lane_id === l.id ? ' ✓' : ''}
+                </button>
+              ))}
+            </div>
+            <button type="button" onClick={() => handleReleaseEntry(movingEntry.id)}
+              className="w-full mb-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition-colors">
+              Release (Left Scene)
+            </button>
+            <button type="button" onClick={() => setMovingEntryId(null)}
+              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {movingResource && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+            <p className="font-semibold text-zinc-900 mb-1">{movingResource.display_desc}</p>
+            <p className="text-sm text-zinc-500 mb-4">Move to which lane? (Moves its crew too.)</p>
+            <div className="flex flex-col gap-2 mb-3">
+              {lanes.map(l => (
+                <button key={l.id} type="button" onClick={() => handleMoveResource(movingResource.id, l.id)}
+                  className={`w-full rounded-lg border px-4 py-2.5 text-sm font-medium text-left transition-colors ${
+                    movingResource.lane_id === l.id
+                      ? 'border-red-300 bg-red-50 text-red-700'
+                      : 'border-zinc-200 hover:bg-zinc-50 text-zinc-700'
+                  }`}>
+                  {l.name}{movingResource.lane_id === l.id ? ' ✓' : ''}
+                </button>
+              ))}
+            </div>
+            <button type="button" onClick={() => handleReleaseResource(movingResource.id)}
+              className="w-full mb-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700 transition-colors">
+              Release
+            </button>
+            <button type="button" onClick={() => setMovingResourceId(null)}
+              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50">
+              Cancel
+            </button>
           </div>
         </div>
       )}
