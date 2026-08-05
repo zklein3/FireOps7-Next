@@ -126,7 +126,7 @@ export default function IcsIncidentClient({
             Reopen (jurisdiction override)
           </button>
         )}
-        {incident.status === 'closed' && isOwner && isAdmin && (
+        {isOwner && isAdmin && (
           deleteConfirming ? (
             <div className="mt-2 flex items-center gap-2">
               <span className="text-xs font-medium text-red-600">Delete this ICS incident for good?</span>

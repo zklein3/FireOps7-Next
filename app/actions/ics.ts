@@ -134,14 +134,20 @@ export async function reopenIcsIncident(icsIncidentId: string) {
 // ics_medical_plan_entries, plus ics_incident_participants/ics_command_transfers) cascades via
 // FK, so nothing else to clean up here -- this is also the one thing that unblocks deleting a
 // linked accountability_boards row, since that FK has no cascade in the other direction.
+//
+// Deliberately NOT gated on incident.status === 'closed' -- unlike a board's own status, this
+// status is derived from every participant closing their portion (closeParticipantPortion), a
+// separate action buried under Participants that has nothing to do with wanting to delete the
+// whole incident. Requiring it first just to reach Delete was friction copied from
+// deleteBoard's convention without actually applying here; admin + current-owner + the UI's own
+// confirm step is already the real guard.
 export async function deleteIcsIncident(icsIncidentId: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
   if (ctx.systemRole !== 'admin') return { error: 'Admin only.' }
-  const { data: incident } = await ctx.adminClient.from('ics_incidents').select('department_id, status').eq('id', icsIncidentId).single()
+  const { data: incident } = await ctx.adminClient.from('ics_incidents').select('department_id').eq('id', icsIncidentId).single()
   if (!incident) return { error: 'Incident not found.' }
   if (incident.department_id !== ctx.departmentId) return { error: 'Only the department currently owning this incident can delete it.' }
-  if (incident.status !== 'closed') return { error: 'Close the incident before deleting it.' }
 
   const { error: dbErr } = await ctx.adminClient.from('ics_incidents').delete().eq('id', icsIncidentId)
   if (dbErr) { await logError(dbErr.message, '/ics'); return { error: dbErr.message } }
