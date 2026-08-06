@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   createCompartmentName,
   updateCompartmentName,
@@ -39,6 +40,7 @@ export default function CompartmentsStep({
   showHelp: boolean
   helpResetKey: number
 }) {
+  const router = useRouter()
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [assigningId, setAssigningId] = useState<string | null>(null)
@@ -61,7 +63,7 @@ export default function CompartmentsStep({
     formData.append('department_id', departmentId)
     const result = await createCompartmentName(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Compartment template added.'); setShowForm(false) }
+    else { setSuccess('Compartment template added.'); setShowForm(false); router.refresh() }
     setLoading(false)
   }
 
@@ -69,7 +71,7 @@ export default function CompartmentsStep({
     setError(null); setSuccess(null); setLoading(true)
     const result = await updateCompartmentName(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Compartment updated.'); setEditingId(null) }
+    else { setSuccess('Compartment updated.'); setEditingId(null); router.refresh() }
     setLoading(false)
   }
 
@@ -86,7 +88,7 @@ export default function CompartmentsStep({
     setError(null); setLoading(true)
     const result = await bulkSetCompartmentApparatus(assigningId, Array.from(assignChecked))
     if (result?.error) setError(result.error)
-    else { setSuccess('Apparatus assignment saved.'); setAssigningId(null) }
+    else { setSuccess('Apparatus assignment saved.'); setAssigningId(null); router.refresh() }
     setLoading(false)
   }
 

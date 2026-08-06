@@ -25,6 +25,16 @@ export const ICS_ACTIVE_VIOLENCE_ROLES = [
 // mode on — these only apply on top of whatever's already there.
 export const ICS_MODE_LANES = ['Staging', 'Command']
 export const ACTIVE_VIOLENCE_LANES = ['Staging', 'Command', 'Rescue Task Force', 'Triage', 'Treatment', 'Transport']
+export const DEFAULT_ACCOUNTABILITY_LANES = [
+  'Staging',
+  'Command',
+  'Interior Attack',
+  'Exterior / Suppression',
+  'Ventilation',
+  'RIT / RIC',
+  'Rehab',
+  'EMS',
+]
 
 export const ALL_ICS_ROLES = [...ICS_COMMAND_ROLES, ...ICS_ACTIVE_VIOLENCE_ROLES]
 export const ALL_ICS_ROLE_VALUES = ALL_ICS_ROLES.map(r => r.value)

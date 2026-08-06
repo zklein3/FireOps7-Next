@@ -1,11 +1,17 @@
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { createAdminClient } from '@/lib/supabase/admin'
 import HubCard from '@/components/HubCard'
 
 export default async function IsoHubPage() {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
   if (!ctx.departmentId || (ctx.systemRole !== 'admin' && ctx.systemRole !== 'officer' && !ctx.isSysAdmin)) redirect('/dashboard')
+
+  // Module gate — Bundle B required
+  const adminClient = createAdminClient()
+  const { data: deptFlags } = await adminClient.from('departments').select('module_iso').eq('id', ctx.departmentId).single()
+  if (!deptFlags?.module_iso) redirect('/dashboard')
 
   return (
     <div>

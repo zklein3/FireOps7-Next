@@ -29,9 +29,14 @@ export async function shot(page, name) {
   return file
 }
 
-export async function launch() {
+export const VIEWPORTS = {
+  desktop: { width: 1400, height: 900 },
+  mobile: { width: 390, height: 844 }, // iPhone 12/13/14-class width, triggers the sm: breakpoint switch to MobileSidebar
+}
+
+export async function launch(viewport = VIEWPORTS.desktop) {
   const browser = await chromium.launch({ args: ['--no-sandbox'] })
-  const context = await browser.newContext({ viewport: { width: 1400, height: 900 } })
+  const context = await browser.newContext({ viewport })
   const page = await context.newPage()
   page.on('console', msg => { if (msg.type() === 'error' && !msg.text().includes('script resource is behind a redirect')) console.log('CONSOLE ERROR:', msg.text()) })
   page.on('pageerror', err => console.log('PAGE ERROR:', err.message))
@@ -47,7 +52,9 @@ async function settle(page) {
   // racing it; a short fixed sleep here produces false "stuck on this page" failures.
   await page.waitForTimeout(1000)
   try {
-    await page.waitForFunction(() => !document.body.innerText.includes('Compiling'), { timeout: 60000 })
+    // Turbopack's dev indicator wording varies by Next.js version ("Compiling...", "Rendering...") —
+    // match both rather than hardcoding one, or a route mid-compile reads as already-settled.
+    await page.waitForFunction(() => !/Compiling|Rendering/.test(document.body.innerText), { timeout: 60000 })
   } catch {
     console.log('  (still compiling after 60s — proceeding anyway)')
   }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createApparatus } from '@/app/actions/apparatus'
 import HelpPrompt from './HelpPrompt'
@@ -149,6 +150,7 @@ export default function ApparatusStep({
   showHelp: boolean
   helpResetKey: number
 }) {
+  const router = useRouter()
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -167,7 +169,7 @@ export default function ApparatusStep({
     setError(null); setLoading(true)
     const result = await createApparatus(formData)
     if (result?.error) setError(result.error)
-    else setShowForm(false)
+    else { setShowForm(false); router.refresh() }
     setLoading(false)
   }
 

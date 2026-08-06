@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createStation, updateStation } from '@/app/actions/stations'
 import HelpPrompt from './HelpPrompt'
 
@@ -80,6 +81,7 @@ export default function StationsStep({
   showHelp: boolean
   helpResetKey: number
 }) {
+  const router = useRouter()
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -90,7 +92,7 @@ export default function StationsStep({
     setError(null); setLoading(true)
     const result = await createStation(formData)
     if (result?.error) setError(result.error)
-    else { setShowForm(false) }
+    else { setShowForm(false); router.refresh() }
     setLoading(false)
   }
 
@@ -98,7 +100,7 @@ export default function StationsStep({
     setError(null); setLoading(true)
     const result = await updateStation(formData)
     if (result?.error) setError(result.error)
-    else setEditingId(null)
+    else { setEditingId(null); router.refresh() }
     setLoading(false)
   }
 

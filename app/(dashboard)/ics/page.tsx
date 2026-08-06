@@ -2,7 +2,6 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import PageNavBar from '@/components/PageNavBar'
 import NewIcsIncidentForm from './NewIcsIncidentForm'
 
 export default async function IcsListPage() {
@@ -47,7 +46,6 @@ export default async function IcsListPage() {
 
   return (
     <div className="max-w-2xl">
-      <PageNavBar />
       <h1 className="text-xl font-semibold text-zinc-900 mb-1">ICS</h1>
       <p className="text-sm text-zinc-500 mb-6">Incident Command System packets — operational-period documentation, shared across departments.</p>
 

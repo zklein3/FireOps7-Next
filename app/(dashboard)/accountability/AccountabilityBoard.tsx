@@ -818,6 +818,7 @@ export default function AccountabilityBoard({
   if (lanes.length === 0) {
     return (
       <div className="text-center py-8">
+        {error && <div className="mb-4 mx-auto max-w-md rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
         <p className="text-sm text-zinc-500 mb-4">No lanes set up yet. Start accountability to load your department's default lanes.</p>
         {isOfficerOrAbove && (
           <button type="button" onClick={handleInit}

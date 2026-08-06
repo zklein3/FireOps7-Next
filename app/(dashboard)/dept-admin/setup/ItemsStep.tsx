@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   createItemCategory, updateItemCategory, deleteItemCategory,
@@ -58,6 +59,7 @@ export default function ItemsStep({
   showHelp: boolean
   helpResetKey: number
 }) {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<Tab>((initialSubTab as Tab) ?? 'items')
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -121,7 +123,7 @@ export default function ItemsStep({
     const labels = fieldDraftsByItem[itemId] ?? []
     const result = await saveCustomFieldDefinitions(itemId, departmentId, labels)
     if (result?.error) setError(result.error)
-    else setSuccess('Custom fields saved.')
+    else { setSuccess('Custom fields saved.'); router.refresh() }
     setSavingFields(false)
   }
 
@@ -141,14 +143,14 @@ export default function ItemsStep({
     formData.append('department_id', departmentId)
     const result = await createItemCategory(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Category added.'); setShowCatForm(false) }
+    else { setSuccess('Category added.'); setShowCatForm(false); router.refresh() }
     setLoading(false)
   }
   async function handleUpdateCategory(formData: FormData) {
     clear(); setLoading(true)
     const result = await updateItemCategory(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Category updated.'); setEditingCatId(null) }
+    else { setSuccess('Category updated.'); setEditingCatId(null); router.refresh() }
     setLoading(false)
   }
   async function handleDeleteCategory(category_id: string) {
@@ -156,7 +158,7 @@ export default function ItemsStep({
     clear(); setLoading(true)
     const result = await deleteItemCategory(category_id)
     if (result?.error) setError(result.error)
-    else setSuccess('Category deleted.')
+    else { setSuccess('Category deleted.'); router.refresh() }
     setLoading(false)
   }
 
@@ -166,14 +168,14 @@ export default function ItemsStep({
     formData.append('department_id', departmentId)
     const result = await createItem(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Item added.'); setShowItemForm(false) }
+    else { setSuccess('Item added.'); setShowItemForm(false); router.refresh() }
     setLoading(false)
   }
   async function handleUpdateItem(formData: FormData) {
     clear(); setLoading(true)
     const result = await updateItem(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Item updated.'); setEditingItemId(null) }
+    else { setSuccess('Item updated.'); setEditingItemId(null); router.refresh() }
     setLoading(false)
   }
 
@@ -183,14 +185,14 @@ export default function ItemsStep({
     formData.append('department_id', departmentId)
     const result = await createAsset(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Asset added.'); setAddingAssetFor(null) }
+    else { setSuccess('Asset added.'); setAddingAssetFor(null); router.refresh() }
     setLoading(false)
   }
   async function handleUpdateAsset(formData: FormData) {
     clear(); setLoading(true)
     const result = await updateAsset(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Asset updated.'); setEditingAssetId(null) }
+    else { setSuccess('Asset updated.'); setEditingAssetId(null); router.refresh() }
     setLoading(false)
   }
 
@@ -204,6 +206,7 @@ export default function ItemsStep({
       setSuccess('Template added.')
       setAddingTemplateFor(null)
       if (result.template_id) setExpandedTemplateId(result.template_id)
+      router.refresh()
     }
     setLoading(false)
   }
@@ -211,7 +214,7 @@ export default function ItemsStep({
     clear(); setLoading(true)
     const result = await updateInspectionTemplate(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Template updated.'); setEditingTemplateId(null) }
+    else { setSuccess('Template updated.'); setEditingTemplateId(null); router.refresh() }
     setLoading(false)
   }
 
@@ -220,27 +223,28 @@ export default function ItemsStep({
     clear(); setLoading(true)
     const result = await addTemplateStep(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Step added.'); setAddingStepFor(null) }
+    else { setSuccess('Step added.'); setAddingStepFor(null); router.refresh() }
     setLoading(false)
   }
   async function handleUpdateStep(formData: FormData) {
     clear(); setLoading(true)
     const result = await updateTemplateStep(formData)
     if (result?.error) setError(result.error)
-    else { setSuccess('Step updated.'); setEditingStepId(null) }
+    else { setSuccess('Step updated.'); setEditingStepId(null); router.refresh() }
     setLoading(false)
   }
   async function handleDeleteStep(stepId: string) {
     clear(); setLoading(true)
     const result = await deleteTemplateStep(stepId)
     if (result?.error) setError(result.error)
-    else setSuccess('Step removed.')
+    else { setSuccess('Step removed.'); router.refresh() }
     setLoading(false)
   }
   async function handleReorder(idA: string, sortA: number, idB: string, sortB: number) {
     clear(); setLoading(true)
     const result = await reorderTemplateSteps(idA, sortA, idB, sortB)
     if (result?.error) setError(result.error)
+    else router.refresh()
     setLoading(false)
   }
 

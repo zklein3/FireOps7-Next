@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import PageNavBar from '@/components/PageNavBar'
 import {
   openOperationalPeriod, updateOperationalPeriod, addParticipant, closeParticipantPortion,
   reopenIcsIncident, transferCommand, addAssignment, removeAssignment, addResource, removeResource,
@@ -93,7 +92,6 @@ export default function IcsIncidentClient({
 
   return (
     <div className="max-w-2xl space-y-6">
-      <PageNavBar />
       {error && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
 
       <div className="rounded-xl border border-zinc-200 bg-white p-4">

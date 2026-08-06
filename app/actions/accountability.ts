@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
-import { ALL_ICS_ROLE_VALUES, icsRoleLabel, ICS_MODE_LANES, ACTIVE_VIOLENCE_LANES } from '@/lib/ics-roles'
+import { ALL_ICS_ROLE_VALUES, icsRoleLabel, ICS_MODE_LANES, ACTIVE_VIOLENCE_LANES, DEFAULT_ACCOUNTABILITY_LANES } from '@/lib/ics-roles'
 import { createBoardGuestToken, verifyBoardGuestTokenSignature } from '@/lib/board-guest-token'
 import { hashRaw, isFireOps7Card, parseFireOps7Card, parseSalamanderCard, salamanderCanonicalKey } from '@/lib/salamander'
 
@@ -572,7 +572,7 @@ export async function initBoardLanes(boardId: string) {
   const board = boardList?.[0]
   if (!board) return { error: 'Board not found.' }
 
-  const { data: templates } = await ctx.adminClient
+  let { data: templates } = await ctx.adminClient
     .from('accountability_lane_templates')
     .select('name, sort_order')
     .eq('department_id', board.department_id)
@@ -580,7 +580,17 @@ export async function initBoardLanes(boardId: string) {
     .eq('active', true)
     .order('sort_order')
 
-  if (!templates?.length) return { error: 'No lane templates configured. Set them up in Dept Admin → Accountability.' }
+  // First-ever board for this department — seed the same defaults the Dept Admin
+  // settings page seeds on first visit, so a board can be started before anyone's
+  // ever opened that settings page.
+  if (!templates?.length) {
+    const seeds = DEFAULT_ACCOUNTABILITY_LANES.map((name, i) => ({
+      department_id: board.department_id, name, sort_order: i, active: true, profile: 'default' as const,
+    }))
+    const { error: seedErr } = await ctx.adminClient.from('accountability_lane_templates').insert(seeds)
+    if (seedErr) { await logError(seedErr.message, '/accountability'); return { error: seedErr.message } }
+    templates = seeds
+  }
 
   const rows = templates.map(t => ({ board_id: boardId, name: t.name, sort_order: t.sort_order, profile: 'default' as const }))
   const { data: inserted, error: dbErr } = await ctx.adminClient

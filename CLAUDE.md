@@ -448,6 +448,31 @@ Salamander cards are for officer-scans-others-cards at a scene, not self check-i
 ### 12. Module / Feature Flag System — mostly already done, was stale ✅ (2026-07-10)
 Turns out the sys-admin toggle UI already existed and was fully built out: `/admin/dept/[id]` → Modules tab (`ModulesTab.tsx` + `updateDepartmentModules()`) already covers Bundle A (`module_operations`), NERIS, Bundle B/ISO (`module_iso`), Bundle D/Medical (`module_medical`), and Bundle C/Public Engagement (`public_site_enabled`) — this note was just out of date. The one real gap — `module_fuel_storage` had no sys-admin visibility, only a dept-admin self-service toggle (`app/(dashboard)/dept-admin/FuelStorageToggle.tsx`) — is now closed: added as a bundle in `ModulesTab.tsx`, both toggle paths write the same column so they stay in sync.
 
+### 13. Full-Site Playwright Audit — Screens + Functional Walkthrough — SHIPPED ✅ (2026-08-06)
+Two-part audit run in one session against a dedicated throwaway "QA Test Department" (created via sys admin, not reused from Winslow/Fremont). Full write-up in memory: `audit_session7_functional_ux.md`.
+
+**Part B (functional, from-scratch)** — every module walked end-to-end with each write verified against the DB directly (not just screenshots): station → apparatus → compartment → item → inspection checklist → asset → inventory assignment → ran an actual inspection session → medical storeroom → receive/dispense/waste → events → self-log + officer-approve attendance → incident → NERIS readiness page → ICS module → accountability board → kiosk device. All of it works correctly at the data layer.
+
+**Part A (visual sweep)** — admin/officer at desktop+mobile, member at mobile, sys admin at desktop. Found real mobile-specific cutoffs (accountability board title truncates to "Q..", incidents table clips the Address column).
+
+**Headline findings (full detail in the memory file):**
+- **Systemic bug:** 8 separate "quick add" forms across unrelated pages (Users, Setup→Stations, Medical storerooms/receive/waste, Events approval, ICS, Accountability) succeed server-side but don't refresh the UI — looks like a silent failure until manual reload. Worth a dedicated pass across all "quick add" client forms rather than one-off fixes.
+- **Gating gap:** `/iso` hub page never checks `module_iso` (all 5 sub-pages do) — dead-end but reachable by URL for depts without the module.
+- **Silent failure:** new departments get zero accountability lane templates; `initBoardLanes` returns a real error but the client never shows it, so "Start Accountability" appears to do nothing on a brand-new department's very first use.
+- **Duplicate nav bar** on `/ics` and `/ics/[id]` (desktop + mobile).
+- Also discovered the **ICS module is fully built and functional** (incident command packets 201–214, cross-department jurisdiction) with **zero mention anywhere in this file's shipped-feature history** — folding it into the record now. REFERENCE.md's route list was also confirmed significantly stale (~30 undocumented routes).
+
+**Fixes applied 2026-08-06 (same session, user asked to fix immediately after reviewing the report):**
+- Added `router.refresh()` to every "quick add" client form that was genuinely missing it: `UsersClient.tsx` (Add Dept Admin + all modal actions), and the whole `dept-admin/setup` wizard (`StationsStep`, `ApparatusStep`, `CompartmentsStep`, `ItemsStep` — categories/items/assets/templates/steps/custom fields all now refresh). Verified live: a newly-added station now appears without a manual reload (self-corrects in ~2.4s — that page fans out a lot of Supabase queries on refresh, so it's not instant, but it's a real fix over "never updates without a hard reload").
+- **Investigated further and found the pattern splits in two:** Medical (dept-admin + member pages), Events approval, and ICS already called `router.refresh()` correctly in code — their residual lag is `router.refresh()`'s inherent async round-trip, not a missing call. No further code change made there; flagged as a possible future optimistic-UI improvement if the lag ever bothers a real user, but not a bug as such.
+- **Accountability — real root cause fixed, not just papered over:** `AccountabilityBoard.tsx`'s empty-lanes early-return (`lanes.length === 0`) had zero error display, so `initBoardLanes`'s error message was being set in state but was structurally unreachable. Fixed by adding the error banner to that branch. Then fixed the actual root cause: `initBoardLanes` (`app/actions/accountability.ts`) now auto-seeds the same 8 default lanes the Dept Admin settings page seeds, instead of erroring — a brand-new department's first "Start Accountability" click just works now, verified live against a genuinely template-less department. Extracted the previously-duplicated `DEFAULT_LANES` array into `lib/ics-roles.ts` as `DEFAULT_ACCOUNTABILITY_LANES`, shared by both call sites; also fixed the settings page's comment that claimed defaults were "never force-seeded" when the code directly below it always did.
+- `/iso` hub page (`app/(dashboard)/iso/page.tsx`) now checks `module_iso` before rendering, matching all 5 of its sub-pages. Verified live — a department without the module now redirects to `/dashboard`.
+- Removed the duplicate `<PageNavBar />` on `/ics` and `/ics/[id]` (both explicitly rendered their own on top of the one `(dashboard)/layout.tsx` already renders globally for every page).
+- Mobile: accountability board list rows now stack (`flex-col sm:flex-row`) instead of forcing the title into a shrinking flex-1 column fighting a `shrink-0` badge cluster — "QA Test Board" no longer truncates to "Q..".
+- **Investigated and closed, not a bug:** the `/incidents` mobile table already had correct `overflow-x-auto` + `min-w-[640px]` — scrolling right reveals Address/Status/NERIS exactly as designed. The original screenshot just caught the unscrolled default view. No change made.
+
+Build verified clean (`npm run build`) after all changes. Dev server was restarted once mid-fix after hitting the documented "stale Server Action ID from HMR" gotcha (see Browser Testing section) from editing files while it stayed running — resolved per the documented fix.
+
 ---
 
 ## Run Sheet Import — Central Square CFS Format

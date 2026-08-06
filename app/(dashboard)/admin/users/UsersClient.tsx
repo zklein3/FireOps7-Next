@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   createDeptAdmin,
   sysAdminUpdateEmail,
@@ -52,6 +53,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default function UsersClient({ departments, users }: { departments: Department[], users: User[] }) {
+  const router = useRouter()
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -98,6 +100,7 @@ export default function UsersClient({ departments, users }: { departments: Depar
         setModalError(result.error)
       } else {
         setModalSuccess('Saved successfully.')
+        router.refresh()
       }
     } finally {
       setModalLoading(false)
@@ -118,6 +121,7 @@ export default function UsersClient({ departments, users }: { departments: Depar
           : `Department admin created. Temporary password: ${result?.tempPassword ?? 'Hello1!'} — share this with them directly.`
       )
       setShowForm(false)
+      router.refresh()
     }
     setLoading(false)
   }

@@ -1,19 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
-import { ICS_MODE_LANES, ACTIVE_VIOLENCE_LANES } from '@/lib/ics-roles'
+import { ICS_MODE_LANES, ACTIVE_VIOLENCE_LANES, DEFAULT_ACCOUNTABILITY_LANES } from '@/lib/ics-roles'
 import AccountabilitySettingsClient from './AccountabilitySettingsClient'
-
-const DEFAULT_LANES = [
-  'Staging',
-  'Command',
-  'Interior Attack',
-  'Exterior / Suppression',
-  'Ventilation',
-  'RIT / RIC',
-  'Rehab',
-  'EMS',
-]
 
 export default async function AccountabilitySettingsPage() {
   const adminClient = createAdminClient()
@@ -31,11 +20,10 @@ export default async function AccountabilitySettingsPage() {
     .eq('profile', 'default')
     .order('sort_order')
 
-  // Seed the default profile on first visit only — ICS/Active Violence profiles
-  // are never force-seeded, they just fall back to the built-in preset (shown as
-  // a hint) until a department actually customizes them.
+  // Seed the default profile on first visit — matches the fallback initBoardLanes()
+  // uses when a board is started before anyone's ever opened this settings page.
   if (!defaultLanes || defaultLanes.length === 0) {
-    const seeds = DEFAULT_LANES.map((name, i) => ({
+    const seeds = DEFAULT_ACCOUNTABILITY_LANES.map((name, i) => ({
       department_id,
       name,
       sort_order: i,

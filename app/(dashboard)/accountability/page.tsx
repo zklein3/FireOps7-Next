@@ -87,7 +87,7 @@ export default async function AccountabilityHubPage() {
                     const count = countMap[board.id] ?? 0
                     const incNum = board.linked_incident_id ? incidentMap[board.linked_incident_id] : null
                     return (
-                      <div key={board.id} className="flex items-center px-5 py-4 gap-4 hover:bg-zinc-50 transition-colors">
+                      <div key={board.id} className="flex flex-col sm:flex-row sm:items-center px-5 py-4 gap-2 sm:gap-4 hover:bg-zinc-50 transition-colors">
                         <Link href={`/accountability/${board.id}`} className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-zinc-900 truncate">{board.title}</p>
                           <p className="text-xs text-zinc-400 mt-0.5">
@@ -124,7 +124,7 @@ export default async function AccountabilityHubPage() {
                     const count = countMap[board.id] ?? 0
                     const incNum = board.linked_incident_id ? incidentMap[board.linked_incident_id] : null
                     return (
-                      <div key={board.id} className="flex items-center px-5 py-4 gap-4 hover:bg-zinc-50 transition-colors">
+                      <div key={board.id} className="flex flex-col sm:flex-row sm:items-center px-5 py-4 gap-2 sm:gap-4 hover:bg-zinc-50 transition-colors">
                         <Link href={`/accountability/${board.id}`} className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-zinc-900 truncate">{board.title}</p>
                           <p className="text-xs text-zinc-400 mt-0.5">
