@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createDeptMember } from '@/app/actions/users'
+import { createDeptMember, deptAdminForcePasswordReset } from '@/app/actions/users'
 import { assignPersonnelShift, addShift } from '@/app/actions/shifts'
 
 interface Role {
@@ -74,6 +74,18 @@ export default function DeptPersonnelClient({
   const [shiftOverrides, setShiftOverrides] = useState<Record<string, string | null>>({})
   const [newShiftName, setNewShiftName] = useState('')
   const [addingShift, setAddingShift] = useState(false)
+  const [confirmResetId, setConfirmResetId] = useState<string | null>(null)
+  const [resetSuccessId, setResetSuccessId] = useState<string | null>(null)
+  const [resetLoading, setResetLoading] = useState(false)
+
+  async function handleResetPassword(recordId: string, personnelId: string) {
+    setResetLoading(true); setError(null)
+    const res = await deptAdminForcePasswordReset(personnelId)
+    setResetLoading(false)
+    if (res?.error) { setError(res.error); return }
+    setConfirmResetId(null)
+    setResetSuccessId(recordId)
+  }
 
   async function handleAssignShift(recordId: string, shiftId: string) {
     setShiftOverrides(prev => ({ ...prev, [recordId]: shiftId || null }))
@@ -343,13 +355,46 @@ export default function DeptPersonnelClient({
                     </span>
                   )}
                 </div>
+                {resetSuccessId === record.id && (
+                  <div className="mt-3 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-700">
+                    Password reset to <span className="font-mono font-semibold">Hello1!</span> — share this with {name} directly. They'll be required to change it on next login.
+                  </div>
+                )}
+                {confirmResetId === record.id && (
+                  <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 p-3">
+                    <p className="text-xs font-medium text-amber-900">Reset {name}'s password to Hello1!?</p>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={() => setConfirmResetId(null)}
+                        className="flex-1 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => p?.id && handleResetPassword(record.id, p.id)}
+                        disabled={resetLoading}
+                        className="flex-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        {resetLoading ? 'Resetting…' : 'Confirm Reset'}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {p?.id && (
-                  <button
-                    onClick={() => router.push(`/personnel/${p.id}`)}
-                    className="mt-3 w-full rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300 transition-colors"
-                  >
-                    Edit Profile
-                  </button>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => router.push(`/personnel/${p.id}`)}
+                      className="flex-1 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300 transition-colors"
+                    >
+                      Edit Profile
+                    </button>
+                    <button
+                      onClick={() => { setConfirmResetId(record.id); setResetSuccessId(null) }}
+                      className="flex-1 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 hover:border-zinc-300 transition-colors"
+                    >
+                      Reset Password
+                    </button>
+                  </div>
                 )}
               </div>
             )

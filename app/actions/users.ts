@@ -162,6 +162,58 @@ export async function sysAdminForcePasswordReset(personnelId: string) {
   }
 }
 
+// ─── Dept Admin: Force Password Reset ────────────────────────────────────────
+// Same reset-to-Hello1!-plus-temp_password mechanism as sysAdminForcePasswordReset,
+// but scoped to a dept admin's own department instead of requiring sys admin/
+// /admin/users. Verifies the target actually has an active department_personnel
+// row in the caller's own department before touching their auth account — a
+// multi-dept admin must not be able to reset a password for someone who only
+// belongs to a different department they don't administer.
+export async function deptAdminForcePasswordReset(personnelId: string) {
+  try {
+    const ctx = await getCurrentDepartmentContext()
+    if (!ctx) return { error: 'Session expired.' }
+    if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) return { error: 'Only admins can reset passwords.' }
+    if (!ctx.departmentId) return { error: 'Could not verify your department.' }
+
+    const adminClient = createAdminClient()
+
+    const { data: membership } = await adminClient
+      .from('department_personnel')
+      .select('id')
+      .eq('personnel_id', personnelId)
+      .eq('department_id', ctx.departmentId)
+      .eq('active', true)
+      .maybeSingle()
+    if (!membership) return { error: 'This person is not part of your department.' }
+
+    const { data: person, error: fetchErr } = await adminClient
+      .from('personnel')
+      .select('auth_user_id')
+      .eq('id', personnelId)
+      .single()
+    if (fetchErr || !person) return { error: 'User not found.' }
+
+    const { error: authErr } = await adminClient.auth.admin.updateUserById(
+      person.auth_user_id,
+      { password: TEMP_PASSWORD }
+    )
+    if (authErr) { await logError(authErr.message, '/dept-admin/personnel', { metadata: { personnelId } }); return { error: authErr.message } }
+
+    const { error: dbErr } = await adminClient
+      .from('personnel')
+      .update({ signup_status: 'temp_password' })
+      .eq('id', personnelId)
+    if (dbErr) { await logError(dbErr.message, '/dept-admin/personnel', { metadata: { personnelId } }); return { error: dbErr.message } }
+
+    revalidatePath('/dept-admin/personnel')
+    return { success: true }
+  } catch (err) {
+    await logError(err, '/dept-admin/personnel', { metadata: { personnelId } })
+    return { error: err instanceof Error ? err.message : 'Failed to reset password.' }
+  }
+}
+
 // ─── Sys Admin: Set Department Role ──────────────────────────────────────────
 export async function sysAdminSetRole(personnelId: string, newRole: string) {
   try {
