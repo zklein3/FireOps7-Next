@@ -1,12 +1,14 @@
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { createAdminClient } from '@/lib/supabase/admin'
 import DeptSettingsClient from './DeptSettingsClient'
 
 export default async function DeptSettingsPage() {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && !ctx.isSysAdmin)) redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_department_settings'))) redirect('/dashboard')
 
   const adminClient = createAdminClient()
   const { data: deptData } = await adminClient

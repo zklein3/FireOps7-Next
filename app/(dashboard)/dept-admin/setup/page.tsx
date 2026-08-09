@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import SetupFlowClient from './SetupFlowClient'
 
 export default async function SetupPage() {
@@ -8,7 +9,8 @@ export default async function SetupPage() {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && !ctx.isSysAdmin)) redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_dept_setup'))) redirect('/dashboard')
 
   const department_id = ctx.departmentId
 

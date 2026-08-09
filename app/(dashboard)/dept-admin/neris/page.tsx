@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import NerisSettingsClient from './NerisSettingsClient'
 
 export default async function DeptNerisSettingsPage() {
@@ -8,7 +9,8 @@ export default async function DeptNerisSettingsPage() {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && !ctx.isSysAdmin)) redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'submit_neris'))) redirect('/dashboard')
   if (ctx.departmentType !== 'fire') redirect('/dashboard')
 
   const { data: deptList } = await adminClient

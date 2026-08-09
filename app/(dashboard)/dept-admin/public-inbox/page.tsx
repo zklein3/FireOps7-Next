@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import PublicInboxSettingsClient from './PublicInboxSettingsClient'
 
 export default async function PublicInboxSettingsPage() {
@@ -8,7 +9,8 @@ export default async function PublicInboxSettingsPage() {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || ctx.systemRole !== 'admin') redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_public_site'))) redirect('/dashboard')
 
   const { data: dept } = await adminClient
     .from('departments')

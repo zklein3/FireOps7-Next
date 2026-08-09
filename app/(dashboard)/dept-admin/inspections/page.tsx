@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { getVehicleCheckItems } from '@/app/actions/inspections'
 import DeptInspectionSettingsClient from './DeptInspectionSettingsClient'
 import VehicleCheckItemsClient from './VehicleCheckItemsClient'
@@ -17,7 +18,8 @@ export default async function DeptInspectionSettingsPage({
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && !ctx.isSysAdmin)) redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_inspection_settings'))) redirect('/dashboard')
 
   const { data: deptList } = await adminClient
     .from('departments')

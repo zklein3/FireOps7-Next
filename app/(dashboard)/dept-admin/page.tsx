@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import Image from 'next/image'
 import HubCard from '@/components/HubCard'
 import FuelStorageToggle from './FuelStorageToggle'
@@ -10,7 +11,8 @@ export default async function DeptAdminPage() {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || ctx.systemRole !== 'admin') redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'access_dept_admin_hub'))) redirect('/dashboard')
 
   const departmentId = ctx.departmentId
   const isFireDept = ctx.departmentType === 'fire'

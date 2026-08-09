@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { getPermissionGroups } from '@/app/actions/permissions'
 import PersonnelHubClient from './PersonnelHubClient'
 
@@ -9,7 +10,8 @@ export default async function PersonnelHubPage() {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && !ctx.isSysAdmin)) redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_users'))) redirect('/dashboard')
 
   const department_id = ctx.departmentId
   const department_name = ctx.departmentName ?? 'Your Department'

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import {
   getPdContactTypes, getPdActionTakenTypes, getPdCaseNumberSettings,
   getPdContactTypeUsageCounts, getPdActionTakenUsageCounts, getPdCaseNumberCounter,
@@ -17,7 +18,8 @@ export default async function PoliceSettingsPage({
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && !ctx.isSysAdmin)) redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_police_settings'))) redirect('/dashboard')
 
   const departmentId = ctx.departmentId
   const year = new Date().getFullYear()

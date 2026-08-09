@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import AttendanceSettingsClient from './AttendanceSettingsClient'
 
 export default async function AttendanceSettingsPage() {
@@ -8,7 +9,8 @@ export default async function AttendanceSettingsPage() {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || ctx.systemRole !== 'admin') redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_attendance_settings'))) redirect('/dashboard')
 
   const department_id = ctx.departmentId
 
