@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { revalidatePath } from 'next/cache'
 import { nerisCheckEntityExists } from '@/lib/neris-api'
 import { logError } from '@/lib/logger'
@@ -57,7 +58,8 @@ export async function saveDeptInspectionSettings(formData: FormData) {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && !ctx.isSysAdmin)) return { error: 'Only admins can change inspection settings.' }
+  if (!ctx.departmentId) return { error: 'No department found.' }
+  if (!(await hasPermission(ctx, 'manage_inspection_settings'))) return { error: 'Only admins can change inspection settings.' }
 
   const hours = parseInt(formData.get('inspection_session_duration_hours') as string)
   if (!hours || hours < 1) return { error: 'Duration must be at least 1 hour.' }
@@ -175,7 +177,7 @@ export async function saveDeptAdminNerisEntityId(departmentId: string, nerisEnti
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) return { error: 'Only admins can update NERIS settings.' }
+  if (!(await hasPermission(ctx, 'submit_neris'))) return { error: 'Only admins can update NERIS settings.' }
   if (ctx.departmentId !== departmentId && !ctx.isSysAdmin) return { error: 'Department mismatch.' }
 
   const { data: deptList } = await adminClient.from('departments').select('module_neris').eq('id', departmentId)
@@ -196,7 +198,7 @@ export async function saveDeptTimezone(departmentId: string, timezone: string) {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) return { error: 'Only admins can update department settings.' }
+  if (!(await hasPermission(ctx, 'manage_department_settings'))) return { error: 'Only admins can update department settings.' }
   if (ctx.departmentId !== departmentId && !ctx.isSysAdmin) return { error: 'Department mismatch.' }
   if (!timezone) return { error: 'Timezone is required.' }
 
@@ -215,7 +217,7 @@ export async function saveWeeklyDigestEnabled(departmentId: string, enabled: boo
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) return { error: 'Only admins can update department settings.' }
+  if (!(await hasPermission(ctx, 'manage_department_settings'))) return { error: 'Only admins can update department settings.' }
   if (ctx.departmentId !== departmentId && !ctx.isSysAdmin) return { error: 'Department mismatch.' }
 
   const { error } = await adminClient
@@ -238,7 +240,7 @@ export async function saveIsoReportSettings(departmentId: string, settings: {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) return { error: 'Only admins can update ISO report defaults.' }
+  if (!(await hasPermission(ctx, 'manage_iso_data'))) return { error: 'Only admins can update ISO report defaults.' }
   if (ctx.departmentId !== departmentId && !ctx.isSysAdmin) return { error: 'Department mismatch.' }
 
   const { error } = await adminClient
