@@ -125,7 +125,7 @@ export async function updateDepartmentModules(
 export async function setFuelStorageModule(enabled: boolean) {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (ctx.systemRole !== 'admin') return { error: 'Only admins can change this setting.' }
+  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) return { error: 'Only admins can change this setting.' }
   if (!ctx.departmentId) return { error: 'No department found.' }
 
   const admin = createAdminClient()
