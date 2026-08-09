@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
@@ -14,11 +15,8 @@ async function getContext() {
     departmentId: ctx.departmentId,
     systemRole: ctx.systemRole,
     adminClient,
+    fullCtx: ctx,
   }
-}
-
-function isOfficerOrAbove(role: string | null) {
-  return role === 'admin' || role === 'officer'
 }
 
 // A department has standing access to an incident if it's an active participant
@@ -49,7 +47,7 @@ export async function createIcsIncident(
 ) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (!isOfficerOrAbove(ctx.systemRole)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_ics_incidents'))) return { error: 'Officer or admin only.' }
   if (!title.trim()) return { error: 'Title is required.' }
 
   const { data: incident, error: dbErr } = await ctx.adminClient
@@ -77,7 +75,7 @@ export async function addParticipant(icsIncidentId: string, departmentId: string
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
   const allowed = await hasStandingAccess(ctx.adminClient, icsIncidentId, ctx.departmentId)
-  if (!allowed || !isOfficerOrAbove(ctx.systemRole)) return { error: 'Not authorized on this incident.' }
+  if (!allowed || !(await hasPermission(ctx.fullCtx, 'manage_ics_incidents'))) return { error: 'Not authorized on this incident.' }
 
   const { error: dbErr } = await ctx.adminClient
     .from('ics_incident_participants')
@@ -93,7 +91,7 @@ export async function closeParticipantPortion(icsIncidentId: string, departmentI
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
   if (ctx.departmentId !== departmentId) return { error: 'You can only close your own department\'s portion.' }
-  if (!isOfficerOrAbove(ctx.systemRole)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_ics_incidents'))) return { error: 'Officer or admin only.' }
 
   const { error: dbErr } = await ctx.adminClient
     .from('ics_incident_participants')
@@ -144,7 +142,7 @@ export async function reopenIcsIncident(icsIncidentId: string) {
 export async function deleteIcsIncident(icsIncidentId: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (ctx.systemRole !== 'admin') return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'delete_ics_incidents'))) return { error: 'Admin only.' }
   const { data: incident } = await ctx.adminClient.from('ics_incidents').select('department_id').eq('id', icsIncidentId).single()
   if (!incident) return { error: 'Incident not found.' }
   if (incident.department_id !== ctx.departmentId) return { error: 'Only the department currently owning this incident can delete it.' }
@@ -161,7 +159,7 @@ export async function transferCommand(icsIncidentId: string, toDepartmentId: str
   const { data: incident } = await ctx.adminClient.from('ics_incidents').select('department_id').eq('id', icsIncidentId).single()
   if (!incident) return { error: 'Incident not found.' }
   if (incident.department_id !== ctx.departmentId) return { error: 'Only the current owning department can transfer command.' }
-  if (!isOfficerOrAbove(ctx.systemRole)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_ics_incidents'))) return { error: 'Officer or admin only.' }
 
   const { error: logErr } = await ctx.adminClient.from('ics_command_transfers').insert({
     ics_incident_id: icsIncidentId, from_department_id: incident.department_id, to_department_id: toDepartmentId,
@@ -191,7 +189,7 @@ export async function openOperationalPeriod(icsIncidentId: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
   const allowed = await hasStandingAccess(ctx.adminClient, icsIncidentId, ctx.departmentId)
-  if (!allowed || !isOfficerOrAbove(ctx.systemRole)) return { error: 'Not authorized on this incident.' }
+  if (!allowed || !(await hasPermission(ctx.fullCtx, 'manage_ics_incidents'))) return { error: 'Not authorized on this incident.' }
 
   const { data: incident } = await ctx.adminClient
     .from('ics_incidents').select('linked_accountability_board_id, linked_incident_id').eq('id', icsIncidentId).single()
@@ -368,7 +366,7 @@ export async function closeOperationalPeriod(periodId: string, icsIncidentId: st
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
   const allowed = await hasStandingAccess(ctx.adminClient, icsIncidentId, ctx.departmentId)
-  if (!allowed || !isOfficerOrAbove(ctx.systemRole)) return { error: 'Not authorized on this incident.' }
+  if (!allowed || !(await hasPermission(ctx.fullCtx, 'close_ics_packets'))) return { error: 'Not authorized on this incident.' }
 
   const { error: dbErr } = await ctx.adminClient.from('ics_operational_periods').update({ end_at: new Date().toISOString() }).eq('id', periodId)
   if (dbErr) { await logError(dbErr.message, '/ics'); return { error: dbErr.message } }
