@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionGroups } from '@/app/actions/permissions'
 import PersonnelHubClient from './PersonnelHubClient'
 
 export default async function PersonnelHubPage() {
@@ -16,7 +17,7 @@ export default async function PersonnelHubPage() {
   // Personnel data
   const { data: deptPersonnelRaw } = await adminClient
     .from('department_personnel')
-    .select('id, system_role, signup_status, active, employee_number, hire_date, role_id, personnel_id, shift_id')
+    .select('id, system_role, signup_status, active, employee_number, hire_date, role_id, personnel_id, shift_id, permission_group_id')
     .eq('department_id', department_id)
     .order('system_role')
 
@@ -46,6 +47,7 @@ export default async function PersonnelHubPage() {
     hire_date: dp.hire_date,
     role_id: dp.role_id,
     shift_id: dp.shift_id,
+    permission_group_id: dp.permission_group_id,
     personnel: personnelMap[dp.personnel_id] ?? null,
     personnel_roles: dp.role_id ? (roleMap[dp.role_id] ?? null) : null,
     shift_name: dp.shift_id ? (shiftMap[dp.shift_id]?.name ?? null) : null,
@@ -65,6 +67,9 @@ export default async function PersonnelHubPage() {
 
   const reqMap = Object.fromEntries((requirements ?? []).map(r => [r.event_type, r]))
 
+  const { groups: permissionGroupsRaw } = await getPermissionGroups(department_id)
+  const permissionGroups = (permissionGroupsRaw ?? []).filter(g => g.active)
+
   return (
     <PersonnelHubClient
       personnel={personnel}
@@ -74,6 +79,7 @@ export default async function PersonnelHubPage() {
       departmentId={department_id}
       excuseTypes={excuseTypes ?? []}
       requirements={reqMap}
+      permissionGroups={permissionGroups}
     />
   )
 }

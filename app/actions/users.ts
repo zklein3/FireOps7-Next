@@ -419,6 +419,7 @@ export async function createDeptMember(formData: FormData) {
   const email = formData.get('email') as string
   const system_role = formData.get('system_role') as string
   const role_id = formData.get('role_id') as string
+  const permission_group_id = (formData.get('permission_group_id') as string) || null
   const employee_number = formData.get('employee_number') as string
   const hire_date = formData.get('hire_date') as string
   const first_name = (formData.get('first_name') as string)?.trim() || ''
@@ -487,6 +488,7 @@ export async function createDeptMember(formData: FormData) {
         department_id,
         system_role,
         role_id: role_id || null,
+        permission_group_id,
         employee_number: employee_number || null,
         hire_date: hire_date || null,
         signup_status: 'active',
@@ -534,6 +536,7 @@ export async function createDeptMember(formData: FormData) {
       department_id,
       system_role,
       role_id: role_id || null,
+      permission_group_id,
       employee_number: employee_number || null,
       hire_date: hire_date || null,
       signup_status: 'temp_password',

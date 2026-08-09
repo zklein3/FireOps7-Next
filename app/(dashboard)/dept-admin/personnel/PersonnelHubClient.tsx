@@ -11,9 +11,11 @@ const TABS = [
 
 interface Role { id: string; name: string; is_officer: boolean; sort_order: number }
 interface Shift { id: string; name: string; sort_order: number; active: boolean }
+interface PermissionGroup { id: string; name: string }
 interface PersonnelRecord {
   id: string; system_role: string; signup_status: string; active: boolean
   employee_number: string | null; hire_date: string | null; role_id: string | null; shift_id: string | null
+  permission_group_id: string | null
   personnel: { id: string; first_name: string; last_name: string; email: string; signup_status: string } | null
   personnel_roles: { name: string; is_officer: boolean } | null
   shift_name: string | null
@@ -23,7 +25,7 @@ interface Requirement { id: string; event_type: string; minimum_percentage: numb
 
 export default function PersonnelHubClient({
   personnel, roles, shifts, departmentName, departmentId,
-  excuseTypes, requirements,
+  excuseTypes, requirements, permissionGroups,
 }: {
   personnel: PersonnelRecord[]
   roles: Role[]
@@ -32,6 +34,7 @@ export default function PersonnelHubClient({
   departmentId: string
   excuseTypes: ExcuseType[]
   requirements: Record<string, Requirement>
+  permissionGroups: PermissionGroup[]
 }) {
   const [activeTab, setActiveTab] = useState('members')
 
@@ -87,6 +90,7 @@ export default function PersonnelHubClient({
               shifts={shifts}
               departmentName={departmentName}
               departmentId={departmentId}
+              permissionGroups={permissionGroups}
             />
           )}
           {activeTab === 'attendance' && (

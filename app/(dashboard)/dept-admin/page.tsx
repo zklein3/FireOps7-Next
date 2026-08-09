@@ -60,6 +60,11 @@ export default async function DeptAdminPage() {
           alert={hasPendingSetup}
         />
         <HubCard
+          title="Permission Groups"
+          description="Customize what each role can do"
+          href="/dept-admin/permission-groups"
+        />
+        <HubCard
           title="Department Settings"
           description="Timezone and display preferences"
           href="/dept-admin/settings"

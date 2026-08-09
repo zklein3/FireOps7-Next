@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { createDeptMember } from '@/app/actions/users'
 
 interface Role { id: string; name: string; is_officer: boolean }
+interface PermissionGroup { id: string; name: string }
 
-export default function PersonnelAddForm({ roles }: { roles: Role[] }) {
+export default function PersonnelAddForm({ roles, permissionGroups }: { roles: Role[]; permissionGroups: PermissionGroup[] }) {
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -95,6 +96,14 @@ export default function PersonnelAddForm({ roles }: { roles: Role[] }) {
                   {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">Permission Group</label>
+              <select name="permission_group_id" defaultValue=""
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
+                <option value="">— Legacy (based on Access Level) —</option>
+                {permissionGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
             </div>
             <div className="flex gap-4">
               <div className="w-44">

@@ -3,6 +3,7 @@ import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionGroups } from '@/app/actions/permissions'
 import PersonnelAddForm from './PersonnelAddForm'
 
 function formatDate(d: string | null) {
@@ -36,6 +37,7 @@ export default async function PersonnelPage() {
     { data: personnelData },
     { data: roleData },
     { data: allRoles },
+    permissionGroupsResult,
   ] = await Promise.all([
     personnelIds.length > 0
       ? adminClient.from('personnel').select('id, first_name, last_name, email, phone').in('id', personnelIds)
@@ -46,7 +48,11 @@ export default async function PersonnelPage() {
     isOfficerOrAbove
       ? adminClient.from('personnel_roles').select('id, name, is_officer, sort_order').eq('active', true).order('sort_order')
       : Promise.resolve({ data: [] }),
+    isOfficerOrAbove
+      ? getPermissionGroups(ctx.departmentId)
+      : Promise.resolve({ groups: [] }),
   ])
+  const permissionGroups = (permissionGroupsResult.groups ?? []).filter(g => g.active)
 
   const personnelMap = Object.fromEntries((personnelData ?? []).map(p => [p.id, p]))
   const roleMap = Object.fromEntries((roleData ?? []).map(r => [r.id, r]))
@@ -76,7 +82,7 @@ export default async function PersonnelPage() {
   return (
     <div>
       {isOfficerOrAbove ? (
-        <PersonnelAddForm roles={allRoles ?? []} />
+        <PersonnelAddForm roles={allRoles ?? []} permissionGroups={permissionGroups} />
       ) : (
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-zinc-900">Personnel</h1>

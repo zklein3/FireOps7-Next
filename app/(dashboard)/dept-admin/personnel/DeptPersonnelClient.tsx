@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createDeptMember, deptAdminForcePasswordReset } from '@/app/actions/users'
 import { assignPersonnelShift, addShift } from '@/app/actions/shifts'
+import { updatePersonnelPermissionGroup } from '@/app/actions/permissions'
 
 interface Role {
   id: string
@@ -13,6 +14,7 @@ interface Role {
 }
 
 interface Shift { id: string; name: string; sort_order: number; active: boolean }
+interface PermissionGroup { id: string; name: string }
 
 interface PersonnelRecord {
   id: string
@@ -24,6 +26,7 @@ interface PersonnelRecord {
   role_id: string | null
   shift_id: string | null
   shift_name: string | null
+  permission_group_id: string | null
   personnel: {
     id: string
     first_name: string
@@ -59,12 +62,14 @@ export default function DeptPersonnelClient({
   shifts,
   departmentName,
   departmentId,
+  permissionGroups,
 }: {
   personnel: PersonnelRecord[]
   roles: Role[]
   shifts: Shift[]
   departmentName: string
   departmentId: string
+  permissionGroups: PermissionGroup[]
 }) {
   const router = useRouter()
   const [showForm, setShowForm] = useState(false)
@@ -77,6 +82,13 @@ export default function DeptPersonnelClient({
   const [confirmResetId, setConfirmResetId] = useState<string | null>(null)
   const [resetSuccessId, setResetSuccessId] = useState<string | null>(null)
   const [resetLoading, setResetLoading] = useState(false)
+  const [groupOverrides, setGroupOverrides] = useState<Record<string, string | null>>({})
+
+  async function handleAssignPermissionGroup(recordId: string, groupId: string) {
+    setGroupOverrides(prev => ({ ...prev, [recordId]: groupId || null }))
+    const res = await updatePersonnelPermissionGroup(recordId, groupId || null)
+    if (res?.error) setError(res.error)
+  }
 
   async function handleResetPassword(recordId: string, personnelId: string) {
     setResetLoading(true); setError(null)
@@ -245,6 +257,24 @@ export default function DeptPersonnelClient({
               </div>
             </div>
 
+            {/* Permission Group */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700" htmlFor="permission_group_id">
+                Permission Group
+              </label>
+              <select
+                id="permission_group_id"
+                name="permission_group_id"
+                defaultValue=""
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+              >
+                <option value="">— Legacy (based on Access Level) —</option>
+                {permissionGroups.map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Employee Number + Hire Date Row */}
             <div className="flex gap-4">
               <div className="w-44">
@@ -344,6 +374,15 @@ export default function DeptPersonnelClient({
                       className="rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-red-500">
                       <option value="">No shift</option>
                       {shifts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  )}
+                  {permissionGroups.length > 0 && (
+                    <select
+                      value={groupOverrides[record.id] ?? record.permission_group_id ?? ''}
+                      onChange={e => handleAssignPermissionGroup(record.id, e.target.value)}
+                      className="rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-xs text-zinc-600 focus:outline-none focus:ring-1 focus:ring-red-500">
+                      <option value="">Legacy access level</option>
+                      {permissionGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                     </select>
                   )}
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[status] ?? 'bg-zinc-100 text-zinc-500'}`}>
