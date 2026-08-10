@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { parseSalamanderCard } from '@/lib/salamander'
 import { revalidatePath } from 'next/cache'
@@ -45,7 +46,7 @@ export async function updatePersonnelProfile(formData: FormData) {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Session expired.' }
-  if (ctx.systemRole === 'member' && !ctx.isSysAdmin) {
+  if (!(await hasPermission(ctx, 'view_personnel_details'))) {
     return { error: 'You do not have permission to edit other profiles.' }
   }
 
@@ -81,7 +82,7 @@ export async function updateDeptPersonnel(formData: FormData) {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Session expired.' }
-  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) {
+  if (!(await hasPermission(ctx, 'manage_users'))) {
     return { error: 'You do not have permission to edit department info.' }
   }
 
@@ -189,7 +190,7 @@ export async function linkQrToken(
 
   const isMe = me.id === personnelId
   if (!isMe) {
-    if (ctx.systemRole !== 'admin' && ctx.systemRole !== 'officer') return { error: 'Not authorized.' }
+    if (!(await hasPermission(ctx, 'view_personnel_details'))) return { error: 'Not authorized.' }
     const { data: targetDept } = await adminClient
       .from('department_personnel').select('id')
       .eq('personnel_id', personnelId).eq('department_id', ctx.departmentId ?? '').eq('active', true).limit(1)
@@ -232,7 +233,7 @@ export async function deleteQrToken(tokenId: string) {
 
   const isMe = me.id === token.personnel_id
   if (!isMe) {
-    if (ctx.systemRole !== 'admin' && ctx.systemRole !== 'officer') return { error: 'Not authorized.' }
+    if (!(await hasPermission(ctx, 'view_personnel_details'))) return { error: 'Not authorized.' }
   }
 
   const { error: dbErr } = await adminClient.from('personnel_qr_tokens').delete().eq('id', tokenId)

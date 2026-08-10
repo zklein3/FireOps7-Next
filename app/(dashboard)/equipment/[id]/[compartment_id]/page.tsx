@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { setCompartmentQrCode } from '@/app/actions/compartments'
 import QrPrintLabel from '@/components/QrPrintLabel'
 import CompartmentItemsClient from './CompartmentItemsClient'
@@ -31,7 +32,7 @@ export default async function CompartmentPage({
   if (!ctx.departmentId) redirect('/dashboard')
 
   const department_id = ctx.departmentId
-  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
+  const isAdmin = await hasPermission(ctx, 'manage_apparatus')
 
   // Fetch apparatus
   const { data: appList } = await adminClient

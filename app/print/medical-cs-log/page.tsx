@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import PrintButton from '../training-signin/PrintButton'
 
 const TX_LABELS: Record<string, string> = {
@@ -31,8 +32,7 @@ export default async function MedicalCSLogPrintPage({
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/login')
 
-  const isOfficerOrAbove = ['admin', 'officer'].includes(ctx.systemRole ?? '') || ctx.isSysAdmin
-  if (!isOfficerOrAbove) redirect('/medical')
+  if (!(await hasPermission(ctx, 'manage_medical_inventory'))) redirect('/medical')
 
   const department_id = ctx.departmentId
 

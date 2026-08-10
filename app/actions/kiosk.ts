@@ -3,6 +3,7 @@
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 import { parseSalamanderCard, salamanderCanonicalKey, isFireOps7Card, parseFireOps7Card } from '@/lib/salamander'
@@ -17,7 +18,7 @@ function hashSecret(secret: string): string {
 export async function createKioskDevice(deviceName: string) {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx?.departmentId) return { error: 'Not authenticated.' }
-  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) return { error: 'Only admins can create kiosk devices.' }
+  if (!(await hasPermission(ctx, 'manage_kiosk_devices'))) return { error: 'Only admins can create kiosk devices.' }
   if (!deviceName.trim()) return { error: 'Device name is required.' }
 
   const secret = crypto.randomBytes(24).toString('base64url')
@@ -36,7 +37,7 @@ export async function createKioskDevice(deviceName: string) {
 export async function listKioskDevices() {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx?.departmentId) return { error: 'Not authenticated.' }
-  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) return { error: 'Only admins can view kiosk devices.' }
+  if (!(await hasPermission(ctx, 'manage_kiosk_devices'))) return { error: 'Only admins can view kiosk devices.' }
 
   const adminClient = createAdminClient()
   const { data, error } = await adminClient
@@ -52,7 +53,7 @@ export async function listKioskDevices() {
 export async function revokeKioskDevice(deviceId: string) {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx?.departmentId) return { error: 'Not authenticated.' }
-  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) return { error: 'Only admins can revoke kiosk devices.' }
+  if (!(await hasPermission(ctx, 'manage_kiosk_devices'))) return { error: 'Only admins can revoke kiosk devices.' }
 
   const adminClient = createAdminClient()
   const { error } = await adminClient

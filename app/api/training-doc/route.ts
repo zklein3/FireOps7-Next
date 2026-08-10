@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(req: NextRequest) {
@@ -8,7 +9,7 @@ export async function GET(req: NextRequest) {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-  if (ctx.systemRole !== 'admin' && ctx.systemRole !== 'officer' && !ctx.isSysAdmin) {
+  if (!(await hasPermission(ctx, 'record_training_completion'))) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 

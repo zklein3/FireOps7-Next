@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import BackButton from '@/components/BackButton'
 import Link from 'next/link'
 
@@ -24,6 +25,7 @@ export default async function TankDetailPage({
   if (!ctx.departmentId) redirect('/dashboard')
 
   const department_id = ctx.departmentId
+  const canManageFuelStorage = await hasPermission(ctx, 'manage_fuel_storage')
 
   // Verify tank belongs to this dept and module is on
   const { data: deptFlags } = await adminClient
@@ -236,7 +238,7 @@ export default async function TankDetailPage({
         )}
       </div>
 
-      {ctx.systemRole === 'admin' && (
+      {canManageFuelStorage && (
         <div className="mt-6">
           <Link href="/dept-admin/fuel-tanks" className="text-xs text-zinc-400 hover:text-zinc-600 underline underline-offset-2">
             Manage tanks in Dept Admin →
