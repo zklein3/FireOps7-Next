@@ -77,6 +77,7 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
   { key: 'close_ics_packets', label: 'Close ICS Packets', category: 'Accountability / ICS', legacyMinRole: 'officer' },
   { key: 'manage_ics_incidents', label: 'Manage ICS Incidents', category: 'Accountability / ICS', legacyMinRole: 'officer', description: 'Create ICS incidents, add/close participants, transfer command, open operational periods' },
   { key: 'delete_ics_incidents', label: 'Delete ICS Incidents', category: 'Accountability / ICS', legacyMinRole: 'admin' },
+  { key: 'delete_accountability_boards', label: 'Delete Accountability Boards', category: 'Accountability / ICS', legacyMinRole: 'admin' },
 
   // ISO
   { key: 'manage_iso_data', label: 'Manage ISO Data', category: 'ISO', legacyMinRole: 'admin' },
