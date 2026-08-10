@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { getDeptBrandName } from '@/lib/department-theme'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
@@ -173,8 +174,8 @@ export async function deptAdminForcePasswordReset(personnelId: string) {
   try {
     const ctx = await getCurrentDepartmentContext()
     if (!ctx) return { error: 'Session expired.' }
-    if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) return { error: 'Only admins can reset passwords.' }
     if (!ctx.departmentId) return { error: 'Could not verify your department.' }
+    if (!(await hasPermission(ctx, 'manage_users'))) return { error: 'Only admins can reset passwords.' }
 
     const adminClient = createAdminClient()
 
@@ -436,7 +437,7 @@ export async function createDeptMember(formData: FormData) {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Session expired.' }
 
-  if (ctx.systemRole !== 'admin' && ctx.systemRole !== 'officer' && !ctx.isSysAdmin) {
+  if (!(await hasPermission(ctx, 'add_personnel'))) {
     return { error: 'You do not have permission to add personnel.' }
   }
 

@@ -37,6 +37,7 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
   { key: 'manage_police_settings', label: 'Manage Police Settings', category: 'Department Administration', legacyMinRole: 'admin' },
 
   // Personnel
+  { key: 'add_personnel', label: 'Add Personnel', category: 'Personnel', legacyMinRole: 'officer', description: 'Add new members to the department roster' },
   { key: 'manage_personnel_roles', label: 'Manage Personnel Roles', category: 'Personnel', legacyMinRole: 'admin', description: 'Manage rank/title list' },
   { key: 'view_personnel_details', label: 'View Personnel Details', category: 'Personnel', legacyMinRole: 'officer' },
   { key: 'manage_attendance_settings', label: 'Manage Attendance Settings', category: 'Personnel', legacyMinRole: 'admin' },
