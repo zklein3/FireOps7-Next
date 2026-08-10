@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect, notFound } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import IncidentDetailClient from './IncidentDetailClient'
 
 export default async function IncidentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,7 +18,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
   const me = { id: ctx.personnelId }
 
   const department_id = ctx.departmentId
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
+  const isOfficerOrAbove = await hasPermission(ctx, 'manage_incidents')
 
   // Incident
   const { data: incident } = await adminClient

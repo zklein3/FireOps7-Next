@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import InboxClient from './InboxClient'
 
 export default async function InboxPage({
@@ -21,7 +22,8 @@ export default async function InboxPage({
 
   const me = { id: ctx.personnelId, first_name: ctx.firstName, last_name: ctx.lastName }
   const department_id = ctx.departmentId
-  const isOfficerOrAbove = ctx.isSysAdmin || ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
+  const inboxPermissions = await getPermissionSnapshot(ctx)
+  const isOfficerOrAbove = inboxPermissions.review_burn_permits || inboxPermissions.manage_public_inbox
 
   // Pending signatures — all members (incident + event)
   const [{ data: pendingIncidentSigs }, { data: pendingEventSigs }] = await Promise.all([

@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import MutualAidClient from './MutualAidClient'
 
 export default async function MutualAidPage() {
@@ -15,7 +16,7 @@ export default async function MutualAidPage() {
   const { data: deptFlags } = await adminClient.from('departments').select('module_iso').eq('id', ctx.departmentId).single()
   if (!deptFlags?.module_iso) redirect('/dashboard')
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
+  const isOfficerOrAbove = await hasPermission(ctx, 'perform_iso_testing')
 
   const { data: agreements } = await adminClient
     .from('iso_mutual_aid_agreements')

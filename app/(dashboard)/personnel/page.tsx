@@ -3,6 +3,7 @@ import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import { getPermissionGroups } from '@/app/actions/permissions'
 import PersonnelAddForm from './PersonnelAddForm'
 
@@ -19,8 +20,9 @@ export default async function PersonnelPage() {
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const systemRole = ctx.systemRole
-  const isOfficerOrAbove = systemRole === 'admin' || systemRole === 'officer' || ctx.isSysAdmin
+  const permissions = await getPermissionSnapshot(ctx)
+  const canAddPersonnel = permissions.add_personnel
+  const canViewPersonnelDetails = permissions.view_personnel_details
 
   // Fetch roster — flat, no nested joins, include hire_date for my card
   const { data: rosterRaw } = await adminClient
@@ -45,10 +47,10 @@ export default async function PersonnelPage() {
     roleIds.length > 0
       ? adminClient.from('personnel_roles').select('id, name, is_officer').in('id', roleIds)
       : Promise.resolve({ data: [] }),
-    isOfficerOrAbove
+    canAddPersonnel
       ? adminClient.from('personnel_roles').select('id, name, is_officer, sort_order').eq('active', true).order('sort_order')
       : Promise.resolve({ data: [] }),
-    isOfficerOrAbove
+    canAddPersonnel
       ? getPermissionGroups(ctx.departmentId)
       : Promise.resolve({ groups: [] }),
   ])
@@ -81,7 +83,7 @@ export default async function PersonnelPage() {
 
   return (
     <div>
-      {isOfficerOrAbove ? (
+      {canAddPersonnel ? (
         <PersonnelAddForm roles={allRoles ?? []} permissionGroups={permissionGroups} />
       ) : (
         <div className="mb-6">
@@ -169,7 +171,7 @@ export default async function PersonnelPage() {
               {empNum && <span className="text-zinc-400">#{empNum}</span>}
             </div>
 
-            {isOfficerOrAbove && (
+            {canViewPersonnelDetails && (
               <Link
                 href={`/personnel/${personnelId}`}
                 className="mt-auto text-xs font-semibold text-red-600 hover:text-red-800"

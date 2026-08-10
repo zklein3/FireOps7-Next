@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import MedicalStoreClient from './MedicalStoreClient'
 
 export default async function MedicalPage() {
@@ -17,8 +18,9 @@ export default async function MedicalPage() {
   const { data: deptRow } = await adminClient.from('departments').select('module_medical').eq('id', ctx.departmentId).single()
   if (!deptRow?.module_medical && !ctx.isSysAdmin) redirect('/dashboard')
 
-  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
-  const isOfficerOrAbove = isAdmin || ctx.systemRole === 'officer'
+  const medicalPermissions = await getPermissionSnapshot(ctx)
+  const isAdmin = medicalPermissions.manage_medical_supply_setup
+  const isOfficerOrAbove = medicalPermissions.manage_medical_inventory
   const department_id = ctx.departmentId
 
   // Station storerooms (displayed on this page)

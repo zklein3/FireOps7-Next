@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import TrainingClient from './TrainingClient'
 import HubCard from '@/components/HubCard'
 
@@ -15,7 +16,7 @@ export default async function TrainingPage() {
 
   const me = { id: ctx.personnelId, first_name: ctx.firstName, last_name: ctx.lastName }
   const department_id = ctx.departmentId
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
+  const isOfficerOrAbove = await hasPermission(ctx, 'record_training_completion')
 
   // My enrollments
   const { data: enrollments } = await adminClient

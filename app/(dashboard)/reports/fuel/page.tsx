@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import FuelReportClient from './FuelReportClient'
 
 export default async function FuelReportPage({
@@ -22,7 +23,8 @@ export default async function FuelReportPage({
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
-  if (!ctx.departmentId || (ctx.systemRole === 'member' && !ctx.isSysAdmin)) redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_fuel_log'))) redirect('/dashboard')
 
   const department_id = ctx.departmentId
 

@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import PreplansClient from './PreplansClient'
 
 export default async function PreplansPage() {
@@ -15,7 +16,7 @@ export default async function PreplansPage() {
   const { data: deptFlags } = await adminClient.from('departments').select('module_iso').eq('id', ctx.departmentId).single()
   if (!deptFlags?.module_iso) redirect('/dashboard')
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
+  const isOfficerOrAbove = await hasPermission(ctx, 'perform_iso_testing')
 
   const { data: preplans } = await adminClient
     .from('iso_preplans')

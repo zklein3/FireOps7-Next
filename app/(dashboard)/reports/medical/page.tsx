@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 
 const CATEGORY_LABELS: Record<string, string> = { medication: 'Medication', supply: 'Supply', equipment: 'Equipment' }
 const CATEGORY_COLORS: Record<string, string> = {
@@ -50,8 +51,7 @@ export default async function MedicalReportsPage({
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const isOfficerOrAbove = ['admin', 'officer'].includes(ctx.systemRole ?? '') || ctx.isSysAdmin
-  if (!isOfficerOrAbove) redirect('/reports')
+  if (!(await hasPermission(ctx, 'manage_medical_inventory'))) redirect('/reports')
 
   const { data: deptRow } = await adminClient.from('departments').select('module_medical').eq('id', ctx.departmentId).single()
   if (!deptRow?.module_medical && !ctx.isSysAdmin) redirect('/reports')

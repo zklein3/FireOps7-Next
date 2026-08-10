@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import HubCard from '@/components/HubCard'
 
 export default async function OfficerPage() {
@@ -12,8 +13,7 @@ export default async function OfficerPage() {
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
-  if (!isOfficerOrAbove) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'access_officer_hub'))) redirect('/dashboard')
   if (ctx.departmentType !== 'fire') redirect('/dashboard')
 
   const { data: deptFlags } = await adminClient

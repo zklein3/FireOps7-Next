@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import ApparatusDetailClient from './ApparatusDetailClient'
 
 export default async function ApparatusDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -14,9 +15,9 @@ export default async function ApparatusDetailPage({ params }: { params: Promise<
   if (!ctx.departmentId) redirect('/dashboard')
   const me = { id: ctx.personnelId, is_sys_admin: ctx.isSysAdmin }
 
-  const systemRole = ctx.systemRole
-  const isAdmin = systemRole === 'admin' || ctx.isSysAdmin
-  const isOfficerOrAbove = isAdmin || systemRole === 'officer'
+  const apparatusPermissions = await getPermissionSnapshot(ctx)
+  const isAdmin = apparatusPermissions.manage_apparatus
+  const isOfficerOrAbove = apparatusPermissions.change_apparatus_service_status
 
   // Fetch apparatus — no nested joins to avoid type issues
   const { data: apparatusList } = await adminClient

@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import IncidentsClient from './IncidentsClient'
 
 export default async function IncidentsPage() {
@@ -19,7 +20,7 @@ export default async function IncidentsPage() {
   if (!deptFlags?.module_operations) redirect('/dashboard')
 
   const department_id = ctx.departmentId
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
+  const isOfficerOrAbove = await hasPermission(ctx, 'manage_incidents')
 
   // Last 6 months of incidents
   const since = new Date()

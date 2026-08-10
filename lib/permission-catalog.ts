@@ -27,6 +27,7 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
   { key: 'manage_users', label: 'Manage Users', category: 'Department Administration', legacyMinRole: 'admin', description: 'Create and edit personnel within this department' },
   { key: 'manage_department_settings', label: 'Manage Department Settings', category: 'Department Administration', legacyMinRole: 'admin' },
   { key: 'post_update', label: 'Post Update', category: 'Department Administration', legacyMinRole: 'officer', description: 'Post announcements' },
+  { key: 'moderate_announcements', label: 'Moderate Announcements', category: 'Department Administration', legacyMinRole: 'admin', description: 'Pin and delete any announcement' },
   { key: 'view_dashboards', label: 'View Dashboards', category: 'Department Administration', legacyMinRole: 'member' },
   { key: 'switch_station', label: 'Switch Station', category: 'Department Administration', legacyMinRole: 'member' },
   { key: 'unrestricted_transfer', label: 'Unrestricted Transfer', category: 'Department Administration', legacyMinRole: 'officer', description: 'Transfer equipment/apparatus across stations without restriction' },
@@ -35,6 +36,8 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
   { key: 'manage_kiosk_devices', label: 'Manage Kiosk Devices', category: 'Department Administration', legacyMinRole: 'admin' },
   { key: 'manage_dept_setup', label: 'Manage Dept Setup', category: 'Department Administration', legacyMinRole: 'admin', description: 'Stations, apparatus, and equipment item setup wizard' },
   { key: 'manage_police_settings', label: 'Manage Police Settings', category: 'Department Administration', legacyMinRole: 'admin' },
+  { key: 'access_officer_hub', label: 'Access Officer Hub', category: 'Department Administration', legacyMinRole: 'officer', description: 'View the Officer hub page' },
+  { key: 'manage_pd_logs', label: 'Manage PD Logs', category: 'Department Administration', legacyMinRole: 'officer', description: 'Business checks and contact log entries' },
 
   // Personnel
   { key: 'add_personnel', label: 'Add Personnel', category: 'Personnel', legacyMinRole: 'officer', description: 'Add new members to the department roster' },
@@ -51,6 +54,8 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
   { key: 'transfer_equipment', label: 'Transfer Equipment', category: 'Fleet', legacyMinRole: 'officer' },
   { key: 'manage_fuel_storage', label: 'Manage Fuel Storage', category: 'Fleet', legacyMinRole: 'admin' },
   { key: 'manage_inspection_settings', label: 'Manage Inspection Settings', category: 'Fleet', legacyMinRole: 'admin', description: 'Vehicle check items and inspection session settings' },
+  { key: 'manage_inspection_sessions', label: 'Manage Inspection Sessions', category: 'Fleet', legacyMinRole: 'officer', description: 'Close, delete, and reconcile live inspection sessions' },
+  { key: 'manage_fuel_log', label: 'Manage Fuel Log', category: 'Fleet', legacyMinRole: 'officer', description: 'Log and edit apparatus fuel entries' },
 
   // Equipment
   { key: 'manage_equipment_standard', label: 'Manage Standard Equipment', category: 'Equipment', legacyMinRole: 'admin' },
@@ -65,6 +70,7 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
 
   // Events / Attendance
   { key: 'manage_events', label: 'Manage Events', category: 'Events / Attendance', legacyMinRole: 'officer' },
+  { key: 'delete_events', label: 'Delete Events', category: 'Events / Attendance', legacyMinRole: 'admin' },
   { key: 'approve_attendance', label: 'Approve Attendance', category: 'Events / Attendance', legacyMinRole: 'officer' },
 
   // Operations / Incidents
@@ -81,7 +87,8 @@ export const PERMISSION_CATALOG: PermissionCatalogEntry[] = [
   { key: 'delete_accountability_boards', label: 'Delete Accountability Boards', category: 'Accountability / ICS', legacyMinRole: 'admin' },
 
   // ISO
-  { key: 'manage_iso_data', label: 'Manage ISO Data', category: 'ISO', legacyMinRole: 'admin' },
+  { key: 'manage_iso_data', label: 'Manage ISO Data', category: 'ISO', legacyMinRole: 'admin', description: 'Audit-ready ISO report settings' },
+  { key: 'perform_iso_testing', label: 'Perform ISO Testing', category: 'ISO', legacyMinRole: 'officer', description: 'Hose/hydrant testing, mutual aid, and preplan data entry' },
 
   // Medical
   { key: 'manage_medical_inventory', label: 'Manage Medical Inventory', category: 'Medical', legacyMinRole: 'officer' },

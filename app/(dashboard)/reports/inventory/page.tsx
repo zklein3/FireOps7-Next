@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import InventoryReportClient from './InventoryReportClient'
 
 export default async function InventoryReportPage({
@@ -18,8 +19,7 @@ export default async function InventoryReportPage({
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const system_role = ctx.systemRole
-  if (system_role === 'member' && !ctx.isSysAdmin) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_inventory'))) redirect('/dashboard')
 
   const departmentId = ctx.departmentId
 

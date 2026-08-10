@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
@@ -12,8 +13,8 @@ async function getContext() {
     me: { id: ctx.personnelId, is_sys_admin: ctx.isSysAdmin },
     department_id: ctx.departmentId,
     system_role: ctx.systemRole,
-    isAdmin: ctx.systemRole === 'admin' || ctx.isSysAdmin,
-    isOfficerOrAbove: ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin,
+    fullCtx: ctx,
+    isOfficerOrAbove: await hasPermission(ctx, 'manage_events'),
   }
 }
 
@@ -809,7 +810,7 @@ export async function closeEventInstance(instance_id: string) {
 // ─── Delete Event Instance (admin only) ───────────────────────────────────────
 export async function deleteEventInstance(instance_id: string) {
   const ctx = await getContext()
-  if (!ctx?.isAdmin) return { error: 'Only admins can delete events.' }
+  if (!ctx || !(await hasPermission(ctx.fullCtx, 'delete_events'))) return { error: 'Only admins can delete events.' }
 
   const adminClient = createAdminClient()
   await adminClient.from('event_attendance').delete().eq('instance_id', instance_id)
@@ -839,7 +840,7 @@ export async function cancelEventInstance(instance_id: string) {
 // ─── Create Excuse Type (admin only) ─────────────────────────────────────────
 export async function createExcuseType(formData: FormData) {
   const ctx = await getContext()
-  if (!ctx?.isAdmin) return { error: 'Only admins can manage excuse types.' }
+  if (!ctx || !(await hasPermission(ctx.fullCtx, 'manage_attendance_settings'))) return { error: 'Only admins can manage excuse types.' }
 
   const adminClient = createAdminClient()
   const excuse_name = formData.get('excuse_name') as string
@@ -859,7 +860,7 @@ export async function createExcuseType(formData: FormData) {
 // ─── Save Participation Requirements (admin only) ─────────────────────────────
 export async function saveParticipationRequirement(formData: FormData) {
   const ctx = await getContext()
-  if (!ctx?.isAdmin) return { error: 'Only admins can set participation requirements.' }
+  if (!ctx || !(await hasPermission(ctx.fullCtx, 'manage_attendance_settings'))) return { error: 'Only admins can set participation requirements.' }
 
   const adminClient = createAdminClient()
   const event_type = formData.get('event_type') as string

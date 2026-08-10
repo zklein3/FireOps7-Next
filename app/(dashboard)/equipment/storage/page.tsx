@@ -3,6 +3,7 @@ import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import BackButton from '@/components/BackButton'
 import StorageClient from './StorageClient'
 
@@ -14,8 +15,9 @@ export default async function StoragePage() {
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
-  const isOfficerOrAbove = isAdmin || ctx.systemRole === 'officer'
+  const storagePermissions = await getPermissionSnapshot(ctx)
+  const isAdmin = ctx.isSysAdmin || ctx.systemRole === 'admin'
+  const isOfficerOrAbove = storagePermissions.manage_inventory
   const department_id = ctx.departmentId
 
   // Items — quantity-tracked

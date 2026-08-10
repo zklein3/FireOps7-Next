@@ -2,18 +2,20 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
 async function getContext() {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx || !ctx.departmentId) return null
-  return { departmentId: ctx.departmentId, systemRole: ctx.systemRole, adminClient: createAdminClient() }
+  return { departmentId: ctx.departmentId, systemRole: ctx.systemRole, adminClient: createAdminClient(), fullCtx: ctx }
 }
 
 export async function addShift(departmentId: string, name: string) {
   const ctx = await getContext()
-  if (!ctx || ctx.systemRole !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_attendance_settings'))) return { error: 'Admin only.' }
   if (!name.trim()) return { error: 'Name is required.' }
 
   const { data: existing } = await ctx.adminClient
@@ -29,7 +31,8 @@ export async function addShift(departmentId: string, name: string) {
 
 export async function renameShift(id: string, name: string) {
   const ctx = await getContext()
-  if (!ctx || ctx.systemRole !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_attendance_settings'))) return { error: 'Admin only.' }
   if (!name.trim()) return { error: 'Name is required.' }
   const { error: dbErr } = await ctx.adminClient.from('department_shifts').update({ name: name.trim() }).eq('id', id)
   if (dbErr) { await logError(dbErr.message, '/dept-admin/personnel'); return { error: dbErr.message } }
@@ -39,7 +42,8 @@ export async function renameShift(id: string, name: string) {
 
 export async function toggleShift(id: string, active: boolean) {
   const ctx = await getContext()
-  if (!ctx || ctx.systemRole !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_attendance_settings'))) return { error: 'Admin only.' }
   const { error: dbErr } = await ctx.adminClient.from('department_shifts').update({ active }).eq('id', id)
   if (dbErr) { await logError(dbErr.message, '/dept-admin/personnel'); return { error: dbErr.message } }
   revalidatePath('/dept-admin/personnel')
@@ -48,7 +52,8 @@ export async function toggleShift(id: string, active: boolean) {
 
 export async function assignPersonnelShift(departmentPersonnelId: string, shiftId: string | null) {
   const ctx = await getContext()
-  if (!ctx || ctx.systemRole !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_attendance_settings'))) return { error: 'Admin only.' }
   const { error: dbErr } = await ctx.adminClient
     .from('department_personnel').update({ shift_id: shiftId }).eq('id', departmentPersonnelId).eq('department_id', ctx.departmentId)
   if (dbErr) { await logError(dbErr.message, '/dept-admin/personnel'); return { error: dbErr.message } }

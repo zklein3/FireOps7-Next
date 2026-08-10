@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import NerisReportClient from './NerisReportClient'
 import { evaluateNerisRequirements } from '@/lib/neris-requirements'
 
@@ -19,8 +20,9 @@ export default async function NerisReportPage({
   if (ctx.departmentId && ctx.departmentType !== 'fire') redirect('/dashboard')
   const me = { id: ctx.personnelId, is_sys_admin: ctx.isSysAdmin }
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
+  const isOfficerOrAbove = await hasPermission(ctx, 'manage_incidents')
   if (!isOfficerOrAbove) redirect(`/incidents/${id}`)
+  const isNerisAdmin = await hasPermission(ctx, 'submit_neris')
 
   // Fetch incident (cover sheet) — sys admin can access any incident
   const { data: incident } = await adminClient
@@ -142,7 +144,7 @@ export default async function NerisReportPage({
         nerisRecord={nerisRecord ?? null}
         mutualAidRows={mutualAidRows ?? []}
         requirementSummary={requirementSummary}
-        isAdmin={ctx.systemRole === 'admin' || ctx.isSysAdmin}
+        isAdmin={isNerisAdmin}
         isOfficerOrAbove={isOfficerOrAbove}
       />
     </div>
