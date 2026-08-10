@@ -17,6 +17,7 @@ async function getContext() {
     systemRole: ctx.systemRole,
     isAdmin: await hasPermission(ctx, 'manage_inspection_settings'),
     isOfficerOrAbove: await hasPermission(ctx, 'manage_inspection_sessions'),
+    fullCtx: ctx,
   }
 }
 
@@ -187,11 +188,13 @@ export async function submitInspection(payload: {
     notes?: string
   }[]
 }) {
-  const supabase = await createClient()
   const adminClient = createAdminClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!(await hasPermission(ctx.fullCtx, 'perform_standard_equipment_inspection'))) {
+    return { error: 'You do not have permission to submit inspections.' }
+  }
 
   const now = new Date().toISOString()
 
@@ -627,10 +630,12 @@ export async function submitVehicleCheck(payload: {
   notes?: string
   results: { item_id: string; result: 'ok' | 'issue' | 'na'; amount_added?: string; notes?: string }[]
 }) {
-  const supabase = await createClient()
   const adminClient = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!(await hasPermission(ctx.fullCtx, 'perform_apparatus_check'))) {
+    return { error: 'You do not have permission to submit vehicle checks.' }
+  }
 
   const { data: inspection, error: inspErr } = await adminClient
     .from('vehicle_inspections')

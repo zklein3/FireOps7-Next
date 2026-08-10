@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
-import { hasPermission } from '@/lib/permissions'
+import { hasPermission, getPermissionSnapshot } from '@/lib/permissions'
 import Image from 'next/image'
 import HubCard from '@/components/HubCard'
 import FuelStorageToggle from './FuelStorageToggle'
@@ -17,6 +17,7 @@ export default async function DeptAdminPage() {
   const departmentId = ctx.departmentId
   const isFireDept = ctx.departmentType === 'fire'
   const isPoliceDept = ctx.departmentType === 'law_enforcement'
+  const perms = await getPermissionSnapshot(ctx)
 
   const [
     { data: deptFlags },
@@ -53,102 +54,122 @@ export default async function DeptAdminPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <HubCard
-          title="Personnel"
-          description="Manage members, roles, and account setup"
-          href="/dept-admin/personnel"
-          stat={activeMemberCount ?? undefined}
-          statLabel={hasPendingSetup ? `${pendingSetupCount} pending setup` : 'Active Members'}
-          alert={hasPendingSetup}
-        />
-        <HubCard
-          title="Permission Groups"
-          description="Customize what each role can do"
-          href="/dept-admin/permission-groups"
-        />
-        <HubCard
-          title="Department Settings"
-          description="Timezone and display preferences"
-          href="/dept-admin/settings"
-        />
-        <HubCard
-          title="Events"
-          description="Manage attendance, approvals, and event settings"
-          href="/dept-admin/events"
-        />
-        <HubCard
-          title="Attendance Settings"
-          description="Excuse types and participation requirements"
-          href="/dept-admin/attendance"
-        />
-        {moduleMedical && (
+        {perms.manage_users && (
+          <HubCard
+            title="Personnel"
+            description="Manage members, roles, and account setup"
+            href="/dept-admin/personnel"
+            stat={activeMemberCount ?? undefined}
+            statLabel={hasPendingSetup ? `${pendingSetupCount} pending setup` : 'Active Members'}
+            alert={hasPendingSetup}
+          />
+        )}
+        {perms.manage_permission_groups && (
+          <HubCard
+            title="Permission Groups"
+            description="Customize what each role can do"
+            href="/dept-admin/permission-groups"
+          />
+        )}
+        {perms.manage_department_settings && (
+          <HubCard
+            title="Department Settings"
+            description="Timezone and display preferences"
+            href="/dept-admin/settings"
+          />
+        )}
+        {perms.manage_events && (
+          <HubCard
+            title="Events"
+            description="Manage attendance, approvals, and event settings"
+            href="/dept-admin/events"
+          />
+        )}
+        {perms.manage_attendance_settings && (
+          <HubCard
+            title="Attendance Settings"
+            description="Excuse types and participation requirements"
+            href="/dept-admin/attendance"
+          />
+        )}
+        {moduleMedical && perms.manage_medical_supply_setup && (
           <HubCard
             title="Medical"
             description="Supply types, storerooms, and medical inventory setup"
             href="/dept-admin/medical"
           />
         )}
-        <HubCard
-          title="Training & Certs"
-          description="Certification types, courses, and training setup"
-          href="/dept-admin/training"
-        />
-        <HubCard
-          title="Accountability"
-          description="Configure accountability lanes — default, ICS/NIMS Mode, and Active Violence profiles"
-          href="/dept-admin/accountability"
-        />
-        {moduleIcs && (
+        {perms.record_training_completion && (
+          <HubCard
+            title="Training & Certs"
+            description="Certification types, courses, and training setup"
+            href="/dept-admin/training"
+          />
+        )}
+        {perms.manage_accountability_lanes && (
+          <HubCard
+            title="Accountability"
+            description="Configure accountability lanes — default, ICS/NIMS Mode, and Active Violence profiles"
+            href="/dept-admin/accountability"
+          />
+        )}
+        {moduleIcs && perms.manage_ics_defaults && (
           <HubCard
             title="ICS Defaults"
             description="Default radio channels (ICS 205) and medical plan contacts (ICS 206), copied into every new operational period"
             href="/dept-admin/ics-defaults"
           />
         )}
-        <HubCard
-          title="Kiosk Devices"
-          description="Set up a station tablet for scan-in/scan-out presence tracking"
-          href="/dept-admin/kiosk"
-        />
-        <HubCard
-          title="Dept Setup"
-          description="Stations, apparatus, personnel roles, and equipment items"
-          href="/dept-admin/setup"
-        />
-        <HubCard
-          title="Inspections"
-          description="Vehicle check items and inspection session settings"
-          href="/dept-admin/inspections"
-        />
-        {isPoliceDept && (
+        {perms.manage_kiosk_devices && (
+          <HubCard
+            title="Kiosk Devices"
+            description="Set up a station tablet for scan-in/scan-out presence tracking"
+            href="/dept-admin/kiosk"
+          />
+        )}
+        {perms.manage_dept_setup && (
+          <HubCard
+            title="Dept Setup"
+            description="Stations, apparatus, personnel roles, and equipment items"
+            href="/dept-admin/setup"
+          />
+        )}
+        {perms.manage_inspection_settings && (
+          <HubCard
+            title="Inspections"
+            description="Vehicle check items and inspection session settings"
+            href="/dept-admin/inspections"
+          />
+        )}
+        {isPoliceDept && perms.manage_police_settings && (
           <HubCard
             title="Police Settings"
             description="Contact types, action-taken options, and case numbering"
             href="/dept-admin/police"
           />
         )}
-        {moduleIso && (
+        {moduleIso && perms.perform_iso_testing && (
           <HubCard
             title="ISO"
             description="Hose inventory, hydrants, mutual aid, and ISO report"
             href="/iso"
           />
         )}
-        {isFireDept && moduleNeris && (
+        {isFireDept && moduleNeris && perms.submit_neris && (
           <HubCard
             title="NERIS Settings"
             description="Incident reporting configuration"
             href="/dept-admin/neris"
           />
         )}
-        {publicSiteEnabled && (
+        {publicSiteEnabled && perms.manage_public_site && (
           <HubCard
             title="Public Site"
             description="Burn permits and public records inbox"
             href="/dept-admin/public-inbox"
           />
         )}
-        {moduleFuelStorage && (
+        {moduleFuelStorage && perms.manage_fuel_storage && (
           <HubCard
             title="Fuel Tanks"
             description="Manage on-site storage tanks and fuel deliveries"

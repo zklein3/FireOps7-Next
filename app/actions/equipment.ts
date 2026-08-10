@@ -24,7 +24,7 @@ async function getContext() {
     user_id: user?.id ?? null,
     department_id: ctx.departmentId,
     system_role: ctx.systemRole,
-    isAdmin: await hasPermission(ctx, 'manage_dept_setup'),
+    isAdmin: await hasPermission(ctx, 'manage_equipment_standard'),
     isOfficerOrAbove: await hasPermission(ctx, 'manage_inventory'),
   }
 }

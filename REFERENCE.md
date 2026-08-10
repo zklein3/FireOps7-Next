@@ -118,33 +118,31 @@ Sidebar footer: name links to own `/personnel/[id]` profile.
 
 ### Granular Permission Catalog (`lib/permission-catalog.ts`)
 
-A department admin creates named permission groups (e.g. "Chief", "Records Clerk") at `/dept-admin/permission-groups`, checks whichever of the 55 keys below apply, and assigns personnel to that group. `lib/permissions.ts` → `hasPermission(ctx, key)` / `getPermissionSnapshot(ctx)` is the resolver every gate below calls. `legacyMinRole` is only the fallback for someone with no group assigned — it is not a fixed role a group is limited to.
+A department admin creates named permission groups (e.g. "Chief", "Records Clerk") at `/dept-admin/permission-groups`, checks whichever of the 46 keys below apply, and assigns personnel to that group. `lib/permissions.ts` → `hasPermission(ctx, key)` / `getPermissionSnapshot(ctx)` is the resolver every gate below calls. `legacyMinRole` is only the fallback for someone with no group assigned — it is not a fixed role a group is limited to.
 
-**⚠️ 13 keys exist in the builder UI but are not wired to any code check yet** — checking them currently has no effect. Marked `NOT WIRED` below. Do not rely on them; they're the leftover Phase-1 catalog entries that never got a matching Phase-2 gate.
+Every key here is wired to at least one real gate — the original 55-key catalog had 13 speculative Phase-1 entries with no matching code. 4 were wired to real (previously ungated) capabilities (`perform_apparatus_check`, `manage_equipment_standard`, `perform_standard_equipment_inspection`, `dispense_controlled_substances`); 9 were removed outright since no corresponding feature exists in the app (`view_dashboards`, `switch_station`, `unrestricted_transfer`, `manage_personnel_roles`, `delete_completed_check_reports`, `manage_service_task`, `manage_equipment_ppe`, `perform_ppe_inspection`, `transfer_equipment` — the PPE/standard-equipment split in particular never had a code-level distinction, so those pairs collapsed into one key each).
+
+`/dept-admin` and `/officer` now filter each `HubCard` by its own matching key (not just whether you can see the hub at all) — a narrowly-scoped custom role only sees cards it can actually use.
 
 #### Department Administration
 | Key | `legacyMinRole` | Grants |
 |---|---|---|
-| `access_dept_admin_hub` | admin | View the `/dept-admin` hub page. *(Hub doesn't yet filter individual cards by their own permission — see Known Gaps.)* |
+| `access_dept_admin_hub` | admin | View the `/dept-admin` hub page |
 | `manage_users` | admin | `/dept-admin/personnel` page · reset a member's password · edit a member's department-level info (role/employee #/active status) |
 | `manage_department_settings` | admin | `/dept-admin/settings` page · save timezone · save weekly digest setting |
 | `post_update` | officer | Show the "Post Announcement" form on `/announcements` (page itself is open to all) |
 | `moderate_announcements` | admin | Pin or delete any announcement |
-| `view_dashboards` | member | **NOT WIRED** |
-| `switch_station` | member | **NOT WIRED** |
-| `unrestricted_transfer` | officer | **NOT WIRED** |
 | `manage_permission_groups` | admin | `/dept-admin/permission-groups` page · create/edit/delete permission groups · assign a group to a person |
 | `manage_kiosk_devices` | admin | `/dept-admin/kiosk` page · create/list/revoke kiosk tablet devices |
-| `manage_dept_setup` | admin | `/dept-admin/setup` wizard · `/stations`, `/stations/[id]` admin controls · create/edit stations · create compartment names · admin controls in `equipment.ts` (item/category templates) |
+| `manage_dept_setup` | admin | `/dept-admin/setup` wizard · `/stations`, `/stations/[id]` admin controls · create/edit stations · create compartment names |
 | `manage_police_settings` | admin | `/dept-admin/police` page · edit contact types / action-taken types / case numbering |
-| `access_officer_hub` | officer | View the `/officer` hub page. Same card-filtering caveat as above. |
+| `access_officer_hub` | officer | View the `/officer` hub page |
 | `manage_pd_logs` | officer | `/forms/business-check`, `/forms/contact` pages · create/edit/delete those log entries |
 
 #### Personnel
 | Key | `legacyMinRole` | Grants |
 |---|---|---|
 | `add_personnel` | officer | Show the Add Personnel form on `/personnel` and `/dept-admin/personnel` · actually create a new member |
-| `manage_personnel_roles` | admin | **NOT WIRED** (rank/title list management) |
 | `view_personnel_details` | officer | View another member's profile (`/personnel/[id]`) · print another member's ID card · edit another member's basic profile · link/unlink another member's ID card or QR token |
 | `manage_attendance_settings` | admin | `/dept-admin/attendance` page · manage shifts (add/rename/toggle/assign) · manage excuse types · set participation requirements |
 
@@ -152,11 +150,8 @@ A department admin creates named permission groups (e.g. "Chief", "Records Clerk
 | Key | `legacyMinRole` | Grants |
 |---|---|---|
 | `manage_apparatus` | admin | Create an apparatus · edit active/ISO-exclusion/air-brakes/engine-hours flags · admin controls on the compartment detail page |
-| `perform_apparatus_check` | member | **NOT WIRED** |
+| `perform_apparatus_check` | member | Submit a vehicle check (`submitVehicleCheck`) |
 | `change_apparatus_service_status` | officer | Edit an apparatus's basic info (name, type, station, make/model, etc.) |
-| `delete_completed_check_reports` | admin | **NOT WIRED** |
-| `manage_service_task` | officer | **NOT WIRED** |
-| `transfer_equipment` | officer | **NOT WIRED** |
 | `manage_fuel_storage` | admin | `/dept-admin/fuel-tanks` page · toggle the fuel storage module · admin section of `/fuel/tanks/[id]` |
 | `manage_inspection_settings` | admin | `/dept-admin/inspections` page · manage vehicle check items · inspection session duration setting |
 | `manage_inspection_sessions` | officer | Close/delete a live inspection session · reconcile a session · `/reports/inspections` page |
@@ -164,10 +159,8 @@ A department admin creates named permission groups (e.g. "Chief", "Records Clerk
 #### Equipment
 | Key | `legacyMinRole` | Grants |
 |---|---|---|
-| `manage_equipment_standard` | admin | **NOT WIRED** |
-| `manage_equipment_ppe` | admin | **NOT WIRED** |
-| `perform_standard_equipment_inspection` | member | **NOT WIRED** |
-| `perform_ppe_inspection` | member | **NOT WIRED** |
+| `manage_equipment_standard` | admin | Item categories, item types, and asset records (`equipment.ts`'s create/update/delete item category, item, asset, and asset-apparatus assignment) |
+| `perform_standard_equipment_inspection` | member | Submit an equipment/compartment inspection (`submitInspection`) |
 | `manage_inventory` | officer | `/equipment/movement-log`, `/reports/inventory`, `/reports/inventory-status` pages · assign/move/quantity-manage inventory items and compartment assignments · asset detail edit controls · storage transfer controls |
 
 #### Training
@@ -209,8 +202,8 @@ A department admin creates named permission groups (e.g. "Chief", "Records Clerk
 #### Medical
 | Key | `legacyMinRole` | Grants |
 |---|---|---|
-| `manage_medical_inventory` | officer | Officer UI on `/equipment`, `/medical` · `/reports/medical` page · medical CS log print page · dispense/waste/transfer actions |
-| `dispense_controlled_substances` | member | **NOT WIRED** |
+| `manage_medical_inventory` | officer | Officer UI on `/equipment`, `/medical` · `/reports/medical` page · medical CS log print page · waste/transfer actions |
+| `dispense_controlled_substances` | member | Dispense or administer a controlled substance (`dispenseStock`, `administerStock`) |
 | `manage_medical_supply_setup` | admin | `/dept-admin/medical` page · admin UI on `/medical` (setup links, stock adjustment) |
 
 #### Public Site / Inbox
@@ -221,8 +214,6 @@ A department admin creates named permission groups (e.g. "Chief", "Records Clerk
 | `review_burn_permits` | officer | Approve/deny/delete a burn permit · save officer signature · contact a permit holder · Inbox page officer-tab visibility |
 
 ### Known Gaps (as of 2026-08-10)
-- **Hub card filtering**: `/dept-admin` and `/officer` show every `HubCard` to anyone who can see the hub at all (`access_dept_admin_hub`/`access_officer_hub`), not filtered per-card by that card's own key. A narrowly-scoped custom role sees dead-end buttons for things they can't actually use — cosmetic confusion, not a security issue, since every destination page still enforces its own real check.
-- **13 unwired keys** listed above — present in the builder UI, do nothing yet.
 - **`layout.tsx` nav conditionals** (`isOfficerOrAbove`/`isDeptAdmin`/`viewingSysAdminOverview`) are the one remaining piece still on raw `system_role` — badge counts and nav-item visibility, not access control (every page/action they point at is already migrated).
 
 ---
