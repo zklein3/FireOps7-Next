@@ -108,32 +108,122 @@ Sidebar footer: name links to own `/personnel/[id]` profile.
 
 ## Permission Model
 
-### Role Fields
+**Superseded 2026-08-10 by the granular permission-group system** (currently on local branch `feature/permission-groups-phase2`, not yet merged to `main` — see CLAUDE.md's "IMMEDIATE NEXT" section for full status). The old fixed 3-tier matrix below no longer reflects reality once that branch merges; kept temporarily for the legacy-fallback reference.
+
+### Role Fields (legacy fallback only, once merged)
 | Field | Table | Values |
 |---|---|---|
-| `is_sys_admin` | `personnel` | boolean — global, no dept record needed |
-| `system_role` | `department_personnel` | `admin / officer / member` |
+| `is_sys_admin` | `personnel` | boolean — global, no dept record needed. Always bypasses every permission check. |
+| `system_role` | `department_personnel` | `admin / officer / member` — used as the fallback for anyone with no `permission_group_id` assigned. See `legacyMinRole` per key below. |
 
-### What Officers Can / Cannot Do
-- **Can:** add personnel (officers/members), edit apparatus, assign items, run inspections, manage events/attendance, approve permits, toggle events public
-- **Cannot:** create apparatus/stations/compartments/item types, manage roles, access `/dept-admin/setup`
+### Granular Permission Catalog (`lib/permission-catalog.ts`)
 
-### Permission Matrix
-| Action | Member | Officer | Admin |
-|---|---|---|---|
-| View roster/apparatus/equipment | ✅ | ✅ | ✅ |
-| Run inspections | ✅ | ✅ | ✅ |
-| Log own attendance | ✅ | ✅ | ✅ |
-| Verify/approve attendance | ❌ | ✅ | ✅ |
-| Create events / log incidents | ❌ | ✅ | ✅ |
-| Edit apparatus/station info | ❌ | ✅ | ✅ |
-| Assign items to compartments | ❌ | ✅ | ✅ |
-| Add/manage personnel | ❌ | ✅* | ✅ |
-| Add apparatus/stations/compartments | ❌ | ❌ | ✅ |
-| Manage item types/categories/assets | ❌ | ❌ | ✅ |
-| Create cert types + courses | ❌ | ❌ | ✅ |
+A department admin creates named permission groups (e.g. "Chief", "Records Clerk") at `/dept-admin/permission-groups`, checks whichever of the 55 keys below apply, and assigns personnel to that group. `lib/permissions.ts` → `hasPermission(ctx, key)` / `getPermissionSnapshot(ctx)` is the resolver every gate below calls. `legacyMinRole` is only the fallback for someone with no group assigned — it is not a fixed role a group is limited to.
 
-*Officers: add officers/members only. Admin role assignment stays in `/dept-admin/setup`.
+**⚠️ 13 keys exist in the builder UI but are not wired to any code check yet** — checking them currently has no effect. Marked `NOT WIRED` below. Do not rely on them; they're the leftover Phase-1 catalog entries that never got a matching Phase-2 gate.
+
+#### Department Administration
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `access_dept_admin_hub` | admin | View the `/dept-admin` hub page. *(Hub doesn't yet filter individual cards by their own permission — see Known Gaps.)* |
+| `manage_users` | admin | `/dept-admin/personnel` page · reset a member's password · edit a member's department-level info (role/employee #/active status) |
+| `manage_department_settings` | admin | `/dept-admin/settings` page · save timezone · save weekly digest setting |
+| `post_update` | officer | Show the "Post Announcement" form on `/announcements` (page itself is open to all) |
+| `moderate_announcements` | admin | Pin or delete any announcement |
+| `view_dashboards` | member | **NOT WIRED** |
+| `switch_station` | member | **NOT WIRED** |
+| `unrestricted_transfer` | officer | **NOT WIRED** |
+| `manage_permission_groups` | admin | `/dept-admin/permission-groups` page · create/edit/delete permission groups · assign a group to a person |
+| `manage_kiosk_devices` | admin | `/dept-admin/kiosk` page · create/list/revoke kiosk tablet devices |
+| `manage_dept_setup` | admin | `/dept-admin/setup` wizard · `/stations`, `/stations/[id]` admin controls · create/edit stations · create compartment names · admin controls in `equipment.ts` (item/category templates) |
+| `manage_police_settings` | admin | `/dept-admin/police` page · edit contact types / action-taken types / case numbering |
+| `access_officer_hub` | officer | View the `/officer` hub page. Same card-filtering caveat as above. |
+| `manage_pd_logs` | officer | `/forms/business-check`, `/forms/contact` pages · create/edit/delete those log entries |
+
+#### Personnel
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `add_personnel` | officer | Show the Add Personnel form on `/personnel` and `/dept-admin/personnel` · actually create a new member |
+| `manage_personnel_roles` | admin | **NOT WIRED** (rank/title list management) |
+| `view_personnel_details` | officer | View another member's profile (`/personnel/[id]`) · print another member's ID card · edit another member's basic profile · link/unlink another member's ID card or QR token |
+| `manage_attendance_settings` | admin | `/dept-admin/attendance` page · manage shifts (add/rename/toggle/assign) · manage excuse types · set participation requirements |
+
+#### Fleet
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `manage_apparatus` | admin | Create an apparatus · edit active/ISO-exclusion/air-brakes/engine-hours flags · admin controls on the compartment detail page |
+| `perform_apparatus_check` | member | **NOT WIRED** |
+| `change_apparatus_service_status` | officer | Edit an apparatus's basic info (name, type, station, make/model, etc.) |
+| `delete_completed_check_reports` | admin | **NOT WIRED** |
+| `manage_service_task` | officer | **NOT WIRED** |
+| `transfer_equipment` | officer | **NOT WIRED** |
+| `manage_fuel_storage` | admin | `/dept-admin/fuel-tanks` page · toggle the fuel storage module · admin section of `/fuel/tanks/[id]` |
+| `manage_inspection_settings` | admin | `/dept-admin/inspections` page · manage vehicle check items · inspection session duration setting |
+| `manage_inspection_sessions` | officer | Close/delete a live inspection session · reconcile a session · `/reports/inspections` page |
+
+#### Equipment
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `manage_equipment_standard` | admin | **NOT WIRED** |
+| `manage_equipment_ppe` | admin | **NOT WIRED** |
+| `perform_standard_equipment_inspection` | member | **NOT WIRED** |
+| `perform_ppe_inspection` | member | **NOT WIRED** |
+| `manage_inventory` | officer | `/equipment/movement-log`, `/reports/inventory`, `/reports/inventory-status` pages · assign/move/quantity-manage inventory items and compartment assignments · asset detail edit controls · storage transfer controls |
+
+#### Training
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `manage_training_programs` | admin | Create/edit/delete cert types, courses, direct cert entries · review outside-training submissions (all in `training.ts`) |
+| `record_training_completion` | officer | `/dept-admin/training`, `/reports/training` pages · officer UI on `/training` · download a training document (`/api/training-doc`) · log/verify attendance, issue certs |
+
+#### Events / Attendance
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `manage_events` | officer | `/dept-admin/events`, `/events/new` pages · officer UI on `/events` · generate a self-check-in QR code · create/edit/close/cancel events |
+| `delete_events` | admin | Delete an event |
+| `approve_attendance` | officer | `/reports/attendance` page (and its Reports-hub card) |
+
+#### Operations / Incidents
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `manage_incidents` | officer | Officer UI on `/incidents`, `/incidents/[id]`, the NERIS report page · `/reports/run-report` page · officer-level incident/NERIS actions |
+| `submit_neris` | admin | `/dept-admin/neris` page · save a department's NERIS entity ID · submit-only controls on the NERIS report page |
+
+#### Accountability / ICS
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `manage_accountability_boards` | officer | Officer UI on `/accountability` and a board's detail page · generate/revoke guest links · delete a lane · attach a card · set ICS fields/roles/lane leader/work assignment · rename a lane |
+| `manage_accountability_lanes` | admin | `/dept-admin/accountability` page · add/update/toggle/reorder lane templates |
+| `manage_ics_defaults` | admin | `/dept-admin/ics-defaults` page · radio channel and medical plan contact defaults |
+| `close_ics_packets` | officer | Close an ICS operational period |
+| `manage_ics_incidents` | officer | Officer UI on `/ics` and an incident's detail page · create an ICS incident · add/close a participant · transfer command · open an operational period |
+| `delete_ics_incidents` | admin | Delete an ICS incident · admin UI on an incident's detail page |
+| `delete_accountability_boards` | admin | Delete an accountability board · admin UI on `/accountability` and a board's detail page |
+
+#### ISO
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `manage_iso_data` | admin | "Save as Default" control on `/iso/report/print` · save ISO report settings |
+| `perform_iso_testing` | officer | `/iso` hub · `/iso/hydrants`, `/iso/hoses`, `/iso/hoses/session`, `/iso/mutual-aid`, `/iso/preplans` pages · all hose/hydrant/mutual-aid/preplan data entry |
+
+#### Medical
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `manage_medical_inventory` | officer | Officer UI on `/equipment`, `/medical` · `/reports/medical` page · medical CS log print page · dispense/waste/transfer actions |
+| `dispense_controlled_substances` | member | **NOT WIRED** |
+| `manage_medical_supply_setup` | admin | `/dept-admin/medical` page · admin UI on `/medical` (setup links, stock adjustment) |
+
+#### Public Site / Inbox
+| Key | `legacyMinRole` | Grants |
+|---|---|---|
+| `manage_public_site` | admin | `/dept-admin/public-inbox` page · save inbox/public-site settings · toggle an event series' public visibility |
+| `manage_public_inbox` | officer | Update/delete public feedback · reply to public feedback · update a records request's status · Inbox page officer-tab visibility |
+| `review_burn_permits` | officer | Approve/deny/delete a burn permit · save officer signature · contact a permit holder · Inbox page officer-tab visibility |
+
+### Known Gaps (as of 2026-08-10)
+- **Hub card filtering**: `/dept-admin` and `/officer` show every `HubCard` to anyone who can see the hub at all (`access_dept_admin_hub`/`access_officer_hub`), not filtered per-card by that card's own key. A narrowly-scoped custom role sees dead-end buttons for things they can't actually use — cosmetic confusion, not a security issue, since every destination page still enforces its own real check.
+- **13 unwired keys** listed above — present in the builder UI, do nothing yet.
+- **`layout.tsx` nav conditionals** (`isOfficerOrAbove`/`isDeptAdmin`/`viewingSysAdminOverview`) are the one remaining piece still on raw `system_role` — badge counts and nav-item visibility, not access control (every page/action they point at is already migrated).
 
 ---
 
