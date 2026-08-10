@@ -73,3 +73,35 @@ export function checkPermission(snapshot: PermissionSnapshot, key: PermissionKey
 export async function hasPermission(ctx: CurrentDepartmentContext, key: PermissionKey): Promise<boolean> {
   return checkPermission(await getPermissionSnapshot(ctx), key)
 }
+
+// For actions that authorize against a resource's own department (e.g. a burn
+// permit or public feedback submission's department_id) rather than the
+// caller's currently-selected department — a multi-dept admin or sys admin
+// acting on a resource outside their currently-selected department must still
+// be checked against THAT resource's department, not ctx.departmentId. Looks
+// up the caller's real system_role for targetDepartmentId fresh rather than
+// trusting whatever's in the caller's session-selected ctx.
+export async function hasPermissionForDepartment(
+  personnelId: string,
+  isSysAdmin: boolean,
+  targetDepartmentId: string,
+  key: PermissionKey,
+): Promise<boolean> {
+  if (isSysAdmin) return true
+  const adminClient = createAdminClient()
+  const { data } = await adminClient
+    .from('department_personnel')
+    .select('system_role')
+    .eq('personnel_id', personnelId)
+    .eq('department_id', targetDepartmentId)
+    .eq('active', true)
+    .maybeSingle()
+  return hasPermission(
+    {
+      personnelId, isSysAdmin, departmentId: targetDepartmentId, systemRole: data?.system_role ?? null,
+      firstName: '', lastName: '', departmentName: null, departmentType: 'fire', departmentTimezone: 'UTC',
+      hasMultipleDepartments: false, selectionPending: false,
+    },
+    key,
+  )
+}
