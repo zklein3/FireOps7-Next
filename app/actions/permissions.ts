@@ -10,11 +10,35 @@ import { DEFAULT_PERMISSION_TEMPLATES } from '@/lib/permission-catalog'
 async function getContext() {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return null
+  const adminClient = createAdminClient()
+  const { data: myself } = await adminClient
+    .from('department_personnel')
+    .select('permission_group_id')
+    .eq('personnel_id', ctx.personnelId)
+    .eq('department_id', ctx.departmentId ?? '')
+    .eq('active', true)
+    .maybeSingle()
   return {
     me: { id: ctx.personnelId, is_sys_admin: ctx.isSysAdmin },
     department_id: ctx.departmentId,
     isAdmin: await hasPermission(ctx, 'manage_permission_groups'),
+    myGroupId: myself?.permission_group_id ?? null,
   }
+}
+
+// A dept admin editing the very group they're currently assigned to could
+// strip their own access_dept_admin_hub/manage_permission_groups and lock
+// themselves out with no self-service way back in — sys admin is the only
+// recovery path at that point (see sysAdminSetPersonnelPermissionGroup in
+// app/actions/users.ts). Block the save instead.
+function wouldLockOutCaller(
+  ctx: NonNullable<Awaited<ReturnType<typeof getContext>>>,
+  groupId: string,
+  permissions: Record<string, boolean>,
+): boolean {
+  if (ctx.me.is_sys_admin) return false
+  if (ctx.myGroupId !== groupId) return false
+  return !permissions.access_dept_admin_hub || !permissions.manage_permission_groups
 }
 
 // ─── Seed a department's own permission groups from the hardcoded starter
@@ -117,6 +141,9 @@ export async function updatePermissionGroupMeta(groupId: string, name: string, d
 export async function savePermissionGroup(groupId: string, permissions: Record<string, boolean>) {
   const ctx = await getContext()
   if (!ctx?.isAdmin) return { error: 'Only admins can manage permission groups.' }
+  if (wouldLockOutCaller(ctx, groupId, permissions)) {
+    return { error: "You can't remove your own Access Dept Admin Hub or Manage Permission Groups from this group — doing so would lock you out with no way back in yourself. Have another admin make this change, or keep both checked on your own group." }
+  }
 
   const adminClient = createAdminClient()
   const { error: dbErr } = await adminClient
@@ -134,6 +161,9 @@ export async function savePermissionGroup(groupId: string, permissions: Record<s
 export async function togglePermissionGroup(groupId: string, active: boolean) {
   const ctx = await getContext()
   if (!ctx?.isAdmin) return { error: 'Only admins can manage permission groups.' }
+  if (!active && !ctx.me.is_sys_admin && ctx.myGroupId === groupId) {
+    return { error: "You can't deactivate your own currently-assigned group — doing so could lock you out. Have another admin make this change." }
+  }
 
   const adminClient = createAdminClient()
   const { error: dbErr } = await adminClient
@@ -165,6 +195,9 @@ export async function resetPermissionGroupToTemplate(groupId: string) {
 
   const template = DEFAULT_PERMISSION_TEMPLATES.find(t => t.key === group.source_template_key)
   if (!template) return { error: 'The source template no longer exists.' }
+  if (wouldLockOutCaller(ctx, groupId, template.permissions)) {
+    return { error: "Resetting this group to its default would remove your own Access Dept Admin Hub or Manage Permission Groups and lock you out. Have another admin make this change." }
+  }
 
   const { error: dbErr } = await adminClient
     .from('department_permission_groups')

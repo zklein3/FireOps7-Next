@@ -237,6 +237,33 @@ export async function sysAdminSetRole(personnelId: string, newRole: string) {
   }
 }
 
+// ─── Sys Admin: Set/Clear a User's Permission Group ────────────────────────────
+// The recovery backstop for a department that's locked itself out of its own
+// permission groups (e.g. removed access_dept_admin_hub/manage_permission_groups
+// from the group its own admins are assigned to) — a pure sys-admin account has
+// no department_personnel row of its own, so it can never reach a department's
+// own /dept-admin/personnel picker to fix this from inside. departmentId is
+// required (not inferred from ctx) since sys admin isn't scoped to one.
+export async function sysAdminSetPersonnelPermissionGroup(personnelId: string, departmentId: string, permissionGroupId: string | null) {
+  try {
+    await assertSysAdmin()
+    const adminClient = createAdminClient()
+
+    const { error: dbErr } = await adminClient
+      .from('department_personnel')
+      .update({ permission_group_id: permissionGroupId })
+      .eq('personnel_id', personnelId)
+      .eq('department_id', departmentId)
+    if (dbErr) { await logError(dbErr.message, '/admin/users', { metadata: { personnelId, departmentId } }); return { error: dbErr.message } }
+
+    revalidatePath('/admin/users')
+    return { success: true }
+  } catch (err) {
+    await logError(err, '/admin/users', { metadata: { personnelId } })
+    return { error: err instanceof Error ? err.message : 'Failed to update permission group.' }
+  }
+}
+
 // ─── Sys Admin: Move User to Different Department ─────────────────────────────
 export async function sysAdminMoveDepartment(personnelId: string, newDeptId: string) {
   try {

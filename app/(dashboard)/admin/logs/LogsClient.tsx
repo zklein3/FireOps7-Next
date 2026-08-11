@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { resolveLog, resolveAllLogs } from '@/app/actions/admin'
+import { resolveLog, resolveAllLogs, replyToUserReport } from '@/app/actions/admin'
 import { replyToPublicFeedback } from '@/app/actions/public-site'
 import { formatLocalDateTime } from '@/lib/format-datetime'
 
@@ -15,6 +15,9 @@ interface LogEntry {
   personnel_id: string | null
   department_id: string | null
   resolved: boolean
+  reply_message: string | null
+  replied_at: string | null
+  replied_by_personnel_id: string | null
 }
 
 interface FeedbackInfo {
@@ -64,6 +67,25 @@ export default function LogsClient({ logs, personnelMap, feedbackMap: initialFee
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
   const [replying, setReplying] = useState<string | null>(null)
   const [replyErrors, setReplyErrors] = useState<Record<string, string>>({})
+  const [reportReplies, setReportReplies] = useState<Record<string, { reply_message: string; replied_at: string }>>({})
+  const [reportReplyDrafts, setReportReplyDrafts] = useState<Record<string, string>>({})
+  const [reportReplying, setReportReplying] = useState<string | null>(null)
+  const [reportReplyErrors, setReportReplyErrors] = useState<Record<string, string>>({})
+
+  async function handleUserReportReply(logId: string) {
+    const message = (reportReplyDrafts[logId] ?? '').trim()
+    if (!message) return
+    setReportReplying(logId)
+    setReportReplyErrors(prev => ({ ...prev, [logId]: '' }))
+    const result = await replyToUserReport(logId, message)
+    if (result?.error) {
+      setReportReplyErrors(prev => ({ ...prev, [logId]: result.error as string }))
+    } else {
+      setReportReplies(prev => ({ ...prev, [logId]: { reply_message: message, replied_at: new Date().toISOString() } }))
+      setReportReplyDrafts(prev => ({ ...prev, [logId]: '' }))
+    }
+    setReportReplying(null)
+  }
 
   async function handleReply(feedbackId: string) {
     const message = (replyDrafts[feedbackId] ?? '').trim()
@@ -130,7 +152,9 @@ export default function LogsClient({ logs, personnelMap, feedbackMap: initialFee
             />
             Show resolved
           </label>
-          {unresolvedCount > 0 && (
+          {/* Bulk-resolving user reports with no reply would leave the
+              submitter with no response — keep that tab reply-only. */}
+          {unresolvedCount > 0 && activeTab !== 'user_report' && (
             <button
               onClick={handleResolveAll}
               disabled={resolvingAll}
@@ -211,7 +235,10 @@ export default function LogsClient({ logs, personnelMap, feedbackMap: initialFee
                       {expanded === log.id ? 'Hide' : 'Details'}
                     </button>
                   )}
-                  {!log.resolved && (
+                  {/* user_report rows resolve exclusively through the reply flow
+                      below (Send & mark resolved) — no separate plain Resolve
+                      button, so there's one action per row, not two. */}
+                  {!log.resolved && log.log_type !== 'user_report' && (
                     <button
                       onClick={() => handleResolve(log.id)}
                       disabled={resolving === log.id}
@@ -270,6 +297,52 @@ export default function LogsClient({ logs, personnelMap, feedbackMap: initialFee
                   )}
                 </div>
               )}
+              {expanded === log.id && log.log_type === 'user_report' && (() => {
+                const optimistic = reportReplies[log.id]
+                const existingReply = optimistic ?? (log.reply_message ? { reply_message: log.reply_message, replied_at: log.replied_at ?? '' } : null)
+                const repliedByName = optimistic
+                  ? 'You'
+                  : (log.replied_by_personnel_id ? personnelMap[log.replied_by_personnel_id] : null)
+                return (
+                  <div className="mt-3 p-3 bg-zinc-50 rounded border border-zinc-200">
+                    <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wide mb-1">Reply — shows in their Inbox</p>
+                    {existingReply && (
+                      <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 mb-2">
+                        <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-line">{existingReply.reply_message}</p>
+                        <p className="text-xs text-zinc-400 mt-1">
+                          Sent {existingReply.replied_at ? formatDateTime(existingReply.replied_at) : ''}
+                          {repliedByName ? ` by ${repliedByName}` : ''}
+                        </p>
+                      </div>
+                    )}
+                    {!log.personnel_id ? (
+                      <p className="text-xs text-zinc-400 italic">No user on file for this report — a reply cannot be sent.</p>
+                    ) : (
+                      <>
+                        {reportReplyErrors[log.id] && (
+                          <div className="mb-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                            {reportReplyErrors[log.id]}
+                          </div>
+                        )}
+                        <textarea
+                          value={reportReplyDrafts[log.id] ?? ''}
+                          onChange={(e) => setReportReplyDrafts(prev => ({ ...prev, [log.id]: e.target.value }))}
+                          rows={3}
+                          placeholder={existingReply ? 'Send another message…' : `Write a reply to ${personnelMap[log.personnel_id] ?? 'this user'}…`}
+                          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400 resize-none bg-white"
+                        />
+                        <button
+                          onClick={() => handleUserReportReply(log.id)}
+                          disabled={reportReplying === log.id || !(reportReplyDrafts[log.id] ?? '').trim()}
+                          className="mt-2 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 transition-colors"
+                        >
+                          {reportReplying === log.id ? 'Sending…' : 'Send & mark resolved'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           )
           })}

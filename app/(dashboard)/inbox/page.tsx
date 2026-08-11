@@ -36,6 +36,28 @@ export default async function InboxPage({
       .eq('personnel_id', me.id).is('signed_at', null).order('created_at', { ascending: false }),
   ])
 
+  // Sys-admin replies to a user_report they submitted via the Report/Feedback
+  // button — one-way, no threading. Shown to every member unconditionally,
+  // like Signatures.
+  const { data: messageRows } = await adminClient
+    .from('system_logs')
+    .select('id, message, metadata, reply_message, replied_at, message_read_at')
+    .eq('personnel_id', me.id)
+    .not('reply_message', 'is', null)
+    .order('replied_at', { ascending: false })
+  const messages = messageRows ?? []
+  const unreadMessageCount = messages.filter(m => !m.message_read_at).length
+
+  // Mark unread messages read as soon as the tab is actually viewed, not on
+  // every Inbox page load regardless of tab.
+  if (tab === 'messages' && unreadMessageCount > 0) {
+    await adminClient
+      .from('system_logs')
+      .update({ message_read_at: new Date().toISOString() })
+      .eq('personnel_id', me.id)
+      .is('message_read_at', null)
+  }
+
   let signatureRows: any[] = []
 
   if ((pendingIncidentSigs ?? []).length > 0) {
@@ -228,7 +250,7 @@ export default async function InboxPage({
   const moduleMedical = deptConfig?.module_medical ?? false
   const publicSiteEnabled = deptConfig?.public_site_enabled ?? false
   const validTabs = [
-    'signatures',
+    'signatures', 'messages',
     ...(canManageInbox ? ['feedback'] : []),
     ...(publicSiteEnabled && canReviewPermits ? ['permits'] : []),
     ...(publicSiteEnabled && canManageInbox ? ['records'] : []),
@@ -243,6 +265,7 @@ export default async function InboxPage({
       permits={permits}
       requests={requestsRaw}
       signatureRows={signatureRows}
+      messages={messages}
       restockRequests={restockRequests}
       expiredLots={expiredLots}
       feedbackItems={feedbackItems}

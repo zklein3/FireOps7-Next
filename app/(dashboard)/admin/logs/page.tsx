@@ -7,7 +7,7 @@ export default async function LogsPage() {
 
   const { data: logs } = await admin
     .from('system_logs')
-    .select('id, created_at, log_type, page, message, metadata, personnel_id, department_id, resolved')
+    .select('id, created_at, log_type, page, message, metadata, personnel_id, department_id, resolved, reply_message, replied_at, replied_by_personnel_id')
     .order('created_at', { ascending: false })
 
   const { data: personnel } = await admin

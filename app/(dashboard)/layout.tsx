@@ -95,7 +95,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!viewingSysAdminOverview && user?.department_id && user?.id) {
     const adminClient = createAdminClient()
     const thirtyDaysOut = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    const [{ data: allIds }, { data: readIds }, { data: pendingPermits }, { data: pendingRequests }, { data: deptFlags }, { count: sigCount }, { count: medicalAlertCount }] = await Promise.all([
+    const [{ data: allIds }, { data: readIds }, { data: pendingPermits }, { data: pendingRequests }, { data: deptFlags }, { count: sigCount }, { count: unreadMsgCount }, { count: medicalAlertCount }] = await Promise.all([
       adminClient.from('announcements').select('id').eq('department_id', user.department_id),
       adminClient.from('announcement_reads').select('announcement_id').eq('personnel_id', user.id),
       permissions?.review_burn_permits
@@ -106,11 +106,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
         : Promise.resolve({ data: [] }),
       adminClient.from('departments').select('public_site_enabled, module_operations, module_iso, module_neris, module_medical, module_ics').eq('id', user.department_id).single(),
       adminClient.from('incident_signatures').select('id', { count: 'exact', head: true }).eq('personnel_id', user.id).is('signed_at', null),
+      adminClient.from('system_logs').select('id', { count: 'exact', head: true }).eq('personnel_id', user.id).not('reply_message', 'is', null).is('message_read_at', null),
       Promise.resolve({ count: 0, data: null, error: null }), // medical alert resolved after deptFlags
     ])
     const readSet = new Set((readIds ?? []).map((r: { announcement_id: string }) => r.announcement_id))
     announcementUnreadCount = (allIds ?? []).filter((a: { id: string }) => !readSet.has(a.id)).length
-    pendingSignatureCount = sigCount ?? 0
+    pendingSignatureCount = (sigCount ?? 0) + (unreadMsgCount ?? 0)
     publicSiteEnabled = (deptFlags as any)?.public_site_enabled ?? false
     moduleOperations = (deptFlags as any)?.module_operations ?? false
     moduleIso = (deptFlags as any)?.module_iso ?? false

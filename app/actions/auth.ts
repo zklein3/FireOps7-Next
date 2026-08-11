@@ -152,19 +152,22 @@ export async function changePassword(formData: FormData) {
 
   const { data: personnel } = await adminClient
     .from('personnel')
-    .update({ signup_status: 'profile_setup' })
+    .select('id, first_name, last_name')
     .eq('auth_user_id', user.id)
-    .select('id')
     .single()
+  if (!personnel) return { error: 'No personnel record found for this account.' }
 
-  if (personnel) {
-    await adminClient
-      .from('department_personnel')
-      .update({ signup_status: 'profile_setup' })
-      .eq('personnel_id', personnel.id)
-  }
+  // A force-reset (sysAdminForcePasswordReset / deptAdminForcePasswordReset)
+  // only ever touches signup_status, never first_name/last_name — so an
+  // already-set-up member changing a reset password has a complete profile
+  // already and shouldn't be walked through profile setup again.
+  const hasProfile = !!(personnel.first_name?.trim() && personnel.last_name?.trim())
+  const nextStatus = hasProfile ? 'active' : 'profile_setup'
 
-  redirect('/profile-setup')
+  await adminClient.from('personnel').update({ signup_status: nextStatus }).eq('id', personnel.id)
+  await adminClient.from('department_personnel').update({ signup_status: nextStatus }).eq('personnel_id', personnel.id)
+
+  redirect(hasProfile ? '/dashboard' : '/profile-setup')
 }
 
 // ─── Sign Out ─────────────────────────────────────────────────────────────────

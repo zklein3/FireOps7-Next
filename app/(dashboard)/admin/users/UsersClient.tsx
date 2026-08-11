@@ -10,6 +10,7 @@ import {
   sysAdminMoveDepartment,
   sysAdminDeactivateUser,
   sysAdminReactivateUser,
+  sysAdminSetPersonnelPermissionGroup,
 } from '@/app/actions/users'
 
 interface Department {
@@ -18,11 +19,18 @@ interface Department {
   code: string | null
 }
 
+interface PermissionGroup {
+  id: string
+  name: string
+  active: boolean
+}
+
 interface DeptRecord {
   system_role: string
   department_id: string
   department_name: string | null
   active: boolean
+  permission_group_id: string | null
 }
 
 interface User {
@@ -52,7 +60,7 @@ const STATUS_LABELS: Record<string, string> = {
   profile_setup: 'Profile Setup',
 }
 
-export default function UsersClient({ departments, users }: { departments: Department[], users: User[] }) {
+export default function UsersClient({ departments, users, groupsByDept }: { departments: Department[], users: User[], groupsByDept: Record<string, PermissionGroup[]> }) {
   const router = useRouter()
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +81,7 @@ export default function UsersClient({ departments, users }: { departments: Depar
   const [emailInput, setEmailInput] = useState('')
   const [roleInput, setRoleInput] = useState('')
   const [deptInput, setDeptInput] = useState('')
+  const [groupInput, setGroupInput] = useState('')
 
   function openManage(user: User) {
     setManagingUser(user)
@@ -82,6 +91,7 @@ export default function UsersClient({ departments, users }: { departments: Depar
     const dp = user.department_personnel?.[0]
     setRoleInput(dp?.system_role ?? '')
     setDeptInput(dp?.department_id ?? '')
+    setGroupInput(dp?.permission_group_id ?? '')
   }
 
   function closeManage() {
@@ -405,6 +415,35 @@ export default function UsersClient({ departments, users }: { departments: Depar
                       Save
                     </button>
                   </div>
+                </section>
+              )}
+
+              {/* Permission Group */}
+              {dp && (
+                <section>
+                  <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Permission Group</h3>
+                  <div className="flex gap-2">
+                    <select
+                      value={groupInput}
+                      onChange={e => setGroupInput(e.target.value)}
+                      className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                    >
+                      <option value="">Legacy access level ({dp.system_role})</option>
+                      {(groupsByDept[dp.department_id] ?? []).map(g => (
+                        <option key={g.id} value={g.id}>{g.name}{!g.active ? ' (inactive)' : ''}</option>
+                      ))}
+                    </select>
+                    <button
+                      disabled={modalLoading || groupInput === (dp.permission_group_id ?? '')}
+                      onClick={() => withModal(() => sysAdminSetPersonnelPermissionGroup(managingUser.id, dp.department_id, groupInput || null))}
+                      className="rounded-lg bg-zinc-800 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-900 disabled:opacity-40 transition-colors"
+                    >
+                      Save
+                    </button>
+                  </div>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Recovery backstop — use this if a department has locked itself out of its own permission groups (e.g. removed its own admins' Dept Admin access). Clearing to legacy restores access based on their Department Role above.
+                  </p>
                 </section>
               )}
 

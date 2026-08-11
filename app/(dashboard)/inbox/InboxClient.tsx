@@ -8,7 +8,16 @@ import FeedbackTab from './FeedbackTab'
 import IncidentSignaturePadModal from '../signatures/IncidentSignaturePadModal'
 import EventAttendanceSignaturePadModal from '../signatures/EventAttendanceSignaturePadModal'
 
-type Tab = 'permits' | 'records' | 'signatures' | 'restock' | 'feedback'
+type Tab = 'permits' | 'records' | 'signatures' | 'restock' | 'feedback' | 'messages'
+
+type MessageRow = {
+  id: string
+  message: string
+  metadata: Record<string, unknown> | null
+  reply_message: string
+  replied_at: string | null
+  message_read_at: string | null
+}
 
 type IncidentSignatureRow = {
   type: 'incident'
@@ -51,6 +60,7 @@ export default function InboxClient({
   permits,
   requests,
   signatureRows,
+  messages,
   restockRequests,
   expiredLots,
   feedbackItems,
@@ -69,6 +79,7 @@ export default function InboxClient({
   permits: any[]
   requests: any[]
   signatureRows: SignatureRow[]
+  messages: MessageRow[]
   restockRequests: RestockRequest[]
   expiredLots: { supply_name: string; storeroom_name: string; quantity_remaining: number; expiration_date: string; lot_number: string | null; go_to_href: string }[]
   feedbackItems: any[]
@@ -88,6 +99,7 @@ export default function InboxClient({
   const [pendingSigs, setPendingSigs] = useState<SignatureRow[]>(signatureRows)
   const [activeSig, setActiveSig] = useState<SignatureRow | null>(null)
   const hasAnyOfficerInboxAccess = canReviewPermits || canManageInbox || canManageMedical
+  const unreadMessageCount = messages.filter(m => !m.message_read_at).length
 
   const EVENT_TYPE_LABELS: Record<string, string> = {
     training: 'Training', meeting: 'Meeting', incident: 'Incident', special: 'Special Event',
@@ -129,6 +141,25 @@ export default function InboxClient({
             </span>
           )}
         </button>
+
+        {/* Messages — all members, replies to your own Report/Feedback submissions */}
+        {messages.length > 0 && (
+          <button
+            onClick={() => setTab('messages')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              tab === 'messages' ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'
+            }`}
+          >
+            Messages
+            {unreadMessageCount > 0 && (
+              <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold leading-none ${
+                tab === 'messages' ? 'bg-red-500 text-white' : 'bg-orange-100 text-orange-700'
+              }`}>
+                {unreadMessageCount}
+              </span>
+            )}
+          </button>
+        )}
 
         {/* Burn Permits — review_burn_permits */}
         {publicSiteEnabled && canReviewPermits && (
@@ -296,6 +327,29 @@ export default function InboxClient({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'messages' && (
+        <div className="flex flex-col gap-3">
+          {messages.map(m => {
+            const reportType = typeof m.metadata?.report_type === 'string' ? m.metadata.report_type : null
+            return (
+              <div key={m.id} className="rounded-xl bg-white border border-zinc-200 p-5">
+                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">
+                  Reply to your report{reportType ? ` (${reportType})` : ''}
+                </p>
+                <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-line mb-3">{m.reply_message}</p>
+                <div className="rounded-lg bg-zinc-50 border border-zinc-100 px-3 py-2">
+                  <p className="text-xs font-medium text-zinc-500 mb-0.5">You reported:</p>
+                  <p className="text-xs text-zinc-500 leading-relaxed whitespace-pre-line">{m.message}</p>
+                </div>
+                {m.replied_at && (
+                  <p className="text-xs text-zinc-400 mt-2">{formatDate(m.replied_at.slice(0, 10))}</p>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
