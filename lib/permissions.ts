@@ -96,9 +96,15 @@ export async function hasPermissionForDepartment(
     .eq('department_id', targetDepartmentId)
     .eq('active', true)
     .maybeSingle()
+
+  // Not an active member of the target department at all (never joined, or
+  // removed) — must never fall through to legacySnapshot(null)'s member-tier
+  // default, which would otherwise grant every legacyMinRole:'member' key.
+  if (!data) return false
+
   return hasPermission(
     {
-      personnelId, isSysAdmin, departmentId: targetDepartmentId, systemRole: data?.system_role ?? null,
+      personnelId, isSysAdmin, departmentId: targetDepartmentId, systemRole: data.system_role,
       firstName: '', lastName: '', departmentName: null, departmentType: 'fire', departmentTimezone: 'UTC',
       hasMultipleDepartments: false, selectionPending: false,
     },
