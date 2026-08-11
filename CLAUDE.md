@@ -144,6 +144,32 @@ Claude can drive the actual app in a real headless browser — log in, click thr
 
 ## IMMEDIATE NEXT — Resume Here Next Session
 
+### Global Help/Instruction System — BUILT, committed locally, NOT pushed — resume by testing live (2026-08-11)
+
+Two-component system, purely additive (no existing functionality changed), no DB column — toggle state lives in `localStorage`.
+
+**Component 1 — Instruction Toggle:**
+- `lib/useHelp.ts` — reads/writes `localStorage` (`fireops7_show_help`), syncs every mounted instance instantly via a custom event (the native `storage` event only fires in *other* tabs, not the one that made the change)
+- `components/HelpText.tsx` — renders nothing when the toggle is off; a blue "💡" callout box when on
+- `components/HelpToggle.tsx` — the `?` button. Wired into the desktop sidebar footer (`app/(dashboard)/layout.tsx`), the mobile top bar as a compact icon, and the mobile drawer footer (`components/MobileSidebar.tsx`). Shows a toast confirmation on every toggle click (bottom-center, auto-dismisses) — added after live testing showed clicking `?` on a page with no help content yet looked like nothing happened. A "Help Center →" link sits next to the toggle rather than a long-press gesture (long-press is unreliable across mobile browsers, no existing precedent in this app for that pattern).
+
+**Component 2 — Help Center:**
+- `lib/help-content.ts` — single source of truth, 19 topics across all 7 categories (Attendance, Training, Equipment & Inventory, Incidents, Inspections, Personnel, Reports), each tagged `minRole: member/officer/admin`
+- `/help` (`app/(dashboard)/help/`) — search bar filters in real time, topics grouped by category, role-aware (verified live: a member account doesn't see officer/admin-only topics). Role check is a simple rank proxy off `ctx.systemRole`/`ctx.isSysAdmin`, not the full permission-group resolver — this is content relevance, not a security boundary.
+
+**Inline `<HelpText>` coverage — 61 pages**, built and committed in 5 tiers, each build-verified clean before committing:
+- Tier 1 (`2c41e08`) — core member pages: dashboard, events (+new), training, equipment (+ apparatus detail), personnel, inbox, incidents (new + detail), operations
+- Tier 2 (`c76f04f`) — officer-facing: officer hub, reports hub + all 8 sub-reports, accountability, ICS, inspection run flows
+- Tier 3 (`a83aa3a`) — all 17 Dept Admin setup pages
+- Tier 4 (`60e047c`) — all 6 ISO module pages
+- Tier 5 (`1caea15`) — stations, apparatus, fuel (+ tank detail), medical storeroom, announcements, incidents list, inspections hub, equipment storage/movement-log/asset-roster, personnel profile
+
+**Deliberately not covered:** sys-admin-only pages (`/admin/*`, single user) and deep nested action/confirmation pages (accountability board detail, ICS incident detail, incident NERIS/accountability sub-tabs, station/apparatus edit forms, single-compartment inspection, check-in, scan, contact forms, print pages) — mostly single-purpose screens where the form labels already say what's needed.
+
+**Tested so far:** toggle on/off behavior, localStorage persistence across navigation, toast confirmation, Help Center search + role filtering + mobile layout (screenshot-verified) — all via Playwright against `member.winfire@fireops7.com` / `test.winfire@fireops7.com`. **Not yet done:** a real click-through of the actual inline `<HelpText>` content across the 61 pages for tone/accuracy/placement — this is what the user wants to do together next session.
+
+**Commit status:** 5 commits on `main` (`2c41e08` → `1caea15`), all local, nothing pushed to `origin/main` yet. Resume by pulling up the dev server and clicking through pages with the `?` toggle on — fix any placement/wording issues found, then push together once confirmed.
+
 ### Dept Admin — Force Password Reset — SHIPPED ✅ (2026-08-07, committed `706a2ed`, pushed to main)
 
 Gap found by the user while testing: dept admins had no way to reset a member's password themselves — only sys admin could, via `/admin/users` → "Force Reset" (`sysAdminForcePasswordReset`). Added `deptAdminForcePasswordReset(personnelId)` in `app/actions/users.ts`, same reset-to-`Hello1!` + `signup_status: 'temp_password'` mechanism, but gated to the caller's own admin role (`ctx.systemRole === 'admin' || ctx.isSysAdmin`) **and** an explicit check that the target actually has an active `department_personnel` row in the caller's own department — a multi-dept admin can't reset a password for someone who only belongs to a different department they don't administer. UI: "Reset Password" button next to "Edit Profile" on every card in `/dept-admin/personnel` (`DeptPersonnelClient.tsx`), inline amber confirm banner (same convention as every other destructive-ish confirm in this app), green success banner naming the new temp password on completion. Build verified clean and pushed to `origin/main`.
