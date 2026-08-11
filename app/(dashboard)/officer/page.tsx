@@ -103,7 +103,7 @@ export default async function OfficerPage() {
           {publicSiteEnabled && perms.manage_public_inbox && (
             <HubCard title="Records Requests" description="Public records requests awaiting review" href="/inbox?tab=records" />
           )}
-          {moduleMedical && perms.manage_public_inbox && (
+          {moduleMedical && perms.manage_medical_inventory && (
             <HubCard title="Restock" description="Reorder requests and expiring lot alerts" href="/inbox?tab=restock" />
           )}
           {perms.manage_public_inbox && (

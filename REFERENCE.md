@@ -202,7 +202,7 @@ Every key here is wired to at least one real gate — the original 55-key catalo
 #### Medical
 | Key | `legacyMinRole` | Grants |
 |---|---|---|
-| `manage_medical_inventory` | officer | Officer UI on `/equipment`, `/medical` · `/reports/medical` page · medical CS log print page · waste/transfer actions |
+| `manage_medical_inventory` | officer | Officer UI on `/equipment`, `/medical` · `/reports/medical` page · medical CS log print page · waste/transfer actions · Inbox Restock tab (reorder requests, expired lots) |
 | `dispense_controlled_substances` | member | Dispense or administer a controlled substance (`dispenseStock`, `administerStock`) |
 | `manage_medical_supply_setup` | admin | `/dept-admin/medical` page · admin UI on `/medical` (setup links, stock adjustment) |
 
@@ -210,8 +210,8 @@ Every key here is wired to at least one real gate — the original 55-key catalo
 | Key | `legacyMinRole` | Grants |
 |---|---|---|
 | `manage_public_site` | admin | `/dept-admin/public-inbox` page · save inbox/public-site settings · toggle an event series' public visibility |
-| `manage_public_inbox` | officer | Update/delete public feedback · reply to public feedback · update a records request's status · Inbox page officer-tab visibility |
-| `review_burn_permits` | officer | Approve/deny/delete a burn permit · save officer signature · contact a permit holder · Inbox page officer-tab visibility |
+| `manage_public_inbox` | officer | Update/delete public feedback · reply to public feedback · update a records request's status · Inbox Records Requests + Feedback tabs |
+| `review_burn_permits` | officer | Approve/deny/delete a burn permit · save officer signature · contact a permit holder · Inbox Burn Permits tab |
 
 ### Known Gaps (as of 2026-08-10)
 - **`layout.tsx` nav conditionals** (`isOfficerOrAbove`/`isDeptAdmin`/`viewingSysAdminOverview`) are the one remaining piece still on raw `system_role` — badge counts and nav-item visibility, not access control (every page/action they point at is already migrated).
