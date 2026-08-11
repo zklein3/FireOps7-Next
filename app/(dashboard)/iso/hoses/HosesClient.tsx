@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createHose, updateHose, addHoseTest, removeHose } from '@/app/actions/iso'
+import HelpText from '@/components/HelpText'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 const labelCls = "block text-xs font-medium text-zinc-700 mb-1"
@@ -128,6 +129,10 @@ export default function HosesClient({
         <h1 className="text-xl font-bold text-zinc-900">Hose Inventory</h1>
         <p className="text-sm text-zinc-500 mt-0.5">{hoses.length} total · {inService} in service · {testedThisYear}/{hoses.length} tested in past 12 months</p>
       </div>
+      <HelpText className="mb-4">
+        This tracks physical hose sections and their annual pressure tests (NFPA 1962) — it's separate from what's
+        loaded on a specific truck, which is set on the apparatus's ISO Specs instead.
+      </HelpText>
       {isOfficerOrAbove && (
         <div className="flex flex-wrap gap-3 mb-6">
           <button

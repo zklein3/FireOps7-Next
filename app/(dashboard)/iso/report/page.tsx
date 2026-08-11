@@ -3,6 +3,7 @@ import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import Link from 'next/link'
+import HelpText from '@/components/HelpText'
 
 function formatDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -237,6 +238,11 @@ export default async function IsoReportPage() {
           Build Report →
         </Link>
       </div>
+
+      <HelpText className="mb-4">
+        This page is a live summary — "Build Report →" is where you configure sections, set the audit date, and
+        print the actual audit-ready document.
+      </HelpText>
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-8">

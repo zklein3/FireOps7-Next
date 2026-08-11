@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createHydrant, updateHydrant, addHydrantFlowTest, removeHydrant } from '@/app/actions/iso'
+import HelpText from '@/components/HelpText'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 const labelCls = "block text-xs font-medium text-zinc-700 mb-1"
@@ -114,6 +115,10 @@ export default function HydrantsClient({
         <h1 className="text-xl font-bold text-zinc-900">Hydrants</h1>
         <p className="text-sm text-zinc-500 mt-0.5">{hydrants.length} total · {outOfService} out of service · {testedThisYear}/{hydrants.length} flow tested in past 12 months</p>
       </div>
+      <HelpText className="mb-4">
+        Log a flow test at least once a year per hydrant — the ISO Report pulls straight from these records to show
+        current compliance.
+      </HelpText>
       {isOfficerOrAbove && (
         <div className="flex flex-wrap gap-3 mb-6">
           <button

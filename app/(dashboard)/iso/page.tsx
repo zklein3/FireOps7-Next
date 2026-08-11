@@ -3,6 +3,7 @@ import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { hasPermission } from '@/lib/permissions'
 import { createAdminClient } from '@/lib/supabase/admin'
 import HubCard from '@/components/HubCard'
+import HelpText from '@/components/HelpText'
 
 export default async function IsoHubPage() {
   const ctx = await getCurrentDepartmentContext()
@@ -21,6 +22,11 @@ export default async function IsoHubPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">ISO</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Insurance Services Office compliance tools</p>
       </div>
+
+      <HelpText className="mb-4">
+        Hose, hydrant, and mutual aid data feed the ISO Report — keep those up to date year-round rather than
+        scrambling right before an audit.
+      </HelpText>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <HubCard

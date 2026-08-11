@@ -7,6 +7,7 @@ import {
   updateMutualAidAgreement,
   toggleMutualAidAgreement,
 } from '@/app/actions/iso'
+import HelpText from '@/components/HelpText'
 
 const AGREEMENT_TYPES = [
   { value: 'mutual_aid', label: 'Mutual Aid' },
@@ -205,6 +206,11 @@ export default function MutualAidClient({
           </button>
         )}
       </div>
+
+      <HelpText className="mb-4">
+        Enter the partner department's apparatus specs manually for now — data is entered once and stays until you
+        update it, not pulled live from the partner's own records.
+      </HelpText>
 
       {/* Add / Edit Form */}
       {showForm && isOfficerOrAbove && (

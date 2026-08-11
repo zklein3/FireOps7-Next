@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { savePreplan, deletePreplan, getPreplanDocUrl } from '@/app/actions/iso'
+import HelpText from '@/components/HelpText'
 
 type Preplan = {
   id: string
@@ -88,6 +89,11 @@ export default function PreplansClient({
           </button>
         )}
       </div>
+
+      <HelpText className="mb-4">
+        Attach a document (floor plan, hazard notes, hydrant locations) to each location so it's on hand before a
+        crew arrives, not just an address on file.
+      </HelpText>
 
       {/* Form */}
       {showForm && isOfficerOrAbove && (
