@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { submitInspection } from '@/app/actions/inspections'
 import { moveAssetToApparatus } from '@/app/actions/equipment'
 import QRScanner from '@/components/QRScanner'
+import HelpText from '@/components/HelpText'
 
 function parseAssetCode(raw: string): string | null {
   try {
@@ -356,6 +357,10 @@ export default function InspectionRunClient({
           <span className="inline-block mt-1 text-xs rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">Daily Check — Presence Only</span>
         )}
       </div>
+      <HelpText className="mb-4">
+        Scan or select each item to check it off. Flag anything missing or damaged as you go — it'll show up on the
+        Inspection Report for an officer to follow up on.
+      </HelpText>
       <div className="flex flex-wrap gap-3 mb-6">
         <button
           onClick={() => router.push(inspectionSessionId ? `/inspections/apparatus/${apparatus.id}` : '/inspections')}

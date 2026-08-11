@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { submitVehicleCheck } from '@/app/actions/inspections'
+import HelpText from '@/components/HelpText'
 
 interface CheckItem {
   id: string
@@ -223,6 +224,11 @@ export default function VehicleCheckClient({
             </button>
           )}
         </div>
+
+        <HelpText className="mt-3">
+          Every item has instructions expanded by default — what to look for and what counts as pass or fail. This
+          covers the truck itself; use "Inspect Inventory" separately for compartment equipment.
+        </HelpText>
 
         {/* Progress bar */}
         <div className="mt-4">

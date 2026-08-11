@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import type { InspectionLogRow, PresenceCheckRow, StepRow } from './page'
 import { formatLocalDateTime } from '@/lib/format-datetime'
+import HelpText from '@/components/HelpText'
 
 type ApparatusOption = { id: string; name: string }
 type PersonnelOption = { id: string; name: string }
@@ -314,6 +315,11 @@ export default function InspectionReportClient({
           Print
         </button>
       </div>
+
+      <HelpText className="mb-4 print:hidden">
+        Shows completed Vehicle Check and Inventory Inspection sessions department-wide, including any items flagged
+        as damaged or missing — this is the history, not where you run a new inspection.
+      </HelpText>
 
       {/* Filters */}
       <div className="bg-white rounded-lg border border-zinc-200 p-4 mb-6 print:hidden">

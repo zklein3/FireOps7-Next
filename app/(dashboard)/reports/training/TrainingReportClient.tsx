@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import type { CertRow, EnrollmentRow, TrainingAttendanceRow } from './page'
+import HelpText from '@/components/HelpText'
 
 type PersonnelOption = { id: string; name: string }
 type CertTypeOption = { id: string; name: string }
@@ -153,6 +154,11 @@ export default function TrainingReportClient({
           </button>
         </div>
       </div>
+
+      <HelpText className="mb-4 print:hidden">
+        Filter to one member and use "Member Record ↗" for a clean, printable record of just their training and
+        certs — useful for a personnel file or an audit request.
+      </HelpText>
 
       {/* Print header */}
       <div className="hidden print:block mb-6">

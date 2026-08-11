@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { hasPermission } from '@/lib/permissions'
 import InventoryStatusClient from './InventoryStatusClient'
+import HelpText from '@/components/HelpText'
 
 export default async function InventoryStatusPage() {
   const adminClient = createAdminClient()
@@ -136,6 +137,10 @@ export default async function InventoryStatusPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Inventory Status</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Department-wide quantity inventory — storage, trucks, and totals</p>
       </div>
+      <HelpText className="mb-4">
+        "Variance" compares what's actually accounted for (storage + trucks) against the department's total on
+        record — a nonzero variance usually means a count is out of date somewhere.
+      </HelpText>
       <InventoryStatusClient items={reportItems} />
     </div>
   )

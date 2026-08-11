@@ -7,6 +7,7 @@ import Link from 'next/link'
 import GuestAccessControl from './GuestAccessControl'
 import BoardCleanupActions from './BoardCleanupActions'
 import ArchivedBoardsSection from './ArchivedBoardsSection'
+import HelpText from '@/components/HelpText'
 
 export default async function AccountabilityHubPage() {
   const adminClient = createAdminClient()
@@ -69,6 +70,12 @@ export default async function AccountabilityHubPage() {
           New Board
         </Link>
       </div>
+
+      <HelpText className="mb-4">
+        Start a new board for any incident, training, or event needing accountability tracking. Lanes seed from
+        your department's defaults (Staging, Command, Interior Attack, etc.) — reassign personnel between lanes as
+        the scene changes, and run a PAR check anytime to snapshot who's where.
+      </HelpText>
 
       {(boards ?? []).length === 0 ? (
         <div className="rounded-xl bg-white border border-zinc-200 px-6 py-10 text-center">

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import type { MemberSummaryRow, AttendanceDetailRow, RequirementRow, EventTypeOption } from './page'
+import HelpText from '@/components/HelpText'
 
 type PersonnelOption = { id: string; name: string }
 
@@ -142,6 +143,11 @@ export default function AttendanceReportClient({
           Print
         </button>
       </div>
+
+      <HelpText className="mb-4 print:hidden">
+        "Below Threshold" flags members under the department's minimum attendance rate, if one is configured. Use
+        the filters to narrow by date range, event type, or a specific member before printing.
+      </HelpText>
 
       {/* Print header */}
       <div className="hidden print:block mb-6">

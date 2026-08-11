@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import HelpText from '@/components/HelpText'
 
 const inputCls = 'rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500'
 
@@ -110,6 +111,11 @@ export default function FuelReportClient({
           Print
         </button>
       </div>
+
+      <HelpText className="mb-4 print:hidden">
+        Pulls every fuel entry logged from apparatus fuel logs department-wide. Filter by apparatus or date range to
+        narrow it down, then Print for a paper copy.
+      </HelpText>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6 print:hidden">

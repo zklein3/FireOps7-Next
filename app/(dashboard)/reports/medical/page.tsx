@@ -5,6 +5,7 @@ import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { hasPermission } from '@/lib/permissions'
+import HelpText from '@/components/HelpText'
 
 const CATEGORY_LABELS: Record<string, string> = { medication: 'Medication', supply: 'Supply', equipment: 'Equipment' }
 const CATEGORY_COLORS: Record<string, string> = {
@@ -186,6 +187,11 @@ export default async function MedicalReportsPage({
           <p className="text-sm text-zinc-500 mt-0.5">Stock levels, consumption, and expiration</p>
         </div>
       </div>
+
+      <HelpText className="mb-4">
+        Rows below PAR need restocking soon — a reorder request from this or the Inbox Restock tab flags it for
+        whoever manages medical inventory. Expiring lots are called out separately below.
+      </HelpText>
 
       {/* ── Stock vs PAR ──────────────────────────────────────────────────── */}
       <section className="mb-8">

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { getPermissionSnapshot } from '@/lib/permissions'
 import HubCard from '@/components/HubCard'
+import HelpText from '@/components/HelpText'
 
 export default async function ReportsPage() {
   const adminClient = createAdminClient()
@@ -24,6 +25,12 @@ export default async function ReportsPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Reports</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Activity, compliance, and department reports</p>
       </div>
+
+      <HelpText className="mb-4">
+        Every report here is read-only — for actually logging attendance, inspections, or fuel, use the page that
+        does that (Events, Inventory, Fuel Log). "My Activity" is the one report every member can see, for their
+        own records only.
+      </HelpText>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <HubCard

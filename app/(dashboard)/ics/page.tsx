@@ -4,6 +4,7 @@ import { hasPermission } from '@/lib/permissions'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import NewIcsIncidentForm from './NewIcsIncidentForm'
+import HelpText from '@/components/HelpText'
 
 export default async function IcsListPage() {
   const ctx = await getCurrentDepartmentContext()
@@ -49,6 +50,11 @@ export default async function IcsListPage() {
     <div className="max-w-2xl">
       <h1 className="text-xl font-semibold text-zinc-900 mb-1">ICS</h1>
       <p className="text-sm text-zinc-500 mb-6">Incident Command System packets — operational-period documentation, shared across departments.</p>
+
+      <HelpText className="mb-4">
+        Each ICS incident covers one or more operational periods (ICS 201-214 packets) and can involve personnel
+        from multiple departments — useful for mutual aid and multi-agency responses, not just your own crew.
+      </HelpText>
 
       {isOfficerOrAbove && (
         <div className="mb-6">

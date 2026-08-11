@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import type { RunReportRow } from './page'
+import HelpText from '@/components/HelpText'
 
 const INCIDENT_TYPE_LABELS: Record<string, string> = {
   fire:       'Fire',
@@ -57,6 +58,11 @@ export default function RunReportClient({
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Run Report</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Incident run sheets — filter and print</p>
       </div>
+
+      <HelpText className="mb-4">
+        Each row's Print ↗ opens a single-page run sheet formatted to match the department's paper Run Field
+        Report — the same layout dispatch and records requests expect.
+      </HelpText>
 
       {/* Filter bar */}
       <div className="mb-5 rounded-xl bg-white border border-zinc-200 shadow-sm p-4 flex flex-wrap gap-3 items-end">

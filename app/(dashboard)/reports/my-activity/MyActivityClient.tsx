@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import HelpText from '@/components/HelpText'
 
 type AttendanceRow = {
   id: string
@@ -117,6 +118,11 @@ export default function MyActivityClient({
         <h1 className="text-2xl font-bold text-zinc-900">My Activity</h1>
         <p className="text-sm text-zinc-500 mt-0.5">{myName}</p>
       </div>
+
+      <HelpText className="mb-4">
+        This is your own record only — events, training, and inspections you've participated in. Everyone can see
+        this page for themselves, regardless of role.
+      </HelpText>
 
       {/* Date filter */}
       <div className="bg-white rounded-lg border border-zinc-200 p-4 mb-6 flex flex-wrap items-end gap-3">

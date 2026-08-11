@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { hasPermission, getPermissionSnapshot } from '@/lib/permissions'
 import HubCard from '@/components/HubCard'
+import HelpText from '@/components/HelpText'
 
 export default async function OfficerPage() {
   const adminClient = createAdminClient()
@@ -33,6 +34,11 @@ export default async function OfficerPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Officer</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Everything officer+ in one place — operations, reports, and pending items</p>
       </div>
+
+      <HelpText className="mb-6">
+        Most of these are shortcuts to pages you can also reach elsewhere in the app — this hub just collects them
+        in one place. Cards only show if your permission group grants that specific capability.
+      </HelpText>
 
       <div className="mb-8">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Operations</h2>

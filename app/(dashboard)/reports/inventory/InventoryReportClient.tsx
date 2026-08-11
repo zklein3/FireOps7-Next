@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { formatLocalDateTime } from '@/lib/format-datetime'
+import HelpText from '@/components/HelpText'
 
 interface ApparatusItem {
   id: string
@@ -245,6 +246,11 @@ export default function InventoryReportClient({
           <h1 className="text-2xl font-bold text-zinc-900">Inventory Reports</h1>
           <p className="text-sm text-zinc-500 mt-1">All apparatus inspections and presence checks</p>
         </div>
+
+        <HelpText className="mb-4">
+          Every completed inspection session shows here by apparatus and date — click one to see the full
+          pass/fail breakdown, or print an individual session's results.
+        </HelpText>
 
         {/* Filters */}
         <div className="bg-white rounded-xl border border-zinc-200 p-4 mb-6 flex flex-wrap gap-4 items-end">
