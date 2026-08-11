@@ -7,6 +7,7 @@ import BiometricSettings from '@/components/BiometricSettings'
 import QRScanner from '@/components/QRScanner'
 import { parseSalamanderCard, parseFireOps7Card, isFireOps7Card } from '@/lib/salamander'
 import type { SalamanderCard } from '@/lib/salamander'
+import HelpText from '@/components/HelpText'
 
 const US_STATES = [
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
@@ -208,6 +209,11 @@ export default function PersonnelProfileClient({
           </span>
         )}
       </div>
+      {canEditProfile && (
+        <HelpText className="mb-4">
+          {isMe ? "This is your own profile — changes here save immediately, no approval needed." : "You're editing someone else's profile as an officer/admin — they'll see the updated info next time they log in."}
+        </HelpText>
+      )}
       <div className="flex flex-wrap gap-3 mb-6">
         <button onClick={() => router.push('/personnel')} className="rounded-lg bg-white border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors shadow-sm">← Back</button>
         {(isMe || isOfficerOrAbove) && (

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { createStation } from '@/app/actions/stations'
+import HelpText from '@/components/HelpText'
 
 const US_STATES = [
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
@@ -86,6 +87,11 @@ export default function StationsListClient({
           )}
         </div>
       </div>
+
+      <HelpText className="mb-4">
+        Apparatus, personnel, and equipment all get assigned to a station — set these up first before building out
+        the rest of Dept Setup.
+      </HelpText>
 
       {/* Add Station Form */}
       {showForm && isAdmin && (

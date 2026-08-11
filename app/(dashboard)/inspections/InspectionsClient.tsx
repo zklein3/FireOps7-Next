@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import QRScanner from '@/components/QRScanner'
+import HelpText from '@/components/HelpText'
 
 interface Compartment {
   id: string
@@ -115,6 +116,11 @@ export default function InspectionsClient({ apparatus }: { apparatus: Apparatus[
           <span>📷</span> Scan QR
         </button>
       </div>
+
+      <HelpText className="mb-4">
+        Scan a compartment's QR code to jump straight to inspecting it, or pick a unit below and choose Vehicle
+        Check or Inventory Inspection manually.
+      </HelpText>
 
       {scannerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">

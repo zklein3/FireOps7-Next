@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { createApparatus } from '@/app/actions/apparatus'
 import QRScanButton from '@/components/QRScanButton'
+import HelpText from '@/components/HelpText'
 
 interface Station {
   id: string
@@ -99,6 +100,11 @@ export default function ApparatusListClient({
           )}
         </div>
       </div>
+
+      <HelpText className="mb-4">
+        This is the admin roster (edit specs, station, type). For day-to-day vehicle checks and inventory, use the
+        Inventory page instead — it's built around those workflows.
+      </HelpText>
 
       {/* Station Filter */}
       <div className="flex flex-wrap gap-2 mb-4">

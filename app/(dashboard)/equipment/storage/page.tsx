@@ -6,6 +6,7 @@ import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { getPermissionSnapshot } from '@/lib/permissions'
 import BackButton from '@/components/BackButton'
 import StorageClient from './StorageClient'
+import HelpText from '@/components/HelpText'
 
 export default async function StoragePage() {
   const adminClient = createAdminClient()
@@ -205,6 +206,11 @@ export default async function StoragePage() {
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Inventory Storage</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Department-wide unassigned item pool and inventory totals</p>
       </div>
+
+      <HelpText className="mb-4">
+        This is the "unassigned" pool — items not currently loaded on a specific apparatus. Transfer items here
+        to or from a truck as equipment moves around.
+      </HelpText>
 
       {(belowParCount > 0 || missingCount > 0) && (
         <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">

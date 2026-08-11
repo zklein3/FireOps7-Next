@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { createAnnouncement, deleteAnnouncement, pinAnnouncement, markAnnouncementRead } from '@/app/actions/announcements'
 import { formatLocalDateTime } from '@/lib/format-datetime'
+import HelpText from '@/components/HelpText'
 
 type Announcement = {
   id: string
@@ -76,6 +77,11 @@ export default function AnnouncementsClient({
           </button>
         )}
       </div>
+
+      <HelpText className="mb-4">
+        Pinned announcements always stay at the top. Everyone in the department sees these — there's no way to
+        target a specific group or role.
+      </HelpText>
 
       {showForm && (
         <div className="mb-6 rounded-xl bg-white shadow-sm border border-zinc-200 p-5">

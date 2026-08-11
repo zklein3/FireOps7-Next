@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import HelpText from '@/components/HelpText'
 
 type Incident = {
   id: string
@@ -99,6 +100,11 @@ export default function IncidentsClient({
           + New Incident
         </Link>
       </div>
+
+      <HelpText className="mb-4">
+        Shows the last 6 months only — for older incidents or filtered searches, use Run Report under Reports
+        instead.
+      </HelpText>
 
       {isOfficerOrAbove && pendingCount > 0 && (
         <div className="mb-5 rounded-xl bg-yellow-50 border border-yellow-200 px-5 py-3 flex items-center justify-between">

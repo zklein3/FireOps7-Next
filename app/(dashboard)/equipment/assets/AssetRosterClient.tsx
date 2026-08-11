@@ -4,6 +4,7 @@ import { useState, useMemo, useTransition } from 'react'
 import Link from 'next/link'
 import { assignAssetApparatus } from '@/app/actions/equipment'
 import QRScanButton from '@/components/QRScanButton'
+import HelpText from '@/components/HelpText'
 
 type AssetRow = {
   id: string
@@ -191,6 +192,11 @@ export default function AssetRosterClient({
           )}
         </div>
       </div>
+
+      <HelpText className="mb-4">
+        This is a read-only roster of every individually tracked asset — to actually assign one to an apparatus,
+        use Manage Assets in Dept Setup.
+      </HelpText>
 
       {saveError && (
         <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">

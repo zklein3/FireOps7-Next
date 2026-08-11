@@ -6,6 +6,7 @@ import { hasPermission } from '@/lib/permissions'
 import BackButton from '@/components/BackButton'
 import FuelClient from './FuelClient'
 import TankStatusSection from './TankStatusSection'
+import HelpText from '@/components/HelpText'
 
 export default async function FuelPage() {
   const adminClient = createAdminClient()
@@ -108,6 +109,10 @@ export default async function FuelPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Fuel Log</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Department-wide fuel tracking</p>
       </div>
+      <HelpText className="mb-4">
+        This is every fill-up logged across all apparatus. To log one, go to the specific apparatus's Fuel Log from
+        its Inventory card — entries show up here automatically.
+      </HelpText>
       <div className="mb-5">
         <BackButton />
       </div>

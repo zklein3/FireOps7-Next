@@ -6,6 +6,7 @@ import { receiveStock, dispenseStock, administerStock, wasteStock, transferStock
 import { formatLocalDate } from '@/lib/format-datetime'
 import { administeredDoseToVolume } from '@/lib/medical-dose'
 import SignatureCapture, { SignatureCaptureHandle } from './SignatureCapture'
+import HelpText from '@/components/HelpText'
 
 interface Storeroom { id: string; name: string; station_id: string | null; apparatus_id: string | null; compartment_id?: string | null }
 interface InventoryRow { id: string; storeroom_id: string; supply_type_id: string; par_level: number }
@@ -832,6 +833,11 @@ export default function MedicalStoreClient({
           </button>
         </div>
       </div>
+
+      <HelpText className="mb-4">
+        Dispense/Waste both require signatures for controlled substances. Transfer moves stock between this
+        storeroom and an apparatus bag — everything logs to History either way.
+      </HelpText>
 
       {success && <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 border border-green-200">{success}</div>}
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>}

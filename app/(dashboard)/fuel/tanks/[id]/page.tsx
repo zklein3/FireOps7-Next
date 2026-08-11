@@ -4,6 +4,7 @@ import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { hasPermission } from '@/lib/permissions'
 import BackButton from '@/components/BackButton'
 import Link from 'next/link'
+import HelpText from '@/components/HelpText'
 
 const FUEL_LABELS: Record<string, string> = { diesel: 'Diesel', gasoline: 'Gasoline', other: 'Other' }
 const FUEL_COLORS: Record<string, string> = {
@@ -121,6 +122,10 @@ export default async function TankDetailPage({
           )}
         </div>
       </div>
+      <HelpText className="mb-4">
+        The level here updates automatically as apparatus fill up on-site and deliveries are received — it's not
+        something you adjust by hand.
+      </HelpText>
       <div className="mb-5">
         <BackButton href="/fuel" />
       </div>

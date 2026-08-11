@@ -5,6 +5,7 @@ import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { hasPermission } from '@/lib/permissions'
 import Link from 'next/link'
 import MovementLogClient from './MovementLogClient'
+import HelpText from '@/components/HelpText'
 
 export default async function MovementLogPage() {
   const adminClient = createAdminClient()
@@ -136,6 +137,10 @@ export default async function MovementLogPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Movement Log</h1>
         <p className="text-sm text-zinc-500 mt-0.5">All asset and inventory movements — last {logs.length}</p>
       </div>
+      <HelpText className="mb-4">
+        Every transfer between storage, apparatus, and compartments is logged here automatically — it's a history
+        view, nothing to configure.
+      </HelpText>
       <div className="mb-5">
         <Link href="/equipment/storage" className="rounded-lg bg-white border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition-colors shadow-sm">
           ← Storage
