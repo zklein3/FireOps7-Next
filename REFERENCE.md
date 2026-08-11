@@ -214,7 +214,7 @@ Every key here is wired to at least one real gate — the original 55-key catalo
 | `review_burn_permits` | officer | Approve/deny/delete a burn permit · save officer signature · contact a permit holder · Inbox Burn Permits tab |
 
 ### Known Gaps (as of 2026-08-10)
-- **`layout.tsx` nav conditionals** (`isOfficerOrAbove`/`isDeptAdmin`/`viewingSysAdminOverview`) are the one remaining piece still on raw `system_role` — badge counts and nav-item visibility, not access control (every page/action they point at is already migrated).
+None — every real `system_role`-based authorization gate in `app/` (including `layout.tsx` nav conditionals and Inbox tab visibility) is resolver-backed. `viewingSysAdminOverview` is untouched by design, since it governs the platform-level sys-admin bypass, not a department permission.
 
 ---
 
