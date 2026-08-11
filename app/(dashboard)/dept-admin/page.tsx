@@ -5,6 +5,7 @@ import { hasPermission, getPermissionSnapshot } from '@/lib/permissions'
 import Image from 'next/image'
 import HubCard from '@/components/HubCard'
 import FuelStorageToggle from './FuelStorageToggle'
+import HelpText from '@/components/HelpText'
 
 export default async function DeptAdminPage() {
   const adminClient = createAdminClient()
@@ -52,6 +53,11 @@ export default async function DeptAdminPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Dept Admin</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Department configuration and management</p>
       </div>
+
+      <HelpText className="mb-4">
+        Cards here only show if your permission group grants that specific capability — Permission Groups is where
+        you control who sees what, for yourself and everyone else in the department.
+      </HelpText>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {perms.manage_users && (

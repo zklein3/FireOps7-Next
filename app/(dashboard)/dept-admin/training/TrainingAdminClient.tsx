@@ -14,6 +14,7 @@ import {
   reviewTrainingSubmission,
 } from '@/app/actions/training'
 import { formatLocalDateTime } from '@/lib/format-datetime'
+import HelpText from '@/components/HelpText'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 const checkCls = "rounded border-zinc-300 text-red-600 focus:ring-red-500"
@@ -148,6 +149,11 @@ export default function TrainingAdminClient({
         <h1 className="text-2xl font-bold text-zinc-900">Training</h1>
         <p className="text-sm text-zinc-500 mt-0.5">{departmentId && 'Cert types, enrollments, and training events'}</p>
       </div>
+
+      <HelpText className="mb-4">
+        Create cert types here, then assign them to members (individually or dept-wide) to enroll them. Outside
+        training submissions from members show under the Submissions tab, pending your approval.
+      </HelpText>
 
       {success && <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 border border-green-200">{success}</div>}
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>}

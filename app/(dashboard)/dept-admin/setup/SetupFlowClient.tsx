@@ -8,6 +8,7 @@ import ApparatusStep from './ApparatusStep'
 import CompartmentsStep from './CompartmentsStep'
 import ItemsStep from './ItemsStep'
 import InventoryStep from './InventoryStep'
+import HelpText from '@/components/HelpText'
 
 const TABS = [
   { id: 'stations',     label: 'Stations'      },
@@ -71,6 +72,11 @@ export default function SetupFlowClient({
           <p className="text-sm text-zinc-500 mt-0.5">{department.name}</p>
         </div>
       </div>
+
+      <HelpText className="mb-4">
+        Set these up roughly in order: Stations, then Apparatus (assigned to a station), then Compartments (on an
+        apparatus), then Items — each step depends on the one before it existing first.
+      </HelpText>
 
       {/* Tabs — mobile: horizontal scroll, desktop: left rail */}
       <div className="md:hidden flex gap-2 overflow-x-auto pb-2 mb-4">

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createKioskDevice, revokeKioskDevice } from '@/app/actions/kiosk'
+import HelpText from '@/components/HelpText'
 
 interface Device {
   id: string
@@ -53,6 +54,11 @@ export default function KioskDevicesClient({ devices: initialDevices }: { device
           A kiosk device lets a shared station tablet scan people in/out without anyone logging in on it. Set one up once, then leave the tablet on the <span className="font-mono">/kiosk</span> page.
         </p>
       </div>
+
+      <HelpText className="mb-4">
+        The device credential is shown once at creation — if you navigate away before saving it on the tablet,
+        you'll need to revoke the device and create a new one. Revoking locks that tablet out immediately.
+      </HelpText>
 
       {newCredential && (
         <div className="mb-6 rounded-xl bg-amber-50 border border-amber-300 p-5">

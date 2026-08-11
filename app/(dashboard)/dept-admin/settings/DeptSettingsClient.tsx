@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { saveDeptTimezone, saveWeeklyDigestEnabled } from '@/app/actions/departments'
 import { TIMEZONES } from '@/lib/format-datetime'
+import HelpText from '@/components/HelpText'
 
 export default function DeptSettingsClient({
   departmentId,
@@ -43,6 +44,11 @@ export default function DeptSettingsClient({
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Department Settings</h1>
         <p className="text-sm text-zinc-500 mt-1">Timezone and display preferences for this department.</p>
       </div>
+
+      <HelpText className="mb-4">
+        Getting the timezone right here matters — it's what every timestamp across the app (sign-ins, inspections,
+        certs) displays in, so it should match where your department is actually located.
+      </HelpText>
 
       <div className="rounded-xl bg-white border border-zinc-200 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-zinc-900 mb-1">Timezone</h2>

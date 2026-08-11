@@ -5,6 +5,7 @@ import { hasPermission } from '@/lib/permissions'
 import { getVehicleCheckItems } from '@/app/actions/inspections'
 import DeptInspectionSettingsClient from './DeptInspectionSettingsClient'
 import VehicleCheckItemsClient from './VehicleCheckItemsClient'
+import HelpText from '@/components/HelpText'
 
 export default async function DeptInspectionSettingsPage({
   searchParams,
@@ -35,6 +36,11 @@ export default async function DeptInspectionSettingsPage({
         <h1 className="text-2xl font-bold text-zinc-900">Inspection Settings</h1>
         <p className="text-sm text-zinc-500 mt-1">Configure inspection sessions and vehicle check items for your department.</p>
       </div>
+
+      <HelpText className="mb-4">
+        Vehicle Check Items controls exactly what members see on a Vehicle Check — add, edit, reorder, or toggle
+        apparatus-specific groups like Air Brakes. Changes apply the next time anyone starts a check.
+      </HelpText>
 
       {/* Tabs */}
       <div className="flex border-b border-zinc-200 mb-6">

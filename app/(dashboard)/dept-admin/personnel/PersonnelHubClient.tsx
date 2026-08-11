@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import DeptPersonnelClient from './DeptPersonnelClient'
 import AttendanceSettingsClient from '../attendance/AttendanceSettingsClient'
+import HelpText from '@/components/HelpText'
 
 const TABS = [
   { id: 'members',    label: 'Members'    },
@@ -45,6 +46,11 @@ export default function PersonnelHubClient({
         <h1 className="text-2xl font-bold text-zinc-900">Personnel</h1>
         <p className="text-sm text-zinc-500 mt-0.5">{departmentName}</p>
       </div>
+
+      <HelpText className="mb-4">
+        Add new members here, assign their permission group or legacy role, and use "Reset Password" if someone's
+        locked out — it resets to a temporary password they'll be required to change on next login.
+      </HelpText>
 
       {/* Mobile tabs */}
       <div className="md:hidden flex gap-2 overflow-x-auto pb-2 mb-4">

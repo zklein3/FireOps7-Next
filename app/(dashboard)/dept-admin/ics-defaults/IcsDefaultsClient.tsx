@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import PageNavBar from '@/components/PageNavBar'
 import { addRadioChannel, toggleRadioChannel, addMedicalPlanContact, toggleMedicalPlanContact } from '@/app/actions/ics-defaults'
+import HelpText from '@/components/HelpText'
 
 interface Channel { id: string; channel_name: string; assignment: string | null; active: boolean }
 interface Contact { id: string; contact_type: string; name: string; phone: string | null; address: string | null; active: boolean }
@@ -57,6 +58,11 @@ export default function IcsDefaultsClient({ departmentId, channels: initialChann
       <PageNavBar />
       <h1 className="text-xl font-bold text-zinc-900 mb-1">ICS Defaults</h1>
       <p className="text-sm text-zinc-500 mb-6">Copied into every new operational period when it's opened — edit per-incident from there without changing these defaults.</p>
+
+      <HelpText className="mb-4">
+        Only active channels/contacts here get copied into a new ICS 205/206 packet — deactivate rather than delete
+        if you might reuse one later.
+      </HelpText>
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 

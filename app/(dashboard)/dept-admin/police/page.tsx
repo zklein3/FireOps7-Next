@@ -7,6 +7,7 @@ import {
 } from '@/app/actions/pd-contacts'
 import PdListClient from './PdListClient'
 import PdCaseNumberClient from './PdCaseNumberClient'
+import HelpText from '@/components/HelpText'
 
 export default async function PoliceSettingsPage({
   searchParams,
@@ -49,6 +50,11 @@ export default async function PoliceSettingsPage({
         <h1 className="text-2xl font-bold text-zinc-900">Police Settings</h1>
         <p className="text-sm text-zinc-500 mt-1">Configure contact types, action-taken options, and case numbering for the Contact Log.</p>
       </div>
+
+      <HelpText className="mb-4">
+        These options drive the dropdowns officers see on Contact Form and Business Check — add or retire options
+        here rather than typing free text, so reports stay consistent.
+      </HelpText>
 
       <div className="flex border-b border-zinc-200 mb-6">
         <a

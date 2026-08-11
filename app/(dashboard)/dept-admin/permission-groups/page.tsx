@@ -3,6 +3,7 @@ import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { hasPermission } from '@/lib/permissions'
 import { getPermissionGroups } from '@/app/actions/permissions'
 import PermissionGroupsClient from './PermissionGroupsClient'
+import HelpText from '@/components/HelpText'
 
 export default async function PermissionGroupsPage() {
   const ctx = await getCurrentDepartmentContext()
@@ -20,6 +21,12 @@ export default async function PermissionGroupsPage() {
           Customize what each role can do. Departments start with Chief, Officer, and Firefighter — rename, extend, or add your own.
         </p>
       </div>
+
+      <HelpText className="mb-4">
+        Careful editing your own group — removing your own Dept Admin Hub or Manage Permission Groups access can
+        lock you out with no self-service way back in. "Reset to Default" restores a group's original checkboxes
+        at any time.
+      </HelpText>
 
       <PermissionGroupsClient departmentId={ctx.departmentId} initialGroups={groups} />
     </div>

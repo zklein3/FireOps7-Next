@@ -9,6 +9,7 @@ import {
   reactivateFuelTank,
 } from '@/app/actions/fuel-tanks'
 import ReceiveDeliveryForm from './ReceiveDeliveryForm'
+import HelpText from '@/components/HelpText'
 
 type Delivery = {
   id: string
@@ -144,6 +145,11 @@ export default function FuelTanksClient({
           + Add Tank
         </button>
       </div>
+
+      <HelpText className="mb-4">
+        Once a tank is set up, gallons automatically deduct here whenever an apparatus fills up on-site through the
+        Fuel Log — logging a delivery is the only manual entry needed.
+      </HelpText>
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>

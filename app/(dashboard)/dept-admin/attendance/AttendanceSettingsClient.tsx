@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createExcuseType, saveParticipationRequirement } from '@/app/actions/attendance'
 import { useRouter } from 'next/navigation'
+import HelpText from '@/components/HelpText'
 
 interface ExcuseType { id: string; excuse_name: string; active: boolean }
 interface Requirement { id: string; event_type: string; minimum_percentage: number; period: string; active: boolean }
@@ -53,6 +54,11 @@ export default function AttendanceSettingsClient({
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Attendance Settings</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Configure excuse types and participation requirements</p>
       </div>
+
+      <HelpText className="mb-4">
+        Excuse types show as options when a member requests an excuse — add ones that match how your department
+        actually tracks absences (illness, work conflict, etc).
+      </HelpText>
 
       {success && <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 border border-green-200">{success}</div>}
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>}

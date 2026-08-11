@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { addLaneTemplate, updateLaneTemplate, toggleLaneTemplate, reorderLaneTemplates } from '@/app/actions/accountability'
+import HelpText from '@/components/HelpText'
 
 interface Lane {
   id: string
@@ -97,6 +98,11 @@ export default function AccountabilitySettingsClient({
         <h1 className="text-xl font-bold text-zinc-900">Accountability Lanes</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Built-in presets are used until you set your own — customize any profile below.</p>
       </div>
+
+      <HelpText className="mb-4">
+        Different profiles (default, ICS/NIMS Mode, Active Violence) let you swap lane sets based on incident type
+        — these are the lanes copied into a new board when someone clicks "Start Accountability."
+      </HelpText>
 
       <div className="flex gap-1 mb-4 border-b border-zinc-200">
         {profiles.map(p => (

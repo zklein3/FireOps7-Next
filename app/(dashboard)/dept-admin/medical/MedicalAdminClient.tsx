@@ -9,6 +9,7 @@ import {
   createBagTemplate, updateBagTemplate, addTemplateItem, removeTemplateItem,
   assignBagToApparatus, removeBagFromApparatus,
 } from '@/app/actions/medical'
+import HelpText from '@/components/HelpText'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 
@@ -211,6 +212,11 @@ export default function MedicalAdminClient({
         <h1 className="text-2xl font-bold text-zinc-900">Medical</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Supply types, storerooms, and medical inventory configuration</p>
       </div>
+
+      <HelpText className="mb-4">
+        Storerooms cover station storage; Bags are apparatus-linked templates. Set a PAR level on each supply so the
+        Medical Supplies report and Inbox Restock tab can flag it before you run out.
+      </HelpText>
 
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>}
       {success && <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 border border-green-200">{success}</div>}

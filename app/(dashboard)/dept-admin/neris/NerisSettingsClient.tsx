@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { saveDeptAdminNerisEntityId, testNerisConnection } from '@/app/actions/departments'
+import HelpText from '@/components/HelpText'
 
 const STEPS = [
   {
@@ -83,6 +84,11 @@ export default function NerisSettingsClient({
           Connect your department to the National Emergency Response Information System for incident reporting.
         </p>
       </div>
+
+      <HelpText className="mb-4">
+        This connects your department's account, but doesn't submit anything by itself — individual incidents still
+        need their own required fields completed and get submitted from the incident's own detail page.
+      </HelpText>
 
       {/* Status banner */}
       {isConnected ? (

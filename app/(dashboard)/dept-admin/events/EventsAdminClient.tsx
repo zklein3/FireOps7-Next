@@ -7,6 +7,7 @@ import { toggleEventSeriesPublic } from '@/app/actions/public-site'
 import { generateCheckinToken } from '@/app/actions/checkin'
 import EventAttendanceSignaturePadModal from '@/app/(dashboard)/signatures/EventAttendanceSignaturePadModal'
 import { formatLocalDateTime } from '@/lib/format-datetime'
+import HelpText from '@/components/HelpText'
 
 interface AttendanceRecord {
   id: string
@@ -385,6 +386,11 @@ export default function EventsAdminClient({
           + New Event
         </button>
       </div>
+
+      <HelpText className="mb-6">
+        Bulk-log attendance for a whole roster at once, approve or deny pending excuse requests, and close an event
+        once it's done. Editing an existing event changes that occurrence only, not the whole recurring series.
+      </HelpText>
 
       {success && <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 border border-green-200">{success}</div>}
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>}

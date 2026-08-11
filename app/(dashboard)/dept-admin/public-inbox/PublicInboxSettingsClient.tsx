@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { saveDeptInboxSettings } from '@/app/actions/public-site'
 import CountyContactsEditor from '@/components/CountyContactsEditor'
+import HelpText from '@/components/HelpText'
 
 export default function PublicInboxSettingsClient({
   departmentId,
@@ -31,6 +32,11 @@ export default function PublicInboxSettingsClient({
         <h1 className="text-2xl font-bold text-zinc-900">Public Inbox Settings</h1>
         <p className="text-sm text-zinc-500 mt-1">Configure burn permit and records request forms shown to the public.</p>
       </div>
+
+      <HelpText className="mb-4">
+        This controls what residents see on your public site's burn permit form — county info, restrictions text,
+        and contacts. Submissions themselves are reviewed in the Inbox, not here.
+      </HelpText>
 
       {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
       {success && <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">{success}</div>}
