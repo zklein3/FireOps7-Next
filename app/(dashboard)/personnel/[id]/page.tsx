@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { listBiometricCredentials } from '@/app/actions/biometric'
 import PersonnelProfileClient from './PersonnelProfileClient'
 
@@ -20,7 +21,7 @@ export default async function PersonnelProfilePage({ params }: { params: Promise
   const isOfficerOrAbove = isAdmin || systemRole === 'officer'
   const isMe = ctx.personnelId === id
 
-  if (!isOfficerOrAbove && !isMe) redirect('/personnel')
+  if (!isMe && !(await hasPermission(ctx, 'view_personnel_details'))) redirect('/personnel')
 
   const { data: personList } = await adminClient
     .from('personnel')

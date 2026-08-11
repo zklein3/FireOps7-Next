@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import { redirect, notFound } from 'next/navigation'
 import IcsIncidentClient from './IcsIncidentClient'
 
@@ -119,8 +120,9 @@ export default async function IcsIncidentPage({ params }: { params: Promise<{ id
   const { data: shifts } = await adminClient
     .from('department_shifts').select('id, name').eq('department_id', departmentId).eq('active', true).order('sort_order')
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
-  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
+  const icsPermissions = await getPermissionSnapshot(ctx)
+  const isOfficerOrAbove = icsPermissions.manage_ics_incidents
+  const isAdmin = icsPermissions.delete_ics_incidents
   const isOwner = incident.department_id === departmentId
 
   return (

@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
@@ -12,14 +13,14 @@ async function getContext() {
     me: { id: ctx.personnelId, is_sys_admin: ctx.isSysAdmin },
     department_id: ctx.departmentId,
     system_role: ctx.systemRole,
-    isOfficerOrAbove: ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin,
-    isAdmin: ctx.systemRole === 'admin' || ctx.isSysAdmin,
+    fullCtx: ctx,
   }
 }
 
 export async function createAnnouncement(formData: FormData) {
   const ctx = await getContext()
-  if (!ctx || !ctx.isOfficerOrAbove || !ctx.department_id) return { error: 'Unauthorized' }
+  if (!ctx || !ctx.department_id) return { error: 'Unauthorized' }
+  if (!(await hasPermission(ctx.fullCtx, 'post_update'))) return { error: 'Unauthorized' }
 
   const title = (formData.get('title') as string)?.trim()
   const body = (formData.get('body') as string)?.trim()
@@ -44,7 +45,8 @@ export async function createAnnouncement(formData: FormData) {
 
 export async function deleteAnnouncement(id: string) {
   const ctx = await getContext()
-  if (!ctx || !ctx.isAdmin) return { error: 'Unauthorized' }
+  if (!ctx) return { error: 'Unauthorized' }
+  if (!(await hasPermission(ctx.fullCtx, 'moderate_announcements'))) return { error: 'Unauthorized' }
 
   const adminClient = createAdminClient()
   const { error: dbErr } = await adminClient.from('announcements').delete().eq('id', id)
@@ -60,7 +62,8 @@ export async function deleteAnnouncement(id: string) {
 
 export async function pinAnnouncement(id: string, pinned: boolean) {
   const ctx = await getContext()
-  if (!ctx || !ctx.isAdmin) return { error: 'Unauthorized' }
+  if (!ctx) return { error: 'Unauthorized' }
+  if (!(await hasPermission(ctx.fullCtx, 'moderate_announcements'))) return { error: 'Unauthorized' }
 
   const adminClient = createAdminClient()
   const { error: dbErr } = await adminClient.from('announcements').update({ pinned }).eq('id', id)

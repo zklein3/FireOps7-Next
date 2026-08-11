@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import EquipmentDetailClient from './EquipmentDetailClient'
 import MedicalBagsSection from '@/app/(dashboard)/apparatus/[id]/MedicalBagsSection'
 import MedicalCompartmentsSection from '@/app/(dashboard)/apparatus/[id]/MedicalCompartmentsSection'
@@ -23,8 +24,9 @@ export default async function EquipmentDetailPage({
   if (!ctx.departmentId) redirect('/dashboard')
   const me = { id: ctx.personnelId }
 
-  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
-  const isOfficerOrAbove = isAdmin || ctx.systemRole === 'officer'
+  const equipmentPermissions = await getPermissionSnapshot(ctx)
+  const isAdmin = equipmentPermissions.manage_apparatus
+  const isOfficerOrAbove = equipmentPermissions.manage_inventory
 
   // Fetch apparatus
   const { data: apparatusList } = await adminClient

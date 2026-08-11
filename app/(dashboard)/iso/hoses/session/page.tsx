@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import HoseTestSessionClient from './HoseTestSessionClient'
 
 export default async function HoseTestSessionPage() {
@@ -15,8 +16,7 @@ export default async function HoseTestSessionPage() {
   const { data: deptFlags } = await adminClient.from('departments').select('module_iso').eq('id', ctx.departmentId).single()
   if (!deptFlags?.module_iso) redirect('/dashboard')
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
-  if (!isOfficerOrAbove) redirect('/iso/hoses')
+  if (!(await hasPermission(ctx, 'perform_iso_testing'))) redirect('/iso/hoses')
 
   const { data: hosesRaw } = await adminClient
     .from('hoses')

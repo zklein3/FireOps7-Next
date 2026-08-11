@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 import { DEFAULT_PERMISSION_TEMPLATES } from '@/lib/permission-catalog'
@@ -12,7 +13,7 @@ async function getContext() {
   return {
     me: { id: ctx.personnelId, is_sys_admin: ctx.isSysAdmin },
     department_id: ctx.departmentId,
-    isAdmin: ctx.systemRole === 'admin' || ctx.isSysAdmin,
+    isAdmin: await hasPermission(ctx, 'manage_permission_groups'),
   }
 }
 

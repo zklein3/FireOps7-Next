@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
@@ -12,7 +13,7 @@ export async function createApparatus(formData: FormData) {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Session expired.' }
   if (!ctx.departmentId) return { error: 'No department selected.' }
-  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) {
+  if (!(await hasPermission(ctx, 'manage_apparatus'))) {
     return { error: 'Only admins can add apparatus.' }
   }
 
@@ -60,7 +61,7 @@ export async function updateApparatus(formData: FormData) {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Session expired.' }
-  if (ctx.systemRole === 'member' && !ctx.isSysAdmin) {
+  if (!(await hasPermission(ctx, 'change_apparatus_service_status'))) {
     return { error: 'Members cannot edit apparatus.' }
   }
 
@@ -78,7 +79,7 @@ export async function updateApparatus(formData: FormData) {
   const station_id = formData.get('station_id') as string
 
   // Active status + ISO exclusion + air brakes — admin only
-  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
+  const isAdmin = await hasPermission(ctx, 'manage_apparatus')
   const active = isAdmin ? formData.get('active') === 'true' : undefined
   const exclude_from_iso = isAdmin ? formData.get('exclude_from_iso') === 'on' : undefined
   const has_air_brakes = isAdmin ? formData.get('has_air_brakes') === 'on' : undefined

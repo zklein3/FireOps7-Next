@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import RunReportClient from './RunReportClient'
 
 export type RunReportRow = {
@@ -38,7 +39,7 @@ export default async function RunReportPage({
   if (!ctx) redirect('/login')
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
-  if (ctx.systemRole === 'member' && !ctx.isSysAdmin) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_incidents'))) redirect('/dashboard')
 
   const department_id = ctx.departmentId
 

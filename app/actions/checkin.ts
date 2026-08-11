@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { createCheckinToken, type CheckinType } from '@/lib/checkin-token'
 
 const TTL_MS: Record<CheckinType, number> = {
@@ -13,7 +14,7 @@ const TTL_MS: Record<CheckinType, number> = {
 export async function generateCheckinToken(type: CheckinType, id: string) {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx?.departmentId) return { error: 'Not authenticated.' }
-  if (ctx.systemRole !== 'admin' && ctx.systemRole !== 'officer' && !ctx.isSysAdmin) {
+  if (!(await hasPermission(ctx, 'manage_events'))) {
     return { error: 'Officers and admins only.' }
   }
 

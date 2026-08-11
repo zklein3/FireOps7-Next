@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import ApparatusListClient from './ApparatusListClient'
 
 export default async function ApparatusPage() {
@@ -12,9 +13,9 @@ export default async function ApparatusPage() {
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const systemRole = ctx.systemRole
-  const isAdmin = systemRole === 'admin' || ctx.isSysAdmin
-  const isOfficerOrAbove = isAdmin || systemRole === 'officer'
+  const apparatusPermissions = await getPermissionSnapshot(ctx)
+  const isAdmin = apparatusPermissions.manage_apparatus
+  const isOfficerOrAbove = apparatusPermissions.change_apparatus_service_status
 
   // Fetch stations
   const { data: stations } = await adminClient

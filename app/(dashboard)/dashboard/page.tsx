@@ -3,6 +3,7 @@ import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import SysAdminDashboard from './SysAdminDashboard'
 import DashboardAnnouncementBanner from './DashboardAnnouncementBanner'
 import HubCard from '@/components/HubCard'
@@ -180,9 +181,9 @@ export default async function DashboardPage() {
   const publicSiteUrl = deptData?.public_site_enabled && deptData?.public_slug
     ? `/dept/${deptData.public_slug}`
     : null
-  const systemRole = ctx.systemRole
-  const isAdmin = systemRole === 'admin'
-  const isOfficerOrAbove = isAdmin || systemRole === 'officer'
+  const dashboardPermissions = await getPermissionSnapshot(ctx)
+  const isAdmin = dashboardPermissions.access_dept_admin_hub
+  const isOfficerOrAbove = dashboardPermissions.access_officer_hub || isAdmin
 
   const [data, unreadAnnouncements, pendingInbox] = await Promise.all([
     getDashboardData(departmentId, ctx.personnelId),

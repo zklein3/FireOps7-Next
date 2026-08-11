@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
@@ -10,7 +11,7 @@ async function getContext() {
   if (!ctx) return null
   return {
     department_id: ctx.departmentId,
-    isOfficerOrAbove: ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin,
+    isOfficerOrAbove: await hasPermission(ctx, 'manage_pd_logs'),
   }
 }
 

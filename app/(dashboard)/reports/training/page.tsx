@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import TrainingReportClient from './TrainingReportClient'
 
 export type CertRow = {
@@ -56,9 +57,8 @@ export default async function TrainingReportPage({
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const system_role = ctx.systemRole
   const department_id = ctx.departmentId
-  if (system_role === 'member' && !ctx.isSysAdmin) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'record_training_completion'))) redirect('/dashboard')
 
   const defaultTo = new Date()
   const defaultFrom = new Date()

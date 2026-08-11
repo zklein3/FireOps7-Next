@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentPath } from '@/lib/current-path'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { getOrCreateInspectionSession } from '@/app/actions/inspections'
 import { formatLocalDateTime } from '@/lib/format-datetime'
 import InspectionSessionClient from './InspectionSessionClient'
@@ -20,7 +21,7 @@ export default async function InspectionSessionPage({
   if (!ctx.departmentId) redirect('/dashboard')
   const me = { id: ctx.personnelId }
 
-  const isOfficerOrAdmin = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
+  const isOfficerOrAdmin = await hasPermission(ctx, 'manage_inspection_sessions')
 
   const { data: appList } = await adminClient
     .from('apparatus')

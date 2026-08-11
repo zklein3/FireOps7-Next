@@ -1,12 +1,14 @@
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { getPermissionGroups } from '@/app/actions/permissions'
 import PermissionGroupsClient from './PermissionGroupsClient'
 
 export default async function PermissionGroupsPage() {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && !ctx.isSysAdmin)) redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_permission_groups'))) redirect('/dashboard')
 
   const { groups } = await getPermissionGroups(ctx.departmentId)
 

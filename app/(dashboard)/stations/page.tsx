@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import StationsListClient from './StationsListClient'
 
 export default async function StationsPage() {
@@ -12,7 +13,7 @@ export default async function StationsPage() {
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
+  const isAdmin = await hasPermission(ctx, 'manage_dept_setup')
 
   // Fetch stations
   const { data: stations } = await adminClient

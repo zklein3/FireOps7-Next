@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import InboxClient from './InboxClient'
 
 export default async function InboxPage({
@@ -21,7 +22,11 @@ export default async function InboxPage({
 
   const me = { id: ctx.personnelId, first_name: ctx.firstName, last_name: ctx.lastName }
   const department_id = ctx.departmentId
-  const isOfficerOrAbove = ctx.isSysAdmin || ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
+  const inboxPermissions = await getPermissionSnapshot(ctx)
+  const canReviewPermits = inboxPermissions.review_burn_permits ?? false
+  const canManageInbox = inboxPermissions.manage_public_inbox ?? false
+  const canManageMedical = inboxPermissions.manage_medical_inventory ?? false
+  const hasAnyOfficerInboxAccess = canReviewPermits || canManageInbox || canManageMedical
 
   // Pending signatures — all members (incident + event)
   const [{ data: pendingIncidentSigs }, { data: pendingEventSigs }] = await Promise.all([
@@ -90,18 +95,24 @@ export default async function InboxPage({
   let expiredLots: { supply_name: string; storeroom_name: string; quantity_remaining: number; expiration_date: string; lot_number: string | null; go_to_href: string }[] = []
   let feedbackItems: any[] = []
 
-  if (isOfficerOrAbove && department_id) {
+  if (hasAnyOfficerInboxAccess && department_id) {
     const [deptRes, permitsRes, recordsRes, feedbackRes] = await Promise.all([
       adminClient.from('departments').select('name, burn_permit_county_info, burn_permit_restrictions, module_medical, public_site_enabled').eq('id', department_id).single(),
-      adminClient.from('burn_permits')
-        .select('id, confirmation_code, contact_name, contact_email, contact_phone, burn_address, burn_date, burn_description, status, reviewer_notes, permit_expiry_date, issued_date, approved_by_personnel_id, officer_signed_at, applicant_signed_at, applicant_acknowledged_at, created_at')
-        .eq('department_id', department_id).order('created_at', { ascending: false }),
-      adminClient.from('public_record_requests')
-        .select('id, confirmation_code, contact_name, contact_email, contact_phone, request_type, description, incident_date, incident_address, status, reviewer_notes, created_at')
-        .eq('department_id', department_id).order('created_at', { ascending: false }),
-      adminClient.from('public_feedback')
-        .select('id, feedback_type, contact_name, contact_email, message, page_url, status, reviewer_notes, reply_message, replied_at, replied_by_personnel_id, created_at')
-        .eq('department_id', department_id).order('created_at', { ascending: false }),
+      canReviewPermits
+        ? adminClient.from('burn_permits')
+            .select('id, confirmation_code, contact_name, contact_email, contact_phone, burn_address, burn_date, burn_description, status, reviewer_notes, permit_expiry_date, issued_date, approved_by_personnel_id, officer_signed_at, applicant_signed_at, applicant_acknowledged_at, created_at')
+            .eq('department_id', department_id).order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+      canManageInbox
+        ? adminClient.from('public_record_requests')
+            .select('id, confirmation_code, contact_name, contact_email, contact_phone, request_type, description, incident_date, incident_address, status, reviewer_notes, created_at')
+            .eq('department_id', department_id).order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+      canManageInbox
+        ? adminClient.from('public_feedback')
+            .select('id, feedback_type, contact_name, contact_email, message, page_url, status, reviewer_notes, reply_message, replied_at, replied_by_personnel_id, created_at')
+            .eq('department_id', department_id).order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
     ])
     deptConfig = deptRes.data
     feedbackItems = feedbackRes.data ?? []
@@ -120,7 +131,7 @@ export default async function InboxPage({
     }
 
     // Reorder requests + expired lots (medical module)
-    if (deptConfig?.module_medical) {
+    if (deptConfig?.module_medical && canManageMedical) {
       const today = new Date().toISOString().split('T')[0]
 
       const [{ data: reorderRaw }, { data: expiredLotsRaw }] = await Promise.all([
@@ -217,13 +228,15 @@ export default async function InboxPage({
   const moduleMedical = deptConfig?.module_medical ?? false
   const publicSiteEnabled = deptConfig?.public_site_enabled ?? false
   const validTabs = [
-    'signatures', 'feedback',
-    ...(publicSiteEnabled && isOfficerOrAbove ? ['permits', 'records'] : []),
-    ...(moduleMedical && isOfficerOrAbove ? ['restock'] : []),
+    'signatures',
+    ...(canManageInbox ? ['feedback'] : []),
+    ...(publicSiteEnabled && canReviewPermits ? ['permits'] : []),
+    ...(publicSiteEnabled && canManageInbox ? ['records'] : []),
+    ...(moduleMedical && canManageMedical ? ['restock'] : []),
   ]
   const initialTab = validTabs.includes(tab ?? '')
     ? tab!
-    : (publicSiteEnabled && isOfficerOrAbove ? 'permits' : 'signatures')
+    : (publicSiteEnabled && canReviewPermits ? 'permits' : 'signatures')
 
   return (
     <InboxClient
@@ -235,7 +248,9 @@ export default async function InboxPage({
       feedbackItems={feedbackItems}
       memberName={`${me.first_name} ${me.last_name}`.trim()}
       initialTab={initialTab as any}
-      isOfficerOrAbove={isOfficerOrAbove}
+      canReviewPermits={canReviewPermits}
+      canManageInbox={canManageInbox}
+      canManageMedical={canManageMedical}
       moduleMedical={moduleMedical}
       publicSiteEnabled={publicSiteEnabled}
       deptName={deptConfig?.name ?? null}

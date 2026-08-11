@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import TrainingAdminClient from './TrainingAdminClient'
 
 export default async function TrainingAdminPage() {
@@ -8,7 +9,8 @@ export default async function TrainingAdminPage() {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && ctx.systemRole !== 'officer')) redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'record_training_completion'))) redirect('/dashboard')
 
   const isAdmin = ctx.systemRole === 'admin'
   const department_id = ctx.departmentId

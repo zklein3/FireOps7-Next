@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import BackButton from '@/components/BackButton'
 import FuelClient from '@/app/(dashboard)/fuel/FuelClient'
 
@@ -18,7 +19,7 @@ export default async function ApparatusFuelPage({
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
+  const isOfficerOrAbove = await hasPermission(ctx, 'manage_fuel_log')
   const department_id = ctx.departmentId
 
   const { data: apparatus } = await adminClient.from('apparatus')

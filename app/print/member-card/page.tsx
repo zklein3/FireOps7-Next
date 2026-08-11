@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import MemberCardClient from './MemberCardClient'
 
 export default async function MemberCardPage({
@@ -20,10 +21,9 @@ export default async function MemberCardPage({
   if (!ctx) redirect('/login')
   const me = { id: ctx.personnelId, is_sys_admin: ctx.isSysAdmin }
 
-  const isOfficerOrAbove = ctx.isSysAdmin || ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
   const isMe = me.id === id
 
-  if (!isOfficerOrAbove && !isMe) redirect('/personnel')
+  if (!isMe && !(await hasPermission(ctx, 'view_personnel_details'))) redirect('/personnel')
 
   const { data: person } = await adminClient
     .from('personnel')

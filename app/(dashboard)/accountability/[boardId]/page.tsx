@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect, notFound } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import AccountabilityBoard from '../AccountabilityBoard'
 import BoardHeader from './BoardHeader'
 
@@ -21,8 +22,9 @@ export default async function AccountabilityBoardPage({
   const me = { id: ctx.personnelId, first_name: ctx.firstName, last_name: ctx.lastName }
 
   const department_id = ctx.departmentId
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
-  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
+  const boardPermissions = await getPermissionSnapshot(ctx)
+  const isOfficerOrAbove = boardPermissions.manage_accountability_boards
+  const isAdmin = boardPermissions.delete_accountability_boards
 
   const { data: deptFlags } = await adminClient.from('departments').select('module_ics').eq('id', department_id).single()
   const moduleIcs = deptFlags?.module_ics ?? false

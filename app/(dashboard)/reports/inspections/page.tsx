@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import InspectionReportClient from './InspectionReportClient'
 
 export type StepRow = {
@@ -62,9 +63,8 @@ export default async function InspectionReportPage({
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const system_role = ctx.systemRole
   const department_id = ctx.departmentId
-  if (system_role === 'member' && !ctx.isSysAdmin) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_inspection_sessions'))) redirect('/dashboard')
 
   const defaultTo = new Date()
   const defaultFrom = new Date()

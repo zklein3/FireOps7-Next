@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import NewIcsIncidentForm from './NewIcsIncidentForm'
@@ -37,7 +38,7 @@ export default async function IcsListPage() {
   const incidentDeptNameById = Object.fromEntries((incidentDepartments ?? []).map(d => [d.id, d.name]))
   const incidents = (incidentsRaw ?? []).map(i => ({ ...i, department_name: incidentDeptNameById[i.department_id] ?? '—' }))
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
+  const isOfficerOrAbove = await hasPermission(ctx, 'manage_ics_incidents')
 
   // Recent boards/incidents for the "new" form
   const { data: boards } = await adminClient

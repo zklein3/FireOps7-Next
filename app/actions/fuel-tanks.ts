@@ -2,13 +2,14 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { revalidatePath } from 'next/cache'
 import { logError } from '@/lib/logger'
 
 async function getAdminCtx() {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Not authenticated.' as string, ctx: null }
-  if (ctx.systemRole !== 'admin') return { error: 'Admins only.' as string, ctx: null }
+  if (!(await hasPermission(ctx, 'manage_fuel_storage'))) return { error: 'Admins only.' as string, ctx: null }
   if (!ctx.departmentId) return { error: 'No department found.' as string, ctx: null }
   return { error: null, ctx }
 }

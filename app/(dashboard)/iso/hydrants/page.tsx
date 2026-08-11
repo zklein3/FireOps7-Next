@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import HydrantsClient from './HydrantsClient'
 
 export default async function HydrantsPage() {
@@ -17,7 +18,7 @@ export default async function HydrantsPage() {
   if (!deptFlags?.module_iso) redirect('/dashboard')
 
   const department_id = ctx.departmentId
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer'
+  const isOfficerOrAbove = await hasPermission(ctx, 'perform_iso_testing')
 
   // Fetch hydrants
   const { data: hydrantsRaw } = await adminClient

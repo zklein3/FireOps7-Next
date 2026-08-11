@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
@@ -23,8 +24,8 @@ async function getContext() {
     user_id: user?.id ?? null,
     department_id: ctx.departmentId,
     system_role: ctx.systemRole,
-    isAdmin: ctx.systemRole === 'admin' || ctx.isSysAdmin,
-    isOfficerOrAbove: ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin,
+    isAdmin: await hasPermission(ctx, 'manage_equipment_standard'),
+    isOfficerOrAbove: await hasPermission(ctx, 'manage_inventory'),
   }
 }
 

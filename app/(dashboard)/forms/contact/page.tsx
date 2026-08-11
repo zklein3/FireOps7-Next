@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import BackButton from '@/components/BackButton'
 import ContactClient from './ContactClient'
 import { getPdContactTypes, getPdActionTakenTypes, getPdCaseNumberSettings } from '@/app/actions/pd-contacts'
@@ -14,7 +15,7 @@ export default async function ContactFormPage() {
   if (ctx.selectionPending) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
+  const isOfficerOrAbove = await hasPermission(ctx, 'manage_pd_logs')
   const department_id = ctx.departmentId
 
   const [

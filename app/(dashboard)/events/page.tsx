@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import EventsClient from './EventsClient'
 
 export default async function EventsPage() {
@@ -13,7 +14,7 @@ export default async function EventsPage() {
   if (!ctx.departmentId) redirect('/dashboard')
   const me = { id: ctx.personnelId, first_name: ctx.firstName, last_name: ctx.lastName }
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
+  const isOfficerOrAbove = await hasPermission(ctx, 'manage_events')
   const department_id = ctx.departmentId
 
   // Excuse types for the excuse request form

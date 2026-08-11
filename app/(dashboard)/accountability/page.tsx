@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import Link from 'next/link'
 import GuestAccessControl from './GuestAccessControl'
 import BoardCleanupActions from './BoardCleanupActions'
@@ -52,8 +53,9 @@ export default async function AccountabilityHubPage() {
   const active = (boards ?? []).filter(b => b.status === 'active')
   const closed = (boards ?? []).filter(b => b.status === 'closed' && !b.archived_at)
   const archived = (boards ?? []).filter(b => !!b.archived_at)
-  const isOfficerOrAbove = ctx.systemRole === 'officer' || ctx.systemRole === 'admin' || ctx.isSysAdmin
-  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
+  const acctPermissions = await getPermissionSnapshot(ctx)
+  const isOfficerOrAbove = acctPermissions.manage_accountability_boards
+  const isAdmin = acctPermissions.delete_accountability_boards
 
   return (
     <div className="max-w-2xl">

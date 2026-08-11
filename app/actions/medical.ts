@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
@@ -12,8 +13,9 @@ async function getContext() {
     me: { id: ctx.personnelId, is_sys_admin: ctx.isSysAdmin },
     department_id: ctx.departmentId,
     system_role: ctx.systemRole,
-    isAdmin: ctx.systemRole === 'admin' || ctx.isSysAdmin,
-    isOfficerOrAbove: ['admin', 'officer'].includes(ctx.systemRole ?? '') || ctx.isSysAdmin,
+    isAdmin: await hasPermission(ctx, 'manage_medical_supply_setup'),
+    isOfficerOrAbove: await hasPermission(ctx, 'manage_medical_inventory'),
+    fullCtx: ctx,
   }
 }
 
@@ -437,6 +439,7 @@ export async function dispenseStock(data: {
 }) {
   const ctx = await getContext()
   if (!ctx?.department_id) return { error: 'Not authorized.' }
+  if (!(await hasPermission(ctx.fullCtx, 'dispense_controlled_substances'))) return { error: 'Not authorized.' }
   const adminClient = createAdminClient()
 
   if (!data.lot_id || data.quantity < 1)
@@ -520,6 +523,7 @@ export async function administerStock(data: {
 }) {
   const ctx = await getContext()
   if (!ctx?.department_id) return { error: 'Not authorized.' }
+  if (!(await hasPermission(ctx.fullCtx, 'dispense_controlled_substances'))) return { error: 'Not authorized.' }
   const adminClient = createAdminClient()
 
   if (!data.unit_id || !data.administered_amount || data.administered_amount <= 0)

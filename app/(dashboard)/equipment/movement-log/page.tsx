@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentPath } from '@/lib/current-path'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import Link from 'next/link'
 import MovementLogClient from './MovementLogClient'
 
@@ -13,8 +14,7 @@ export default async function MovementLogPage() {
   if (ctx.hasMultipleDepartments && !ctx.departmentId) redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   if (!ctx.departmentId) redirect('/dashboard')
 
-  const isOfficerOrAbove = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
-  if (!isOfficerOrAbove) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_inventory'))) redirect('/dashboard')
 
   const department_id = ctx.departmentId
 

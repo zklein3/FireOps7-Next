@@ -1,7 +1,8 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getCurrentDepartmentContext, type CurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 import { ALL_ICS_ROLE_VALUES, icsRoleLabel, ICS_MODE_LANES, ACTIVE_VIOLENCE_LANES, DEFAULT_ACCOUNTABILITY_LANES } from '@/lib/ics-roles'
@@ -16,6 +17,7 @@ async function getContext() {
     me: { id: ctx.personnelId },
     dept: { department_id: ctx.departmentId, system_role: ctx.systemRole },
     adminClient,
+    fullCtx: ctx,
   }
 }
 
@@ -28,7 +30,7 @@ async function getContext() {
 // checked live on every call, not just once, so closing the board or hitting
 // "Revoke Guest Access" cuts a guest off immediately.
 type Actor =
-  | { kind: 'officer'; departmentId: string; personnelId: string; systemRole: string | null }
+  | { kind: 'officer'; departmentId: string; personnelId: string; systemRole: string | null; fullCtx: CurrentDepartmentContext }
   | { kind: 'guest_admin'; boardId: string; label: string }
   | { kind: 'guest_self'; boardId: string; entryId: string; label: string }
 
@@ -55,7 +57,7 @@ async function resolveActor(
   if (!ctx) return null
   const { data: boardRows } = await adminClient.from('accountability_boards').select('department_id').eq('id', boardId)
   if (boardRows?.[0]?.department_id !== ctx.dept.department_id) return null
-  return { kind: 'officer', departmentId: ctx.dept.department_id, personnelId: ctx.me.id, systemRole: ctx.dept.system_role }
+  return { kind: 'officer', departmentId: ctx.dept.department_id, personnelId: ctx.me.id, systemRole: ctx.dept.system_role, fullCtx: ctx.fullCtx }
 }
 
 // Guest edits get an explicit trail in the same 214 log an officer's manual notes go into — a
@@ -115,7 +117,7 @@ export async function setEntryAccessTier(entryId: string, tier: 'self' | 'admin'
 export async function generateBoardGuestAdminLink(boardId: string, guestLabel: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_boards'))) return { error: 'Officer or admin only.' }
   if (!guestLabel.trim()) return { error: 'Enter a name for this guest.' }
 
   const { data: boardRows } = await ctx.adminClient.from('accountability_boards').select('department_id').eq('id', boardId)
@@ -133,7 +135,7 @@ export async function generateBoardGuestAdminLink(boardId: string, guestLabel: s
 export async function revokeGuestLinks(boardId: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_boards'))) return { error: 'Officer or admin only.' }
   const { data: boardRows } = await ctx.adminClient
     .from('accountability_boards').select('id').eq('id', boardId).eq('department_id', ctx.dept.department_id)
   if (!boardRows?.length) return { error: 'Not authorized.' }
@@ -375,7 +377,8 @@ async function fetchGuestAdminState(
 
 export async function addLaneTemplate(departmentId: string, name: string, profile: 'default' | 'ics' | 'active_violence' = 'default') {
   const ctx = await getContext()
-  if (!ctx || ctx.dept.system_role !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_lanes'))) return { error: 'Admin only.' }
   if (!name.trim()) return { error: 'Name is required.' }
 
   const { data: existing } = await ctx.adminClient
@@ -397,7 +400,8 @@ export async function addLaneTemplate(departmentId: string, name: string, profil
 
 export async function updateLaneTemplate(id: string, name: string) {
   const ctx = await getContext()
-  if (!ctx || ctx.dept.system_role !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_lanes'))) return { error: 'Admin only.' }
   if (!name.trim()) return { error: 'Name is required.' }
   const { error: dbErr } = await ctx.adminClient
     .from('accountability_lane_templates').update({ name: name.trim() }).eq('id', id)
@@ -408,7 +412,8 @@ export async function updateLaneTemplate(id: string, name: string) {
 
 export async function toggleLaneTemplate(id: string, active: boolean) {
   const ctx = await getContext()
-  if (!ctx || ctx.dept.system_role !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_lanes'))) return { error: 'Admin only.' }
   const { error: dbErr } = await ctx.adminClient
     .from('accountability_lane_templates').update({ active }).eq('id', id)
   if (dbErr) { await logError(dbErr.message, '/dept-admin/accountability'); return { error: dbErr.message } }
@@ -418,7 +423,8 @@ export async function toggleLaneTemplate(id: string, active: boolean) {
 
 export async function reorderLaneTemplates(departmentId: string, orderedIds: string[]) {
   const ctx = await getContext()
-  if (!ctx || ctx.dept.system_role !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_lanes'))) return { error: 'Admin only.' }
   const updates = orderedIds.map((id, i) =>
     ctx.adminClient.from('accountability_lane_templates').update({ sort_order: i }).eq('id', id).eq('department_id', departmentId)
   )
@@ -544,7 +550,8 @@ export async function unarchiveBoard(boardId: string) {
 
 export async function deleteBoard(boardId: string) {
   const ctx = await getContext()
-  if (!ctx || ctx.dept.system_role !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'delete_accountability_boards'))) return { error: 'Admin only.' }
   const { data: boardRows } = await ctx.adminClient
     .from('accountability_boards').select('status').eq('id', boardId).eq('department_id', ctx.dept.department_id)
   const board = boardRows?.[0]
@@ -626,7 +633,7 @@ export async function addBoardLane(boardId: string, name: string, guestToken?: s
 export async function deleteLane(laneId: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_boards'))) return { error: 'Officer or admin only.' }
 
   const { data: laneRows } = await ctx.adminClient
     .from('accountability_lanes').select('board_id').eq('id', laneId)
@@ -835,7 +842,7 @@ export async function updateEntryName(entryId: string, rawName: string, rawDept:
 export async function attachCardToEntry(entryId: string, tagRef: string, tier?: 'self' | 'admin' | null) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_boards'))) return { error: 'Officer or admin only.' }
   const { data: entryRows } = await ctx.adminClient.from('accountability_entries').select('board_id').eq('id', entryId)
   const entry = entryRows?.[0]
   if (!entry) return { error: 'Entry not found.' }
@@ -918,17 +925,13 @@ export async function recordPAR(boardId: string, snapshot: { lane_name: string; 
 
 // ─── ICS fields (command roles, lane leader/work assignment, board objectives) ─
 
-function isOfficerOrAdmin(role: string | null) {
-  return role === 'officer' || role === 'admin'
-}
-
 export async function setBoardIcsFields(
   boardId: string,
   fields: { objectives?: string | null; safety_message?: string | null; weather?: string | null; is_active_violence?: boolean; nims_mode?: boolean }
 ) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_boards'))) return { error: 'Officer or admin only.' }
   const { error: dbErr } = await ctx.adminClient
     .from('accountability_boards')
     .update(fields)
@@ -978,7 +981,7 @@ async function ensureModeLaneProfile(
 export async function setEntryIcsRole(entryId: string, role: string | null) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_boards'))) return { error: 'Officer or admin only.' }
   if (role && !ALL_ICS_ROLE_VALUES.includes(role as typeof ALL_ICS_ROLE_VALUES[number])) return { error: 'Invalid role.' }
 
   const { data: entryRows } = await ctx.adminClient
@@ -999,7 +1002,7 @@ export async function setEntryIcsRole(entryId: string, role: string | null) {
 export async function setLaneLeader(laneId: string, entryId: string | null) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_boards'))) return { error: 'Officer or admin only.' }
 
   const { data: laneRows } = await ctx.adminClient
     .from('accountability_lanes').select('board_id').eq('id', laneId)
@@ -1030,7 +1033,7 @@ export async function renameLane(laneId: string, name: string, guestToken?: stri
 
   const actor = await resolveActor(adminClient, lane.board_id, guestToken)
   if (!actor) return { error: 'Not authorized.' }
-  if (actor.kind === 'officer' && !isOfficerOrAdmin(actor.systemRole)) return { error: 'Officer or admin only.' }
+  if (actor.kind === 'officer' && !(await hasPermission(actor.fullCtx, 'manage_accountability_boards'))) return { error: 'Officer or admin only.' }
   if (actor.kind === 'guest_self') return { error: 'Not authorized.' }
 
   const { error: dbErr } = await adminClient
@@ -1044,7 +1047,7 @@ export async function renameLane(laneId: string, name: string, guestToken?: stri
 export async function setLaneWorkAssignment(laneId: string, text: string) {
   const ctx = await getContext()
   if (!ctx) return { error: 'Not authenticated.' }
-  if (!isOfficerOrAdmin(ctx.dept.system_role)) return { error: 'Officer or admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_accountability_boards'))) return { error: 'Officer or admin only.' }
 
   const { data: laneRows } = await ctx.adminClient
     .from('accountability_lanes').select('board_id').eq('id', laneId)

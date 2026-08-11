@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission, hasPermissionForDepartment } from '@/lib/permissions'
 import { logError, logEvent } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
@@ -57,14 +58,8 @@ export async function toggleEventSeriesPublic(eventSeriesId: string, isPublic: b
   if (!me) return { error: 'Session expired.' }
 
   // Allow sys admins or department admins for this department
-  if (!me.is_sys_admin) {
-    const { data: deptList } = await adminClient
-      .from('department_personnel')
-      .select('system_role')
-      .eq('personnel_id', me.id)
-      .eq('department_id', departmentId)
-      .eq('active', true)
-    if (deptList?.[0]?.system_role !== 'admin') return { error: 'Only department admins can change event visibility.' }
+  if (!(await hasPermissionForDepartment(me.id, me.is_sys_admin, departmentId, 'manage_public_site'))) {
+    return { error: 'Only department admins can change event visibility.' }
   }
 
   const { error: dbErr } = await adminClient
@@ -87,7 +82,8 @@ export async function saveDeptInboxSettings(formData: FormData) {
   const adminClient = createAdminClient()
 
   const ctx = await getCurrentDepartmentContext()
-  if (!ctx || !ctx.departmentId || ctx.systemRole !== 'admin') return { error: 'Unauthorized.' }
+  if (!ctx || !ctx.departmentId) return { error: 'Unauthorized.' }
+  if (!(await hasPermission(ctx, 'manage_public_site'))) return { error: 'Unauthorized.' }
 
   const department_id          = ctx.departmentId
   const burn_permit_county_info  = (formData.get('burn_permit_county_info') as string)?.trim() || null
@@ -241,7 +237,8 @@ export async function updateBurnPermitStatus(formData: FormData) {
   if (!me) return { error: 'Could not verify your account.' }
 
   const ctx = await getCurrentDepartmentContext()
-  if (!ctx || !ctx.departmentId || ctx.systemRole === 'member') return { error: 'Unauthorized.' }
+  if (!ctx || !ctx.departmentId) return { error: 'Unauthorized.' }
+  if (!(await hasPermission(ctx, 'review_burn_permits'))) return { error: 'Unauthorized.' }
 
   const permit_id          = formData.get('permit_id') as string
   const status             = formData.get('status') as string
@@ -325,12 +322,8 @@ export async function contactPermitHolder(formData: FormData) {
   if (!permit) return { error: 'Permit not found.' }
   if (!permit.contact_email) return { error: 'This permit has no email address on file — a message cannot be sent.' }
 
-  if (!me.is_sys_admin) {
-    const { data: myDeptList } = await adminClient
-      .from('department_personnel').select('system_role')
-      .eq('personnel_id', me.id).eq('department_id', permit.department_id).eq('active', true)
-    const myDept = myDeptList?.[0]
-    if (!myDept || myDept.system_role === 'member') return { error: 'Unauthorized.' }
+  if (!(await hasPermissionForDepartment(me.id, me.is_sys_admin, permit.department_id, 'review_burn_permits'))) {
+    return { error: 'Unauthorized.' }
   }
 
   const resendKey = process.env.RESEND_API_KEY
@@ -398,7 +391,8 @@ export async function deleteBurnPermit(formData: FormData) {
   if (!me) return { error: 'Could not verify your account.' }
 
   const ctx = await getCurrentDepartmentContext()
-  if (!ctx || !ctx.departmentId || ctx.systemRole === 'member') return { error: 'Unauthorized.' }
+  if (!ctx || !ctx.departmentId) return { error: 'Unauthorized.' }
+  if (!(await hasPermission(ctx, 'review_burn_permits'))) return { error: 'Unauthorized.' }
 
   const permit_id = formData.get('permit_id') as string
   const password  = formData.get('password') as string
@@ -432,7 +426,8 @@ export async function savePermitOfficerSignature(formData: FormData) {
   if (!me) return { error: 'Could not verify your account.' }
 
   const ctx = await getCurrentDepartmentContext()
-  if (!ctx || !ctx.departmentId || ctx.systemRole === 'member') return { error: 'Unauthorized.' }
+  if (!ctx || !ctx.departmentId) return { error: 'Unauthorized.' }
+  if (!(await hasPermission(ctx, 'review_burn_permits'))) return { error: 'Unauthorized.' }
 
   const permit_id = formData.get('permit_id') as string
   const blob = formData.get('signature') as Blob
@@ -534,7 +529,8 @@ export async function updateRecordRequestStatus(formData: FormData) {
   if (!me) return { error: 'Could not verify your account.' }
 
   const ctx = await getCurrentDepartmentContext()
-  if (!ctx || !ctx.departmentId || ctx.systemRole === 'member') return { error: 'Unauthorized.' }
+  if (!ctx || !ctx.departmentId) return { error: 'Unauthorized.' }
+  if (!(await hasPermission(ctx, 'manage_public_inbox'))) return { error: 'Unauthorized.' }
 
   const request_id     = formData.get('request_id') as string
   const status         = formData.get('status') as string
@@ -702,7 +698,8 @@ export async function updatePublicFeedbackStatus(formData: FormData) {
   if (!me) return { error: 'Could not verify your account.' }
 
   const ctx = await getCurrentDepartmentContext()
-  if (!ctx || !ctx.departmentId || ctx.systemRole === 'member') return { error: 'Unauthorized.' }
+  if (!ctx || !ctx.departmentId) return { error: 'Unauthorized.' }
+  if (!(await hasPermission(ctx, 'manage_public_inbox'))) return { error: 'Unauthorized.' }
 
   const feedback_id   = formData.get('feedback_id') as string
   const status        = formData.get('status') as string
@@ -734,7 +731,8 @@ export async function deletePublicFeedback(formData: FormData) {
   if (!me) return { error: 'Could not verify your account.' }
 
   const ctx = await getCurrentDepartmentContext()
-  if (!ctx || !ctx.departmentId || ctx.systemRole === 'member') return { error: 'Unauthorized.' }
+  if (!ctx || !ctx.departmentId) return { error: 'Unauthorized.' }
+  if (!(await hasPermission(ctx, 'manage_public_inbox'))) return { error: 'Unauthorized.' }
 
   const feedback_id = formData.get('feedback_id') as string
 
@@ -775,12 +773,8 @@ export async function replyToPublicFeedback(formData: FormData) {
   if (!feedback.contact_email) return { error: 'This submission has no email address on file — a reply cannot be sent.' }
 
   // Authorize: sys admin, or officer+ in the feedback's department
-  if (!me.is_sys_admin) {
-    const { data: myDeptList } = await adminClient
-      .from('department_personnel').select('system_role')
-      .eq('personnel_id', me.id).eq('department_id', feedback.department_id).eq('active', true)
-    const myDept = myDeptList?.[0]
-    if (!myDept || myDept.system_role === 'member') return { error: 'Unauthorized.' }
+  if (!(await hasPermissionForDepartment(me.id, me.is_sys_admin, feedback.department_id, 'manage_public_inbox'))) {
+    return { error: 'Unauthorized.' }
   }
 
   const resendKey = process.env.RESEND_API_KEY

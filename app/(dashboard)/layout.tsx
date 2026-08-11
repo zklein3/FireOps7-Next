@@ -3,6 +3,7 @@ import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { signOut } from '@/app/actions/auth'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import { hasBiometricCredentials, isBiometricUnlocked } from '@/app/actions/biometric'
 import BiometricLockScreen from '@/components/BiometricLockScreen'
 import FeedbackButton from '@/components/FeedbackButton'
@@ -22,6 +23,32 @@ async function getUserContext() {
     redirect(`/select-department?next=${encodeURIComponent(await getCurrentPath())}`)
   }
 
+  const permissions = await getPermissionSnapshot(ctx)
+
+  // Sidebar footer label: the assigned permission group's name if the
+  // department admin set one up, falling back to the legacy system_role
+  // word otherwise — same "explicit group wins, legacy is just the
+  // fallback" convention the resolver itself uses.
+  let permissionGroupName: string | null = null
+  if (ctx.departmentId) {
+    const adminClient = createAdminClient()
+    const { data: dp } = await adminClient
+      .from('department_personnel')
+      .select('permission_group_id')
+      .eq('personnel_id', ctx.personnelId)
+      .eq('department_id', ctx.departmentId)
+      .eq('active', true)
+      .maybeSingle()
+    if (dp?.permission_group_id) {
+      const { data: group } = await adminClient
+        .from('department_permission_groups')
+        .select('name, active')
+        .eq('id', dp.permission_group_id)
+        .maybeSingle()
+      if (group?.active) permissionGroupName = group.name
+    }
+  }
+
   return {
     id: ctx.personnelId,
     personnelId: ctx.personnelId,
@@ -33,6 +60,8 @@ async function getUserContext() {
     department_type: ctx.departmentType,
     department_id: ctx.departmentId,
     hasMultipleDepartments: ctx.hasMultipleDepartments,
+    permissions,
+    permissionGroupName,
   }
 }
 
@@ -50,8 +79,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
   }
   const systemRole = user?.system_role ?? null
-  const isDeptAdmin = systemRole === 'admin'
-  const isOfficerOrAbove = isDeptAdmin || systemRole === 'officer' || isSysAdmin
+  const permissions = user?.permissions
+  const isDeptAdmin = permissions?.access_dept_admin_hub ?? false
+  const isOfficerOrAbove = permissions?.access_officer_hub ?? false
 
   // Nav badge counts + dept module flags
   let announcementUnreadCount = 0
@@ -68,10 +98,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     const [{ data: allIds }, { data: readIds }, { data: pendingPermits }, { data: pendingRequests }, { data: deptFlags }, { count: sigCount }, { count: medicalAlertCount }] = await Promise.all([
       adminClient.from('announcements').select('id').eq('department_id', user.department_id),
       adminClient.from('announcement_reads').select('announcement_id').eq('personnel_id', user.id),
-      isOfficerOrAbove
+      permissions?.review_burn_permits
         ? adminClient.from('burn_permits').select('id').eq('department_id', user.department_id).eq('status', 'pending')
         : Promise.resolve({ data: [] }),
-      isOfficerOrAbove
+      permissions?.manage_public_inbox
         ? adminClient.from('public_record_requests').select('id').eq('department_id', user.department_id).eq('status', 'pending')
         : Promise.resolve({ data: [] }),
       adminClient.from('departments').select('public_site_enabled, module_operations, module_iso, module_neris, module_medical, module_ics').eq('id', user.department_id).single(),
@@ -90,7 +120,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
     // Medical alert badge — only when module is enabled
     let medicalAlertBadge = 0
-    if (moduleMedical && isOfficerOrAbove) {
+    if (moduleMedical && permissions?.manage_medical_inventory) {
       const thirtyDaysOutDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
       const { count } = await adminClient.from('medical_stock_lots').select('id', { count: 'exact', head: true }).eq('department_id', user.department_id).eq('active', true).gt('quantity_remaining', 0).lte('expiration_date', thirtyDaysOutDate)
       medicalAlertBadge = count ?? 0
@@ -168,7 +198,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const userInfo = {
     name: user ? `${user.first_name} ${user.last_name}` : 'Unknown',
-    role: viewingSysAdminOverview ? 'System Admin' : systemRole ?? '',
+    role: viewingSysAdminOverview ? 'System Admin' : user?.permissionGroupName ?? systemRole ?? '',
     departmentName: user?.department_name ?? (isSysAdmin ? 'System Administrator' : null),
     profileHref: user?.personnelId ? `/personnel/${user.personnelId}` : null,
     canSwitchDepartment: user?.hasMultipleDepartments ?? false,

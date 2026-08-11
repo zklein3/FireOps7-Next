@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { ICS_MODE_LANES, ACTIVE_VIOLENCE_LANES, DEFAULT_ACCOUNTABILITY_LANES } from '@/lib/ics-roles'
 import AccountabilitySettingsClient from './AccountabilitySettingsClient'
 
@@ -9,7 +10,8 @@ export default async function AccountabilitySettingsPage() {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || ctx.systemRole !== 'admin') redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_accountability_lanes'))) redirect('/dashboard')
 
   const department_id = ctx.departmentId
 

@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import EventsAdminClient from './EventsAdminClient'
 
 export default async function EventsAdminPage() {
@@ -8,7 +9,8 @@ export default async function EventsAdminPage() {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && ctx.systemRole !== 'officer')) redirect('/events')
+  if (!ctx.departmentId) redirect('/events')
+  if (!(await hasPermission(ctx, 'manage_events'))) redirect('/events')
   const me = { id: ctx.personnelId, first_name: ctx.firstName, last_name: ctx.lastName }
 
   const isAdmin = ctx.systemRole === 'admin'

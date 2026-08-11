@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
@@ -11,7 +12,7 @@ export async function createStation(formData: FormData) {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Session expired.' }
-  if (!ctx.departmentId || (ctx.systemRole !== 'admin' && !ctx.isSysAdmin)) {
+  if (!ctx.departmentId || !(await hasPermission(ctx, 'manage_dept_setup'))) {
     return { error: 'Only admins can add stations.' }
   }
 
@@ -55,7 +56,7 @@ export async function updateStation(formData: FormData) {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return { error: 'Session expired.' }
-  if (ctx.systemRole !== 'admin' && !ctx.isSysAdmin) {
+  if (!(await hasPermission(ctx, 'manage_dept_setup'))) {
     return { error: 'Only admins can edit stations.' }
   }
 

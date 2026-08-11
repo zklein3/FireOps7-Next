@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 import { nerisValidateIncident, nerisSubmitIncident } from '@/lib/neris-api'
@@ -85,8 +86,8 @@ async function getContext() {
     user_id: user?.id ?? null,
     department_id: ctx.departmentId,
     system_role: ctx.systemRole,
-    isOfficerOrAbove: ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin,
-    isAdmin: ctx.systemRole === 'admin' || ctx.isSysAdmin,
+    isOfficerOrAbove: await hasPermission(ctx, 'manage_incidents'),
+    isAdmin: await hasPermission(ctx, 'submit_neris'),
   }
 }
 

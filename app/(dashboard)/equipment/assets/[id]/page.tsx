@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { redirect } from 'next/navigation'
 import AssetDetailClient from './AssetDetailClient'
 
@@ -62,7 +63,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
     .eq('asset_id', id)
     .order('created_at', { ascending: false })
 
-  const isOfficer = ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin
+  const isOfficer = await hasPermission(ctx, 'manage_inventory')
 
   return (
     <AssetDetailClient

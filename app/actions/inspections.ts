@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 import { VEHICLE_CHECK_DEFAULTS } from '@/lib/vehicle-check-defaults'
@@ -14,8 +15,9 @@ async function getContext() {
     me: { id: ctx.personnelId, is_sys_admin: ctx.isSysAdmin },
     department_id: ctx.departmentId,
     systemRole: ctx.systemRole,
-    isAdmin: ctx.systemRole === 'admin' || ctx.isSysAdmin,
-    isOfficerOrAbove: ctx.systemRole === 'admin' || ctx.systemRole === 'officer' || ctx.isSysAdmin,
+    isAdmin: await hasPermission(ctx, 'manage_inspection_settings'),
+    isOfficerOrAbove: await hasPermission(ctx, 'manage_inspection_sessions'),
+    fullCtx: ctx,
   }
 }
 
@@ -186,11 +188,13 @@ export async function submitInspection(payload: {
     notes?: string
   }[]
 }) {
-  const supabase = await createClient()
   const adminClient = createAdminClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!(await hasPermission(ctx.fullCtx, 'perform_standard_equipment_inspection'))) {
+    return { error: 'You do not have permission to submit inspections.' }
+  }
 
   const now = new Date().toISOString()
 
@@ -626,10 +630,12 @@ export async function submitVehicleCheck(payload: {
   notes?: string
   results: { item_id: string; result: 'ok' | 'issue' | 'na'; amount_added?: string; notes?: string }[]
 }) {
-  const supabase = await createClient()
   const adminClient = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated.' }
+  const ctx = await getContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!(await hasPermission(ctx.fullCtx, 'perform_apparatus_check'))) {
+    return { error: 'You do not have permission to submit vehicle checks.' }
+  }
 
   const { data: inspection, error: inspErr } = await adminClient
     .from('vehicle_inspections')

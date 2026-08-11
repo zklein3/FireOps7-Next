@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import MedicalAdminClient from './MedicalAdminClient'
 
 export default async function MedicalAdminPage() {
@@ -8,7 +9,8 @@ export default async function MedicalAdminPage() {
 
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
-  if (!ctx.departmentId || ctx.systemRole !== 'admin') redirect('/dashboard')
+  if (!ctx.departmentId) redirect('/dashboard')
+  if (!(await hasPermission(ctx, 'manage_medical_supply_setup'))) redirect('/dashboard')
 
   const { data: deptRow } = await adminClient.from('departments').select('module_medical, module_medical_controlled').eq('id', ctx.departmentId).single()
   if (!deptRow?.module_medical) redirect('/dept-admin')

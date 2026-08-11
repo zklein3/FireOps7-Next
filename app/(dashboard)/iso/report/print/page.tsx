@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import PrintReportClient from './PrintReportClient'
 
 export default async function PrintReportPage({
@@ -29,7 +30,7 @@ export default async function PrintReportPage({
 
   const department_id = ctx.departmentId
   const deptName = deptData.name ?? 'Fire Department'
-  const isAdmin = ctx.systemRole === 'admin' || ctx.isSysAdmin
+  const isAdmin = await hasPermission(ctx, 'manage_iso_data')
 
   const cutoff = new Date()
   cutoff.setMonth(cutoff.getMonth() - months)

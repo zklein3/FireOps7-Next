@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
@@ -17,7 +18,7 @@ async function verifyAdmin(override_department_id?: string) {
   }
 
   // Regular dept admin — respect the currently selected department
-  if (ctx.systemRole !== 'admin' || !ctx.departmentId) return null
+  if (!ctx.departmentId || !(await hasPermission(ctx, 'manage_dept_setup'))) return null
 
   return { me: { id: ctx.personnelId, is_sys_admin: false }, department_id: ctx.departmentId }
 }

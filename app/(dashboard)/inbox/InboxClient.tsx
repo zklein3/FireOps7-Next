@@ -56,7 +56,9 @@ export default function InboxClient({
   feedbackItems,
   memberName,
   initialTab,
-  isOfficerOrAbove,
+  canReviewPermits,
+  canManageInbox,
+  canManageMedical,
   moduleMedical,
   publicSiteEnabled,
   deptName,
@@ -72,7 +74,9 @@ export default function InboxClient({
   feedbackItems: any[]
   memberName: string
   initialTab: Tab
-  isOfficerOrAbove: boolean
+  canReviewPermits: boolean
+  canManageInbox: boolean
+  canManageMedical: boolean
   moduleMedical: boolean
   publicSiteEnabled: boolean
   deptName: string | null
@@ -83,6 +87,7 @@ export default function InboxClient({
   const [tab, setTab] = useState<Tab>(initialTab)
   const [pendingSigs, setPendingSigs] = useState<SignatureRow[]>(signatureRows)
   const [activeSig, setActiveSig] = useState<SignatureRow | null>(null)
+  const hasAnyOfficerInboxAccess = canReviewPermits || canManageInbox || canManageMedical
 
   const EVENT_TYPE_LABELS: Record<string, string> = {
     training: 'Training', meeting: 'Meeting', incident: 'Incident', special: 'Special Event',
@@ -102,7 +107,7 @@ export default function InboxClient({
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-zinc-900">Inbox</h1>
         <p className="text-sm text-zinc-500 mt-0.5">
-          {isOfficerOrAbove ? 'Signatures, burn permits, and public records requests' : 'Incident signatures pending your review'}
+          {hasAnyOfficerInboxAccess ? 'Signatures, burn permits, and public records requests' : 'Incident signatures pending your review'}
         </p>
       </div>
 
@@ -125,80 +130,82 @@ export default function InboxClient({
           )}
         </button>
 
-        {/* Officer+ tabs */}
-        {isOfficerOrAbove && (
-          <>
-            {publicSiteEnabled && (
-              <>
-                <button
-                  onClick={() => setTab('permits')}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    tab === 'permits' ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'
-                  }`}
-                >
-                  Burn Permits
-                  {pendingPermits > 0 && (
-                    <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold leading-none ${
-                      tab === 'permits' ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'
-                    }`}>
-                      {pendingPermits}
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={() => setTab('records')}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    tab === 'records' ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'
-                  }`}
-                >
-                  Records Requests
-                  {pendingRequests > 0 && (
-                    <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold leading-none ${
-                      tab === 'records' ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'
-                    }`}>
-                      {pendingRequests}
-                    </span>
-                  )}
-                </button>
-              </>
+        {/* Burn Permits — review_burn_permits */}
+        {publicSiteEnabled && canReviewPermits && (
+          <button
+            onClick={() => setTab('permits')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              tab === 'permits' ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'
+            }`}
+          >
+            Burn Permits
+            {pendingPermits > 0 && (
+              <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold leading-none ${
+                tab === 'permits' ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'
+              }`}>
+                {pendingPermits}
+              </span>
             )}
+          </button>
+        )}
+
+        {/* Records Requests + Feedback — manage_public_inbox */}
+        {publicSiteEnabled && canManageInbox && (
+          <button
+            onClick={() => setTab('records')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              tab === 'records' ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'
+            }`}
+          >
+            Records Requests
+            {pendingRequests > 0 && (
+              <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold leading-none ${
+                tab === 'records' ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'
+              }`}>
+                {pendingRequests}
+              </span>
+            )}
+          </button>
+        )}
+        {canManageInbox && (
+          <button
+            onClick={() => setTab('feedback')}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              tab === 'feedback' ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'
+            }`}
+          >
+            Feedback
+            {newFeedback > 0 && (
+              <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold leading-none ${
+                tab === 'feedback' ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'
+              }`}>
+                {newFeedback}
+              </span>
+            )}
+          </button>
+        )}
+
+        {/* Restock — manage_medical_inventory */}
+        {moduleMedical && canManageMedical && (() => {
+          const restockBadge = restockRequests.length + expiredLots.length
+          return (
             <button
-              onClick={() => setTab('feedback')}
+              onClick={() => setTab('restock')}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                tab === 'feedback' ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'
+                tab === 'restock' ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'
               }`}
             >
-              Feedback
-              {newFeedback > 0 && (
+              Restock
+              {restockBadge > 0 && (
                 <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold leading-none ${
-                  tab === 'feedback' ? 'bg-red-500 text-white' : 'bg-red-100 text-red-700'
+                  tab === 'restock' ? 'bg-red-500 text-white' : expiredLots.length > 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                 }`}>
-                  {newFeedback}
+                  {restockBadge}
                 </span>
               )}
             </button>
-            {moduleMedical && (() => {
-              const restockBadge = restockRequests.length + expiredLots.length
-              return (
-                <button
-                  onClick={() => setTab('restock')}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    tab === 'restock' ? 'bg-red-700 text-white' : 'text-zinc-600 hover:bg-zinc-50'
-                  }`}
-                >
-                  Restock
-                  {restockBadge > 0 && (
-                    <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold leading-none ${
-                      tab === 'restock' ? 'bg-red-500 text-white' : expiredLots.length > 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                    }`}>
-                      {restockBadge}
-                    </span>
-                  )}
-                </button>
-              )
-            })()}
-          </>
-        )}
+          )
+        })()}
       </div>
 
       {/* Signatures tab content */}
@@ -292,7 +299,7 @@ export default function InboxClient({
         </div>
       )}
 
-      {tab === 'permits' && isOfficerOrAbove && (
+      {tab === 'permits' && canReviewPermits && (
         <BurnPermitsTab
           permits={permits}
           deptName={deptName}
@@ -302,15 +309,15 @@ export default function InboxClient({
         />
       )}
 
-      {tab === 'records' && isOfficerOrAbove && (
+      {tab === 'records' && canManageInbox && (
         <RecordRequestsTab requests={requests} departmentTimezone={departmentTimezone} />
       )}
 
-      {tab === 'restock' && isOfficerOrAbove && moduleMedical && (
+      {tab === 'restock' && canManageMedical && moduleMedical && (
         <RestockTab requests={restockRequests} expiredLots={expiredLots} />
       )}
 
-      {tab === 'feedback' && isOfficerOrAbove && (
+      {tab === 'feedback' && canManageInbox && (
         <FeedbackTab items={feedbackItems} departmentTimezone={departmentTimezone} />
       )}
 

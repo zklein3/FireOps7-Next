@@ -2,20 +2,22 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
 async function getContext() {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx || !ctx.departmentId) return null
-  return { departmentId: ctx.departmentId, systemRole: ctx.systemRole, adminClient: createAdminClient() }
+  return { departmentId: ctx.departmentId, systemRole: ctx.systemRole, adminClient: createAdminClient(), fullCtx: ctx }
 }
 
 // ─── Radio channel defaults (ICS 205) ─────────────────────────────────────────
 
 export async function addRadioChannel(departmentId: string, channelName: string, assignment: string) {
   const ctx = await getContext()
-  if (!ctx || ctx.systemRole !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_ics_defaults'))) return { error: 'Admin only.' }
   if (!channelName.trim()) return { error: 'Channel name is required.' }
 
   const { data: existing } = await ctx.adminClient
@@ -31,7 +33,8 @@ export async function addRadioChannel(departmentId: string, channelName: string,
 
 export async function toggleRadioChannel(id: string, active: boolean) {
   const ctx = await getContext()
-  if (!ctx || ctx.systemRole !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_ics_defaults'))) return { error: 'Admin only.' }
   const { error: dbErr } = await ctx.adminClient.from('department_radio_channels').update({ active }).eq('id', id)
   if (dbErr) { await logError(dbErr.message, '/dept-admin'); return { error: dbErr.message } }
   revalidatePath('/dept-admin')
@@ -46,7 +49,8 @@ export async function addMedicalPlanContact(
   name: string, phone: string, address: string,
 ) {
   const ctx = await getContext()
-  if (!ctx || ctx.systemRole !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_ics_defaults'))) return { error: 'Admin only.' }
   if (!name.trim()) return { error: 'Name is required.' }
 
   const { data: existing } = await ctx.adminClient
@@ -63,7 +67,8 @@ export async function addMedicalPlanContact(
 
 export async function toggleMedicalPlanContact(id: string, active: boolean) {
   const ctx = await getContext()
-  if (!ctx || ctx.systemRole !== 'admin') return { error: 'Admin only.' }
+  if (!ctx) return { error: 'Admin only.' }
+  if (!(await hasPermission(ctx.fullCtx, 'manage_ics_defaults'))) return { error: 'Admin only.' }
   const { error: dbErr } = await ctx.adminClient.from('department_medical_plan_contacts').update({ active }).eq('id', id)
   if (dbErr) { await logError(dbErr.message, '/dept-admin'); return { error: dbErr.message } }
   revalidatePath('/dept-admin')

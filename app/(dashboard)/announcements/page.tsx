@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import AnnouncementsClient from './AnnouncementsClient'
 
 export default async function AnnouncementsPage() {
@@ -14,9 +15,9 @@ export default async function AnnouncementsPage() {
   const me = { id: ctx.personnelId, first_name: ctx.firstName, last_name: ctx.lastName }
 
   const departmentId = ctx.departmentId
-  const systemRole = ctx.systemRole
-  const isOfficerOrAbove = systemRole === 'admin' || systemRole === 'officer'
-  const isAdmin = systemRole === 'admin'
+  const permissions = await getPermissionSnapshot(ctx)
+  const isOfficerOrAbove = permissions.post_update
+  const isAdmin = permissions.moderate_announcements
 
   const [{ data: announcements }, { data: reads }] = await Promise.all([
     adminClient.from('announcements')
