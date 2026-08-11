@@ -12,6 +12,7 @@ import { lookupZip } from '@/lib/zip-lookup'
 import { generateCheckinToken } from '@/app/actions/checkin'
 import { addMutualAid, removeMutualAid, updateMutualAid } from '@/app/actions/iso'
 import { parseRunSheet, type ParsedRunSheet } from '@/app/actions/parse-run-sheet'
+import HelpText from '@/components/HelpText'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 const labelCls = "block text-sm font-medium text-zinc-700 mb-1"
@@ -475,6 +476,12 @@ export default function IncidentDetailClient({
           </Link>
         )}
       </div>
+
+      <HelpText className="mb-4">
+        "Finalize" marks the report complete and triggers signature requests to everyone on the run — it doesn't
+        lock the record, "Reopen" is always available. NERIS submission (if enabled) is separate and only unlocks
+        once required fields are complete.
+      </HelpText>
 
       {/* Edit form */}
       {editing ? (

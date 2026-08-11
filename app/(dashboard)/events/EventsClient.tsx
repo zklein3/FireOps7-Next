@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { logAttendance, requestExcuse, logExcusedAttendance } from '@/app/actions/attendance'
 import EventAttendanceSignaturePadModal from '@/app/(dashboard)/signatures/EventAttendanceSignaturePadModal'
+import HelpText from '@/components/HelpText'
 
 interface AttendanceRecord {
   id: string
@@ -173,6 +174,11 @@ export default function EventsClient({
         )}
       </div>
 
+      <HelpText className="mb-4">
+        This page shows meetings, drills, and training you're eligible to attend. Log your own attendance within the
+        self-log window (usually 12 hours around the event), or request an excuse if you can't make it.
+      </HelpText>
+
       {success && <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 border border-green-200">{success}</div>}
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>}
 
@@ -195,6 +201,10 @@ export default function EventsClient({
           ))}
         </div>
       </div>
+      <HelpText className="-mt-3 mb-5">
+        "Upcoming" and "Past" filter by today's date. Switch to "All" if you're looking for something further back —
+        past events stay visible so you can still request an excuse within the 7-day window after the event date.
+      </HelpText>
 
       {/* Event List */}
       {filteredEvents.length === 0 ? (
@@ -332,6 +342,13 @@ export default function EventsClient({
                     <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-3">
                       {isOfficerOrAbove ? 'Log Excused Absence' : !past ? 'Notify of Absence' : 'Request an Excuse'}
                     </p>
+                    {!isOfficerOrAbove && (
+                      <HelpText className="mb-3">
+                        {!past
+                          ? "Submitting this now lets your officer know ahead of time — it still needs their approval, it isn't automatic."
+                          : "This goes to an officer for review. If approved, your attendance status changes from Absent to Excused."}
+                      </HelpText>
+                    )}
                     {excuseTypes.length === 0 ? (
                       <p className="text-xs text-zinc-400">No excuse types configured. Contact your officer.</p>
                     ) : (

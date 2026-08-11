@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createEventSeries } from '@/app/actions/attendance'
+import HelpText from '@/components/HelpText'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 const checkCls = "rounded border-zinc-300 text-red-600 focus:ring-red-500"
@@ -41,6 +42,11 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
       </div>
 
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>}
+
+      <HelpText className="mb-4">
+        This creates an event <em>series</em>. A one-time event makes a single occurrence; a recurring schedule
+        (weekly, monthly) generates individual occurrences a year out, each with its own attendance tracking.
+      </HelpText>
 
       <form action={handleSubmit} className="flex flex-col gap-5">
         {/* Basic Info */}

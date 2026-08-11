@@ -6,6 +6,7 @@ import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { getPermissionSnapshot } from '@/lib/permissions'
 import { getPermissionGroups } from '@/app/actions/permissions'
 import PersonnelAddForm from './PersonnelAddForm'
+import HelpText from '@/components/HelpText'
 
 function formatDate(d: string | null) {
   if (!d) return null
@@ -95,6 +96,10 @@ export default async function PersonnelPage() {
       <p className="text-sm text-zinc-500 mb-4">
         {rows.length} active member{rows.length !== 1 ? 's' : ''}
       </p>
+      <HelpText className="mb-4">
+        "Edit Profile" on your own card updates your contact info yourself, anytime. "View Profile" on someone
+        else's card is read-only — reach out to them directly, or an officer, for changes to their record.
+      </HelpText>
 
       {/* Current user — full-width card */}
       {myRow && (

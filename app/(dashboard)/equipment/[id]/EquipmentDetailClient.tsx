@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { assignItemToCompartment, removeItemFromCompartment, moveItemToCompartment, moveQuantityToStorage, updateItemQuantity } from '@/app/actions/equipment'
+import HelpText from '@/components/HelpText'
 
 interface Apparatus {
   id: string
@@ -219,6 +220,11 @@ export default function EquipmentDetailClient({
           <p className="text-xs text-zinc-400">item types</p>
         </div>
       </div>
+
+      <HelpText className="mb-4">
+        This is a read-only view of what's assigned to this apparatus, by compartment. To actually inspect the
+        items or move them around, use "Inspect Inventory" — this page won't record anything on its own.
+      </HelpText>
 
       {/* Action row */}
       <div className="flex flex-wrap gap-3 mb-6">

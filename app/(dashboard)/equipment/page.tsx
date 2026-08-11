@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { hasPermission } from '@/lib/permissions'
+import HelpText from '@/components/HelpText'
 
 export default async function EquipmentPage() {
   const adminClient = createAdminClient()
@@ -87,6 +88,12 @@ export default async function EquipmentPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Inventory</h1>
         <p className="text-sm text-zinc-500 mt-0.5">Apparatus inventory and department storage</p>
       </div>
+
+      <HelpText className="mb-4">
+        Each apparatus has four separate actions: <strong>Vehicle Check</strong> covers the truck itself (fluids,
+        lights, brakes); <strong>Inspect Inventory</strong> walks each compartment's equipment; <strong>View
+        Inventory</strong> is a read-only look at what's assigned; <strong>Fuel Log</strong> records fill-ups for that unit.
+      </HelpText>
 
       {/* Top cards */}
       <div className="flex flex-col gap-3 mb-6">

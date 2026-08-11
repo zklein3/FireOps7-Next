@@ -7,6 +7,7 @@ import { getPermissionSnapshot } from '@/lib/permissions'
 import { hasBiometricCredentials, isBiometricUnlocked } from '@/app/actions/biometric'
 import BiometricLockScreen from '@/components/BiometricLockScreen'
 import FeedbackButton from '@/components/FeedbackButton'
+import HelpToggle from '@/components/HelpToggle'
 import MobileSidebar from '@/components/MobileSidebar'
 import NavGroups from '@/components/NavGroups'
 import type { NavGroup } from '@/components/NavGroups'
@@ -261,6 +262,7 @@ function SidebarContent({ navGroups, adminNavItems, adminLabel, userInfo, theme,
             </div>
           )}
         </div>
+        <HelpToggle theme={theme} />
         <PWAInstallButton />
         <FeedbackButton />
         <form action={signOut}>

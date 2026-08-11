@@ -7,6 +7,7 @@ import { getPermissionSnapshot } from '@/lib/permissions'
 import SysAdminDashboard from './SysAdminDashboard'
 import DashboardAnnouncementBanner from './DashboardAnnouncementBanner'
 import HubCard from '@/components/HubCard'
+import HelpText from '@/components/HelpText'
 
 async function getUnreadAnnouncements(departmentId: string, personnelId: string) {
   const adminClient = createAdminClient()
@@ -257,6 +258,12 @@ export default async function DashboardPage() {
         </h1>
         <p className="text-sm text-zinc-500 mt-1">{departmentName}</p>
       </div>
+
+      <HelpText className="mb-4">
+        This is your starting point — upcoming events you're eligible for, unread announcements, and quick links to
+        the pages you use most. Tap the <strong>?</strong> button anytime to toggle tips like this one, or visit the
+        Help Center for a full searchable guide.
+      </HelpText>
 
       {/* Admin: public site preview link */}
       {isAdmin && publicSiteUrl && (

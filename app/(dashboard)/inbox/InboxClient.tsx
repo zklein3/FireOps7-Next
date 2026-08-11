@@ -7,6 +7,7 @@ import RestockTab, { type RestockRequest } from './RestockTab'
 import FeedbackTab from './FeedbackTab'
 import IncidentSignaturePadModal from '../signatures/IncidentSignaturePadModal'
 import EventAttendanceSignaturePadModal from '../signatures/EventAttendanceSignaturePadModal'
+import HelpText from '@/components/HelpText'
 
 type Tab = 'permits' | 'records' | 'signatures' | 'restock' | 'feedback' | 'messages'
 
@@ -122,6 +123,11 @@ export default function InboxClient({
           {hasAnyOfficerInboxAccess ? 'Signatures, burn permits, and public records requests' : 'Incident signatures pending your review'}
         </p>
       </div>
+
+      <HelpText className="mb-4">
+        Signatures and Messages are always here for you — Signatures for runs/events needing your signature,
+        Messages for replies to anything you've reported. The other tabs only appear if your role has access to them.
+      </HelpText>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-white rounded-xl border border-zinc-200 p-1 mb-6 w-fit flex-wrap">

@@ -7,6 +7,7 @@ import { addMutualAid } from '@/app/actions/iso'
 import { parseRunSheet } from '@/app/actions/parse-run-sheet'
 import type { ParsedRunSheet } from '@/app/actions/parse-run-sheet'
 import { lookupZip } from '@/lib/zip-lookup'
+import HelpText from '@/components/HelpText'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 const labelCls = "block text-sm font-medium text-zinc-700 mb-1"
@@ -284,6 +285,11 @@ export default function NewIncidentClient({
         {importSuccess && <p className="w-full text-xs text-green-700 font-medium">Form pre-filled — review and adjust as needed</p>}
         {importError && <p className="w-full text-xs text-red-600">{importError}</p>}
       </div>
+
+      <HelpText className="mb-4">
+        The PDF import is entirely optional — it just saves typing. Times, units, and personnel it pre-fills are
+        never final until you review them below; nothing is saved until you submit the form.
+      </HelpText>
 
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>}
 

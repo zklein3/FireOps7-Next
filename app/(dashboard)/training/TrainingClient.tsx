@@ -7,6 +7,7 @@ import { generateCheckinToken } from '@/app/actions/checkin'
 import SignaturePadModal from '@/components/SignaturePadModal'
 import CertSignaturePadModal from '@/components/CertSignaturePadModal'
 import LogOutsideTrainingModal from '@/components/LogOutsideTrainingModal'
+import HelpText from '@/components/HelpText'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 
@@ -193,6 +194,11 @@ export default function TrainingClient({
           + Log Outside Training
         </button>
       </div>
+      <HelpText className="mb-3">
+        Assigned courses and training events show here automatically. Attended a class outside the department (a
+        conference, an outside course)? Use "Log Outside Training" — you can upload a photo of your certificate and
+        it'll pre-fill the details. It sits as pending until an officer reviews it.
+      </HelpText>
 
       {items.length === 0 ? (
         <div className="rounded-xl bg-white border border-zinc-200 px-6 py-12 text-center text-sm text-zinc-400 mb-8">
@@ -501,6 +507,10 @@ export default function TrainingClient({
 
       {/* ── MY CERTIFICATIONS ────────────────────────────────────────────────── */}
       <h2 className="text-base font-semibold text-zinc-700 mb-3">My Certifications</h2>
+      <HelpText className="mb-3">
+        Certs highlighted here are expiring within 60 days or have already expired — everything else is current.
+        Certs are issued automatically when a linked training's attendance is verified, or entered directly by an admin.
+      </HelpText>
 
       {myCerts.length === 0 ? (
         <div className="rounded-xl bg-white border border-zinc-200 px-6 py-12 text-center text-sm text-zinc-400">

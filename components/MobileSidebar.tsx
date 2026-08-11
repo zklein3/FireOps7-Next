@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { signOut } from '@/app/actions/auth'
 import FeedbackButton from './FeedbackButton'
+import HelpToggle from './HelpToggle'
 import NavGroups from './NavGroups'
 import PWAInstallButton from './PWAInstallButton'
 import type { NavGroup } from './NavGroups'
@@ -48,6 +49,9 @@ export default function MobileSidebar({
             {userInfo.departmentName && (
               <p className={`text-xs ${t.textMuted} leading-tight`}>{userInfo.departmentName}</p>
             )}
+          </div>
+          <div className="ml-auto shrink-0">
+            <HelpToggle theme={t} variant="icon" />
           </div>
         </div>
       </div>
@@ -99,6 +103,7 @@ export default function MobileSidebar({
             <p className="text-sm font-medium truncate">{userInfo.name}</p>
             <p className={`text-xs ${t.textMuted} capitalize`}>{userInfo.role}</p>
           </div>
+          <HelpToggle theme={t} />
           <PWAInstallButton />
           <FeedbackButton />
           <form action={signOut}>
