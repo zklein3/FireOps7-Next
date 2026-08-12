@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { addPublicHose, submitPublicHoseTestSession } from '@/app/actions/hose-testing'
+import { addPublicHose, editPublicHose, submitPublicHoseTestSession } from '@/app/actions/hose-testing'
 
 const TESTER_NAME_KEY = 'fireops7_hose_testing_tester_name'
 
@@ -36,9 +36,11 @@ type HoseResult = {
 export default function HoseTestingClient({ slug, initialHoses }: { slug: string; initialHoses: Hose[] }) {
   const today = new Date().toISOString().slice(0, 10)
 
-  const [step, setStep] = useState<'select' | 'mark'>('select')
+  const [step, setStep] = useState<'select' | 'mark' | 'manage'>('select')
   const [hoses, setHoses] = useState(initialHoses)
   const [selected, setSelected] = useState<Set<string>>(new Set(initialHoses.map(h => h.id)))
+  const [search, setSearch] = useState('')
+  const [sizeFilter, setSizeFilter] = useState<number | null>(null)
 
   const [testerName, setTesterName] = useState('')
   const [testDate, setTestDate] = useState(today)
@@ -53,6 +55,10 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
   const [showAddHose, setShowAddHose] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     const stored = localStorage.getItem(TESTER_NAME_KEY)
@@ -73,6 +79,14 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
     })
   }
 
+  const uniqueSizes = Array.from(new Set(hoses.map(h => h.diameter_in))).sort((a, b) => a - b)
+  const filteredHoses = hoses
+    .filter(h => sizeFilter === null || h.diameter_in === sizeFilter)
+    .filter(h => h.hose_identifier.toLowerCase().includes(search.trim().toLowerCase()))
+  const groupedHoses = uniqueSizes
+    .filter(size => sizeFilter === null || size === sizeFilter)
+    .map(size => ({ size, hoses: filteredHoses.filter(h => h.diameter_in === size) }))
+    .filter(g => g.hoses.length > 0)
   const selectedHoses = hoses.filter(h => selected.has(h.id))
   const canContinue = selectedHoses.length > 0 && testerName.trim() && pressurePsi
 
@@ -109,6 +123,21 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
     setSelected(prev => new Set(prev).add(newHose.id))
     setAdding(false)
     setShowAddHose(false)
+  }
+
+  async function handleEditHose(hoseId: string, formData: FormData) {
+    setEditError(null)
+    setEditing(true)
+    const result = await editPublicHose(slug, hoseId, formData)
+    if (result?.error || !result.hose) {
+      setEditError(result?.error ?? 'Failed to update hose.')
+      setEditing(false)
+      return
+    }
+    const updated = result.hose
+    setHoses(prev => [...prev.filter(h => h.id !== hoseId), updated].sort((a, b) => a.hose_identifier.localeCompare(b.hose_identifier)))
+    setEditing(false)
+    setEditingId(null)
   }
 
   async function handleSubmit() {
@@ -175,29 +204,93 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
         </div>
       </div>
 
-      {step === 'select' && (
+      {(step === 'select' || step === 'manage') && (
         <>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-zinc-700">
-              Select Hoses to Test{hoses.length > 0 ? ` — ${selected.size}/${hoses.length} selected` : ''}
-            </h2>
+            {step === 'select' ? (
+              <h2 className="text-sm font-semibold text-zinc-700">
+                Select Hoses to Test{hoses.length > 0 ? ` — ${selected.size}/${hoses.length} selected` : ''}
+              </h2>
+            ) : (
+              <h2 className="text-sm font-semibold text-zinc-700">Manage Hoses — edit ID, size, or type</h2>
+            )}
             <div className="flex gap-2">
-              {hoses.length > 0 && (
+              {step === 'select' && hoses.length > 0 && (
                 <button
-                  onClick={() => setSelected(selected.size === hoses.length ? new Set() : new Set(hoses.map(h => h.id)))}
+                  onClick={() => {
+                    const filteredIds = filteredHoses.map(h => h.id)
+                    const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => selected.has(id))
+                    setSelected(prev => {
+                      const next = new Set(prev)
+                      filteredIds.forEach(id => allFilteredSelected ? next.delete(id) : next.add(id))
+                      return next
+                    })
+                  }}
                   className="text-xs font-semibold text-red-700 hover:text-red-900"
                 >
-                  {selected.size === hoses.length ? 'Select None' : 'Select All'}
+                  {filteredHoses.length > 0 && filteredHoses.every(h => selected.has(h.id)) ? 'Select None' : 'Select All'}
                 </button>
               )}
-              <button onClick={() => setShowAddHose(v => !v)}
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50">
-                {showAddHose ? 'Cancel' : '+ Add Hose'}
+              {step === 'select' && (
+                <button onClick={() => setShowAddHose(v => !v)}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50">
+                  {showAddHose ? 'Cancel' : '+ Add Hose'}
+                </button>
+              )}
+              <button
+                onClick={() => { setStep(step === 'manage' ? 'select' : 'manage'); setEditingId(null); setEditError(null) }}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
+              >
+                {step === 'manage' ? '← Back to Testing' : 'Manage Hoses'}
               </button>
             </div>
           </div>
 
-          {showAddHose && (
+          {hoses.length > 0 && (
+            <div className="relative mb-3">
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search hose ID..."
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-zinc-400 hover:text-zinc-700"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+
+          {uniqueSizes.length > 1 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button
+                onClick={() => setSizeFilter(null)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold border transition-colors ${
+                  sizeFilter === null ? 'bg-red-700 text-white border-red-700' : 'bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-50'
+                }`}
+              >
+                All Sizes
+              </button>
+              {uniqueSizes.map(size => (
+                <button
+                  key={size}
+                  onClick={() => setSizeFilter(size)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold border transition-colors ${
+                    sizeFilter === size ? 'bg-red-700 text-white border-red-700' : 'bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-50'
+                  }`}
+                >
+                  {size}&quot;
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === 'select' && showAddHose && (
             <form action={handleAddHose} className="rounded-xl bg-white border border-zinc-200 p-4 mb-5 flex flex-col gap-3">
               {addError && <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{addError}</div>}
               <div>
@@ -235,26 +328,86 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
             <div className="rounded-xl bg-white border border-zinc-200 px-6 py-12 text-center text-sm text-zinc-400 mb-5">
               No hoses on file yet — use &quot;+ Add Hose&quot; above to register the first one.
             </div>
+          ) : groupedHoses.length === 0 ? (
+            <div className="rounded-xl bg-white border border-zinc-200 px-6 py-12 text-center text-sm text-zinc-400 mb-5">
+              No hoses match &quot;{search}&quot;.
+            </div>
           ) : (
-            <div className="rounded-xl bg-white border border-zinc-200 overflow-hidden divide-y divide-zinc-100 mb-5">
-              {hoses.map(hose => (
-                <label key={hose.id} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(hose.id)}
-                    onChange={() => toggleSelected(hose.id)}
-                    className="w-4 h-4 rounded border-zinc-300 text-red-600 focus:ring-red-500"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <span className="font-mono font-semibold text-zinc-900">{hose.hose_identifier}</span>
-                    <span className="text-xs text-zinc-400 ml-2">{hose.diameter_in}&quot; · {hose.length_ft} ft · {hose.hose_type}</span>
+            <div className="mb-5 space-y-4">
+              {groupedHoses.map(group => (
+                <div key={group.size}>
+                  <h3 className="text-xs font-semibold text-zinc-500 mb-1.5 px-1">
+                    {group.size}&quot; Hose <span className="text-zinc-400 font-normal">({group.hoses.length})</span>
+                  </h3>
+                  <div className="rounded-xl bg-white border border-zinc-200 overflow-hidden divide-y divide-zinc-100">
+                    {group.hoses.map(hose => (
+                      step === 'manage' && editingId === hose.id ? (
+                        <form
+                          key={hose.id}
+                          action={(formData) => handleEditHose(hose.id, formData)}
+                          className="px-4 py-3 flex flex-col gap-2 bg-zinc-50"
+                        >
+                          {editError && <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{editError}</div>}
+                          <div className="flex gap-2">
+                            <input name="hose_identifier" type="text" required defaultValue={hose.hose_identifier}
+                              className="min-w-0 flex-1 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm font-mono focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+                            <select name="hose_type" required defaultValue={hose.hose_type}
+                              className="rounded-lg border border-zinc-300 px-2 py-1.5 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
+                              {HOSE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                            </select>
+                          </div>
+                          <div className="flex gap-2">
+                            <input name="diameter_in" type="number" step="0.25" min="0.5" required defaultValue={hose.diameter_in}
+                              placeholder="Diameter"
+                              className="w-24 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+                            <input name="length_ft" type="number" min="0" required defaultValue={hose.length_ft}
+                              placeholder="Length (ft)"
+                              className="w-28 rounded-lg border border-zinc-300 px-2 py-1.5 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
+                            <button type="submit" disabled={editing}
+                              className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+                              {editing ? 'Saving...' : 'Save'}
+                            </button>
+                            <button type="button" onClick={() => { setEditingId(null); setEditError(null) }}
+                              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50">
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      ) : step === 'manage' ? (
+                        <div key={hose.id} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50">
+                          <div className="min-w-0 flex-1">
+                            <span className="font-mono font-semibold text-zinc-900">{hose.hose_identifier}</span>
+                            <span className="text-xs text-zinc-400 ml-2">{hose.length_ft} ft · {hose.hose_type}</span>
+                          </div>
+                          <button
+                            onClick={() => { setEditingId(hose.id); setEditError(null) }}
+                            className="shrink-0 text-xs font-semibold text-zinc-500 hover:text-red-700"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      ) : (
+                        <label key={hose.id} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(hose.id)}
+                            onChange={() => toggleSelected(hose.id)}
+                            className="w-4 h-4 rounded border-zinc-300 text-red-600 focus:ring-red-500"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="font-mono font-semibold text-zinc-900">{hose.hose_identifier}</span>
+                            <span className="text-xs text-zinc-400 ml-2">{hose.length_ft} ft · {hose.hose_type}</span>
+                          </div>
+                        </label>
+                      )
+                    ))}
                   </div>
-                </label>
+                </div>
               ))}
             </div>
           )}
 
-          {hoses.length > 0 && (
+          {step === 'select' && hoses.length > 0 && (
             <button
               onClick={handleContinue}
               disabled={!canContinue}

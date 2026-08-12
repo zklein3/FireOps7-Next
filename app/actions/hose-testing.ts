@@ -87,6 +87,49 @@ export async function addPublicHose(slug: string, formData: FormData) {
   return { success: true, hose }
 }
 
+export async function editPublicHose(slug: string, hoseId: string, formData: FormData) {
+  const dept = await resolveDeptBySlug(slug)
+  if (!dept || !dept.hose_testing_enabled) return { error: 'Hose testing is not currently enabled.' }
+
+  const hose_identifier = (formData.get('hose_identifier') as string)?.trim()
+  const hose_type = formData.get('hose_type') as string
+  const diameter_in = formData.get('diameter_in') as string
+  const length_ft = formData.get('length_ft') as string
+
+  if (!hose_identifier) return { error: 'Hose ID is required.' }
+  if (!hose_type) return { error: 'Hose type is required.' }
+  if (!diameter_in || !length_ft) return { error: 'Diameter and length are required.' }
+
+  const adminClient = createAdminClient()
+
+  const { data: existing } = await adminClient
+    .from('hoses')
+    .select('id')
+    .eq('department_id', dept.id)
+    .eq('hose_identifier', hose_identifier)
+    .neq('id', hoseId)
+    .maybeSingle()
+  if (existing) return { error: `Hose ${hose_identifier} already exists.` }
+
+  const { data: hose, error: dbErr } = await adminClient
+    .from('hoses')
+    .update({
+      hose_identifier,
+      hose_type,
+      diameter_in: parseFloat(diameter_in),
+      length_ft: parseInt(length_ft),
+    })
+    .eq('id', hoseId)
+    .eq('department_id', dept.id)
+    .select('id, hose_identifier, hose_type, diameter_in, length_ft, status')
+    .single()
+
+  if (dbErr) { await logError(dbErr.message, `/hose-testing/${slug}`, { metadata: { hose_id: hoseId, hose_identifier } }); return { error: dbErr.message } }
+
+  revalidatePath(`/hose-testing/${slug}`)
+  return { success: true, hose }
+}
+
 type HoseTestResult = {
   hose_id: string
   passed: boolean
