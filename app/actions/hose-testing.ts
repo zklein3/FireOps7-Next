@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { hasPermission } from '@/lib/permissions'
-import { logError } from '@/lib/logger'
+import { logError, logEvent } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
 // Non-user access point for NFPA 1962 hose testing — no login required, same
@@ -30,6 +30,32 @@ export async function getPublicHoseTestingContext(slug: string) {
   return { enabled: true, departmentName: dept.name, departmentId: dept.id }
 }
 
+export async function submitPublicHoseTestingFeedback(slug: string, formData: FormData) {
+  const dept = await resolveDeptBySlug(slug)
+  if (!dept || !dept.hose_testing_enabled) return { error: 'Hose testing is not currently enabled.' }
+
+  const message = (formData.get('message') as string)?.trim()
+  const report_type = formData.get('report_type') as string
+  const reporter_name = (formData.get('reporter_name') as string)?.trim()
+
+  if (!message) return { error: 'Please enter a message.' }
+
+  await logEvent({
+    log_type: 'user_report',
+    page: `/hose-testing/${slug}`,
+    message,
+    department_id: dept.id,
+    metadata: { report_type, reporter_name: reporter_name || null, department_name: dept.name, source: 'public_hose_testing' },
+  })
+
+  return { success: true }
+}
+
+// Full in-service roster — used by the Manage Hoses screen and Add Hose,
+// which need every hose regardless of recent-test status. The Select-hoses
+// screen additionally excludes recently-tested hoses via getHoseTestingLiveState
+// below (kept separate so fixing a typo on a hose tested last week doesn't
+// require it to reappear in the testing queue first).
 export async function listPublicHoses(slug: string) {
   const dept = await resolveDeptBySlug(slug)
   if (!dept || !dept.hose_testing_enabled) return []
@@ -43,6 +69,89 @@ export async function listPublicHoses(slug: string) {
     .order('hose_identifier')
 
   return data ?? []
+}
+
+// ─── Live selection state — polled (not Realtime: this page has no
+// login/session, so there's no JWT for Realtime's postgres_changes auth,
+// same reason the kiosk feature polls instead of subscribing). Combines two
+// concerns in one round trip so both stay in sync every ~5s: (1) locks —
+// prevent two concurrent public sessions from testing the same physical hose
+// at once, and (2) which hoses were tested in the last 30 days, so they drop
+// out of the testing queue for everyone without a page reload.
+const LOCK_STALE_MINUTES = 30
+const RECENT_TEST_EXCLUSION_DAYS = 30
+
+export async function getHoseTestingLiveState(slug: string) {
+  const dept = await resolveDeptBySlug(slug)
+  if (!dept || !dept.hose_testing_enabled) return { locks: [], recentlyTestedHoseIds: [] }
+
+  const adminClient = createAdminClient()
+  const staleCutoff = new Date(Date.now() - LOCK_STALE_MINUTES * 60 * 1000).toISOString()
+  await adminClient.from('hose_testing_locks').delete().eq('department_id', dept.id).lt('created_at', staleCutoff)
+
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - RECENT_TEST_EXCLUSION_DAYS)
+  const cutoffStr = cutoff.toISOString().slice(0, 10)
+
+  const [{ data: locks }, { data: recentTests }] = await Promise.all([
+    adminClient
+      .from('hose_testing_locks')
+      .select('hose_id, session_token, tester_name')
+      .eq('department_id', dept.id),
+    adminClient
+      .from('hose_tests')
+      .select('hose_id')
+      .eq('department_id', dept.id)
+      .gte('test_date', cutoffStr),
+  ])
+
+  return {
+    locks: locks ?? [],
+    recentlyTestedHoseIds: Array.from(new Set((recentTests ?? []).map(t => t.hose_id))),
+  }
+}
+
+export async function claimHose(slug: string, hoseId: string, sessionToken: string, testerName: string) {
+  const dept = await resolveDeptBySlug(slug)
+  if (!dept || !dept.hose_testing_enabled) return { error: 'Hose testing is not currently enabled.' }
+
+  const adminClient = createAdminClient()
+  const staleCutoff = new Date(Date.now() - LOCK_STALE_MINUTES * 60 * 1000).toISOString()
+  await adminClient.from('hose_testing_locks').delete().eq('department_id', dept.id).lt('created_at', staleCutoff)
+
+  const { data: existing } = await adminClient
+    .from('hose_testing_locks')
+    .select('session_token, tester_name')
+    .eq('hose_id', hoseId)
+    .maybeSingle()
+
+  if (existing && existing.session_token !== sessionToken) {
+    return { error: `Already selected by ${existing.tester_name || 'another tester'}.` }
+  }
+
+  const { error: dbErr } = await adminClient
+    .from('hose_testing_locks')
+    .upsert(
+      { department_id: dept.id, hose_id: hoseId, session_token: sessionToken, tester_name: testerName || null, created_at: new Date().toISOString() },
+      { onConflict: 'hose_id' }
+    )
+
+  if (dbErr) { await logError(dbErr.message, `/hose-testing/${slug}`, { metadata: { hose_id: hoseId } }); return { error: dbErr.message } }
+  return { success: true }
+}
+
+export async function releaseHose(slug: string, hoseId: string, sessionToken: string) {
+  const dept = await resolveDeptBySlug(slug)
+  if (!dept) return { error: 'Not found.' }
+
+  const adminClient = createAdminClient()
+  await adminClient
+    .from('hose_testing_locks')
+    .delete()
+    .eq('hose_id', hoseId)
+    .eq('session_token', sessionToken)
+
+  return { success: true }
 }
 
 export async function addPublicHose(slug: string, formData: FormData) {
@@ -130,6 +239,27 @@ export async function editPublicHose(slug: string, hoseId: string, formData: For
   return { success: true, hose }
 }
 
+export async function setPublicHoseStatus(slug: string, hoseId: string, status: 'in_service' | 'out_of_service' | 'retired') {
+  const dept = await resolveDeptBySlug(slug)
+  if (!dept || !dept.hose_testing_enabled) return { error: 'Hose testing is not currently enabled.' }
+
+  const adminClient = createAdminClient()
+  const { error: dbErr } = await adminClient
+    .from('hoses')
+    .update({ status })
+    .eq('id', hoseId)
+    .eq('department_id', dept.id)
+
+  if (dbErr) { await logError(dbErr.message, `/hose-testing/${slug}`, { metadata: { hose_id: hoseId, status } }); return { error: dbErr.message } }
+
+  if (status !== 'in_service') {
+    await adminClient.from('hose_testing_locks').delete().eq('hose_id', hoseId)
+  }
+
+  revalidatePath(`/hose-testing/${slug}`)
+  return { success: true }
+}
+
 type HoseTestResult = {
   hose_id: string
   passed: boolean
@@ -165,6 +295,12 @@ export async function submitPublicHoseTestSession(
 
   const { error: dbErr } = await adminClient.from('hose_tests').insert(rows)
   if (dbErr) { await logError(dbErr.message, `/hose-testing/${slug}`, { metadata: { testerName } }); return { error: dbErr.message } }
+
+  await adminClient
+    .from('hose_testing_locks')
+    .delete()
+    .eq('department_id', dept.id)
+    .in('hose_id', results.map(r => r.hose_id))
 
   revalidatePath(`/hose-testing/${slug}`)
   return { success: true, count: rows.length }

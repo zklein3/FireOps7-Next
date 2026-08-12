@@ -1,5 +1,6 @@
 import { getPublicHoseTestingContext, listPublicHoses } from '@/app/actions/hose-testing'
 import HoseTestingClient from './HoseTestingClient'
+import PublicFeedbackButton from '@/components/PublicFeedbackButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,7 @@ export default async function HoseTestingPage({ params }: { params: Promise<{ sl
       <main className="max-w-2xl mx-auto px-4 py-6">
         <HoseTestingClient slug={slug} initialHoses={hoses} />
       </main>
+      <PublicFeedbackButton slug={slug} />
     </div>
   )
 }
