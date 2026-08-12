@@ -13,7 +13,7 @@ export default async function DeptSettingsPage() {
   const adminClient = createAdminClient()
   const { data: deptData } = await adminClient
     .from('departments')
-    .select('weekly_digest_enabled')
+    .select('weekly_digest_enabled, hose_testing_enabled, public_slug')
     .eq('id', ctx.departmentId)
     .single()
 
@@ -23,6 +23,8 @@ export default async function DeptSettingsPage() {
         departmentId={ctx.departmentId}
         timezone={ctx.departmentTimezone}
         weeklyDigestEnabled={deptData?.weekly_digest_enabled ?? false}
+        hoseTestingEnabled={deptData?.hose_testing_enabled ?? false}
+        publicSlug={deptData?.public_slug ?? null}
       />
     </div>
   )

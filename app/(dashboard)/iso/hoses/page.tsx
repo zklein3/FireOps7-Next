@@ -42,7 +42,7 @@ export default async function HosesPage() {
   const { data: testsRaw } = hoseIds.length > 0
     ? await adminClient
         .from('hose_tests')
-        .select('id, hose_id, test_date, tested_by, test_pressure_psi, duration_min, passed, failure_reason, notes')
+        .select('id, hose_id, test_date, tested_by, tested_by_name, test_pressure_psi, duration_min, passed, failure_reason, notes')
         .in('hose_id', hoseIds)
         .order('test_date', { ascending: false })
     : { data: [] as any[] }
@@ -61,7 +61,9 @@ export default async function HosesPage() {
     testsByHose[t.hose_id]!.push({
       id: t.id,
       test_date: t.test_date,
-      tested_by_name: t.tested_by ? (testerNameMap[t.tested_by] ?? null) : null,
+      // Falls back to the free-text name captured by the no-login /hose-testing
+      // entry point when there's no personnel_id (t.tested_by) to look up.
+      tested_by_name: t.tested_by ? (testerNameMap[t.tested_by] ?? null) : (t.tested_by_name ?? null),
       test_pressure_psi: t.test_pressure_psi,
       duration_min: t.duration_min,
       passed: t.passed,
