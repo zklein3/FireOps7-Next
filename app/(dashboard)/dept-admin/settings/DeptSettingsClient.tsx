@@ -5,6 +5,7 @@ import { saveDeptTimezone, saveWeeklyDigestEnabled } from '@/app/actions/departm
 import { setHoseTestingConfig } from '@/app/actions/hose-testing'
 import { TIMEZONES } from '@/lib/format-datetime'
 import HelpText from '@/components/HelpText'
+import QrPrintLabel from '@/components/QrPrintLabel'
 
 export default function DeptSettingsClient({
   departmentId,
@@ -33,6 +34,7 @@ export default function DeptSettingsClient({
   const [slugInput, setSlugInput] = useState('')
   const [hoseTestingSaving, setHoseTestingSaving] = useState(false)
   const [hoseTestingError, setHoseTestingError] = useState<string | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
 
   async function handleSave() {
     setSaving(true); setSaveError(null); setSaveSuccess(false)
@@ -145,9 +147,28 @@ export default function DeptSettingsClient({
         {publicSlug ? (
           <div className="mb-3 rounded-lg bg-zinc-50 border border-zinc-200 px-3 py-2">
             <p className="text-xs font-medium text-zinc-500 mb-0.5">Public link</p>
-            <p className="text-sm font-mono text-zinc-800 break-all">
+            <p className="text-sm font-mono text-zinc-800 break-all mb-2">
               {typeof window !== 'undefined' ? window.location.origin : ''}/hose-testing/{publicSlug}
             </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/hose-testing/${publicSlug}`)
+                  setLinkCopied(true)
+                  setTimeout(() => setLinkCopied(false), 2000)
+                }}
+                className="text-xs font-medium text-red-700 hover:underline"
+              >
+                {linkCopied ? 'Copied!' : 'Copy Link'}
+              </button>
+              <QrPrintLabel
+                type="hose-testing"
+                code={publicSlug}
+                title="Hose Testing"
+                subtitle="Scan to log NFPA 1962 hose tests"
+              />
+            </div>
           </div>
         ) : (
           <div className="mb-3">
