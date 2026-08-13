@@ -152,6 +152,24 @@ export async function releaseHoseInApp(hoseId: string, sessionToken: string) {
   return { success: true }
 }
 
+// Clears someone else's lock regardless of session_token -- for when the
+// original tester (public or in-app) left without finishing: device died,
+// walked away, closed the tab without releasing. Without this the only way
+// a stuck lock clears is the 30-minute staleness cleanup in claimHoseInApp.
+export async function forceReleaseHoseInApp(hoseId: string) {
+  const ctx = await getContext()
+  if (!ctx?.isOfficerOrAbove || !ctx.department_id) return { error: 'Unauthorized' }
+
+  const adminClient = createAdminClient()
+  await adminClient
+    .from('hose_testing_locks')
+    .delete()
+    .eq('hose_id', hoseId)
+    .eq('department_id', ctx.department_id)
+
+  return { success: true }
+}
+
 // ─── Mutual Aid Agreements ───────────────────────────────────────────────────
 
 type MAAApparatus = {

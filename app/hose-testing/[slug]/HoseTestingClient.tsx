@@ -5,6 +5,7 @@ import { addPublicHose, claimHose, editPublicHose, releaseHose, setPublicHoseSta
 import { createClient } from '@/lib/supabase/client'
 
 const TESTER_NAME_KEY = 'fireops7_hose_testing_tester_name'
+const SESSION_TOKEN_KEY = 'fireops7_hose_testing_session_token'
 
 const HOSE_TYPES = [
   { value: 'attack', label: 'Attack' },
@@ -85,7 +86,16 @@ export default function HoseTestingClient({
 
   // Session token identifies this browser tab so concurrent public sessions
   // can tell "my own lock" apart from "someone else's lock" on the same hose.
-  const [sessionToken] = useState<string>(() => crypto.randomUUID())
+  // Persisted per-tab (not per-visit) so reloading this same tab reconnects
+  // to claims already made, instead of orphaning them under a fresh random ID.
+  const [sessionToken] = useState<string>(() => {
+    if (typeof window === 'undefined') return crypto.randomUUID()
+    const existing = sessionStorage.getItem(SESSION_TOKEN_KEY)
+    if (existing) return existing
+    const fresh = crypto.randomUUID()
+    sessionStorage.setItem(SESSION_TOKEN_KEY, fresh)
+    return fresh
+  })
   const [lockedByOthers, setLockedByOthers] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(initialLocks.map(l => [l.hose_id, l.tester_name]))
   )

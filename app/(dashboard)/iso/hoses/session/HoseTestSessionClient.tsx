@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { submitHoseTestSession, claimHoseInApp, releaseHoseInApp } from '@/app/actions/iso'
+import { submitHoseTestSession, claimHoseInApp, releaseHoseInApp, forceReleaseHoseInApp } from '@/app/actions/iso'
 import { createClient } from '@/lib/supabase/client'
 
 // NFPA 1962: attack hose (1"–3") tests at 300 PSI, supply hose (4"–6") tests at 200 PSI —
@@ -27,6 +27,8 @@ type HoseResult = {
 }
 
 type Lock = { id: string; hose_id: string; session_token: string; tester_name: string | null }
+
+const SESSION_TOKEN_KEY = 'fireops7_hose_testing_session_token_inapp'
 
 export default function HoseTestSessionClient({
   hoses,
@@ -60,7 +62,16 @@ export default function HoseTestSessionClient({
   // someone else's — same locking model as the public hose-testing page,
   // shared via the same hose_testing_locks table so an officer here and a
   // public/mutual-aid tester there can't both grab the same physical hose.
-  const [sessionToken] = useState<string>(() => crypto.randomUUID())
+  // Persisted per-tab so reloading this same tab reconnects to claims already
+  // made, instead of orphaning them under a fresh random ID.
+  const [sessionToken] = useState<string>(() => {
+    if (typeof window === 'undefined') return crypto.randomUUID()
+    const existing = sessionStorage.getItem(SESSION_TOKEN_KEY)
+    if (existing) return existing
+    const fresh = crypto.randomUUID()
+    sessionStorage.setItem(SESSION_TOKEN_KEY, fresh)
+    return fresh
+  })
   const [lockedByOthers, setLockedByOthers] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(initialLocks.map(l => [l.hose_id, l.tester_name]))
   )
@@ -121,6 +132,15 @@ export default function HoseTestSessionClient({
     return () => { supabase.removeChannel(channel) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [departmentId])
+
+  const [clearingId, setClearingId] = useState<string | null>(null)
+
+  async function handleForceRelease(hoseId: string) {
+    if (!confirm('Clear this selection? Only do this if the other tester left without finishing it (device died, walked away, etc.).')) return
+    setClearingId(hoseId)
+    await forceReleaseHoseInApp(hoseId)
+    setClearingId(null)
+  }
 
   async function toggleSelected(hoseId: string) {
     setError(null)
@@ -358,6 +378,13 @@ export default function HoseTestSessionClient({
                         <span className="shrink-0 text-xs font-medium text-amber-600">
                           🔒 In progress{lockedByOthers[hose.id] ? ` — ${lockedByOthers[hose.id]}` : ''}
                         </span>
+                        <button
+                          onClick={() => handleForceRelease(hose.id)}
+                          disabled={clearingId === hose.id}
+                          className="shrink-0 text-xs font-semibold text-zinc-400 hover:text-red-700 disabled:opacity-50"
+                        >
+                          {clearingId === hose.id ? 'Clearing...' : 'Clear'}
+                        </button>
                       </div>
                     ) : (
                       <label key={hose.id} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50">
