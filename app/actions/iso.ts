@@ -87,9 +87,69 @@ export async function submitHoseTestSession(
     return { error: dbErr.message }
   }
 
+  await adminClient
+    .from('hose_testing_locks')
+    .delete()
+    .eq('department_id', ctx.department_id)
+    .in('hose_id', results.map(r => r.hose_id))
+
   revalidatePath('/iso/hoses')
   revalidatePath('/iso/report')
   return { success: true, count: rows.length }
+}
+
+// Shares hose_testing_locks with the public /hose-testing/[slug] flow, so an
+// in-app officer and a public/mutual-aid tester can't both grab the same
+// physical hose. Unlike the public claimHose, this never checks
+// hose_testing_enabled — that flag only gates public (anon) access; in-system
+// users can always use hose testing when module_iso + perform_iso_testing
+// allow it, toggle notwithstanding.
+const LOCK_STALE_MINUTES = 30
+
+export async function claimHoseInApp(hoseId: string, sessionToken: string, testerName: string) {
+  const ctx = await getContext()
+  if (!ctx?.isOfficerOrAbove || !ctx.department_id) return { error: 'Unauthorized' }
+
+  const adminClient = createAdminClient()
+  const staleCutoff = new Date(Date.now() - LOCK_STALE_MINUTES * 60 * 1000).toISOString()
+  await adminClient.from('hose_testing_locks').delete().eq('department_id', ctx.department_id).lt('created_at', staleCutoff)
+
+  const { data: existing } = await adminClient
+    .from('hose_testing_locks')
+    .select('session_token, tester_name')
+    .eq('hose_id', hoseId)
+    .maybeSingle()
+
+  if (existing && existing.session_token !== sessionToken) {
+    return { error: `Already selected by ${existing.tester_name || 'another tester'}.` }
+  }
+
+  const { error: dbErr } = await adminClient
+    .from('hose_testing_locks')
+    .upsert(
+      { department_id: ctx.department_id, hose_id: hoseId, session_token: sessionToken, tester_name: testerName || null, created_at: new Date().toISOString() },
+      { onConflict: 'hose_id' }
+    )
+
+  if (dbErr) {
+    await logError(dbErr.message, 'claimHoseInApp', { personnel_id: ctx.me.id, metadata: { hose_id: hoseId } })
+    return { error: dbErr.message }
+  }
+  return { success: true }
+}
+
+export async function releaseHoseInApp(hoseId: string, sessionToken: string) {
+  const ctx = await getContext()
+  if (!ctx?.department_id) return { error: 'Unauthorized' }
+
+  const adminClient = createAdminClient()
+  await adminClient
+    .from('hose_testing_locks')
+    .delete()
+    .eq('hose_id', hoseId)
+    .eq('session_token', sessionToken)
+
+  return { success: true }
 }
 
 // ─── Mutual Aid Agreements ───────────────────────────────────────────────────

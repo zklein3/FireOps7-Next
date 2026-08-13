@@ -71,13 +71,11 @@ export async function listPublicHoses(slug: string) {
   return data ?? []
 }
 
-// ─── Live selection state — polled (not Realtime: this page has no
-// login/session, so there's no JWT for Realtime's postgres_changes auth,
-// same reason the kiosk feature polls instead of subscribing). Combines two
-// concerns in one round trip so both stay in sync every ~5s: (1) locks —
-// prevent two concurrent public sessions from testing the same physical hose
-// at once, and (2) which hoses were tested in the last 30 days, so they drop
-// out of the testing queue for everyone without a page reload.
+// ─── Live selection state — fetched once server-side on page load; live
+// updates after that come from a Realtime subscription in the client
+// (hose_testing_locks is in the supabase_realtime publication, RLS-scoped to
+// anon only when hose_testing_enabled is true). Stale-lock cleanup happens
+// lazily in claimHose instead of on a timer, so there's no need to poll.
 const LOCK_STALE_MINUTES = 30
 const RECENT_TEST_EXCLUSION_DAYS = 30
 
@@ -86,8 +84,6 @@ export async function getHoseTestingLiveState(slug: string) {
   if (!dept || !dept.hose_testing_enabled) return { locks: [], recentlyTestedHoseIds: [] }
 
   const adminClient = createAdminClient()
-  const staleCutoff = new Date(Date.now() - LOCK_STALE_MINUTES * 60 * 1000).toISOString()
-  await adminClient.from('hose_testing_locks').delete().eq('department_id', dept.id).lt('created_at', staleCutoff)
 
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - RECENT_TEST_EXCLUSION_DAYS)

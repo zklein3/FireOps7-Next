@@ -1,4 +1,4 @@
-import { getPublicHoseTestingContext, listPublicHoses } from '@/app/actions/hose-testing'
+import { getPublicHoseTestingContext, listPublicHoses, getHoseTestingLiveState } from '@/app/actions/hose-testing'
 import HoseTestingClient from './HoseTestingClient'
 import PublicFeedbackButton from '@/components/PublicFeedbackButton'
 
@@ -6,9 +6,9 @@ export const dynamic = 'force-dynamic'
 
 export default async function HoseTestingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const { enabled, departmentName } = await getPublicHoseTestingContext(slug)
+  const { enabled, departmentName, departmentId } = await getPublicHoseTestingContext(slug)
 
-  if (!enabled) {
+  if (!enabled || !departmentId) {
     return (
       <div className="min-h-screen bg-zinc-100 flex items-center justify-center px-4">
         <div className="max-w-sm text-center">
@@ -19,7 +19,10 @@ export default async function HoseTestingPage({ params }: { params: Promise<{ sl
     )
   }
 
-  const hoses = await listPublicHoses(slug)
+  const [hoses, { locks, recentlyTestedHoseIds }] = await Promise.all([
+    listPublicHoses(slug),
+    getHoseTestingLiveState(slug),
+  ])
 
   return (
     <div className="min-h-screen bg-zinc-100">
@@ -30,7 +33,13 @@ export default async function HoseTestingPage({ params }: { params: Promise<{ sl
         </div>
       </header>
       <main className="max-w-2xl mx-auto px-4 py-6">
-        <HoseTestingClient slug={slug} initialHoses={hoses} />
+        <HoseTestingClient
+          slug={slug}
+          departmentId={departmentId}
+          initialHoses={hoses}
+          initialLocks={locks}
+          initialRecentlyTestedIds={recentlyTestedHoseIds}
+        />
       </main>
       <PublicFeedbackButton slug={slug} />
     </div>

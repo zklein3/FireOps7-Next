@@ -18,12 +18,18 @@ export default async function HoseTestSessionPage() {
 
   if (!(await hasPermission(ctx, 'perform_iso_testing'))) redirect('/iso/hoses')
 
-  const { data: hosesRaw } = await adminClient
-    .from('hoses')
-    .select('id, hose_identifier, hose_type, diameter_in, length_ft, status')
-    .eq('department_id', ctx.departmentId)
-    .eq('status', 'in_service')
-    .order('hose_identifier')
+  const [{ data: hosesRaw }, { data: locksRaw }] = await Promise.all([
+    adminClient
+      .from('hoses')
+      .select('id, hose_identifier, hose_type, diameter_in, length_ft, status')
+      .eq('department_id', ctx.departmentId)
+      .eq('status', 'in_service')
+      .order('hose_identifier'),
+    adminClient
+      .from('hose_testing_locks')
+      .select('hose_id, session_token, tester_name')
+      .eq('department_id', ctx.departmentId),
+  ])
 
   const testerName = `${ctx.firstName} ${ctx.lastName}`
 
@@ -31,6 +37,8 @@ export default async function HoseTestSessionPage() {
     <HoseTestSessionClient
       hoses={hosesRaw ?? []}
       testerName={testerName}
+      departmentId={ctx.departmentId}
+      initialLocks={locksRaw ?? []}
     />
   )
 }

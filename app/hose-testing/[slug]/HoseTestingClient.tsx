@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { addPublicHose, claimHose, editPublicHose, getHoseTestingLiveState, releaseHose, setPublicHoseStatus, submitPublicHoseTestSession } from '@/app/actions/hose-testing'
+import { addPublicHose, claimHose, editPublicHose, releaseHose, setPublicHoseStatus, submitPublicHoseTestSession } from '@/app/actions/hose-testing'
+import { createClient } from '@/lib/supabase/client'
 
 const TESTER_NAME_KEY = 'fireops7_hose_testing_tester_name'
 
@@ -33,7 +34,21 @@ type HoseResult = {
   failure_reason: string
 }
 
-export default function HoseTestingClient({ slug, initialHoses }: { slug: string; initialHoses: Hose[] }) {
+type Lock = { hose_id: string; session_token: string; tester_name: string | null }
+
+export default function HoseTestingClient({
+  slug,
+  departmentId,
+  initialHoses,
+  initialLocks,
+  initialRecentlyTestedIds,
+}: {
+  slug: string
+  departmentId: string
+  initialHoses: Hose[]
+  initialLocks: Lock[]
+  initialRecentlyTestedIds: string[]
+}) {
   const today = new Date().toISOString().slice(0, 10)
 
   const [step, setStep] = useState<'select' | 'mark' | 'manage'>('select')
@@ -71,8 +86,13 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
   // Session token identifies this browser tab so concurrent public sessions
   // can tell "my own lock" apart from "someone else's lock" on the same hose.
   const [sessionToken] = useState<string>(() => crypto.randomUUID())
-  const [lockedByOthers, setLockedByOthers] = useState<Record<string, string | null>>({})
-  const [recentlyTestedIds, setRecentlyTestedIds] = useState<Set<string>>(new Set())
+  const [lockedByOthers, setLockedByOthers] = useState<Record<string, string | null>>(() =>
+    Object.fromEntries(initialLocks.map(l => [l.hose_id, l.tester_name]))
+  )
+  // 30-day exclusion is set once on load and only needs to move locally when
+  // *this* session submits a test — it isn't collision-sensitive the way
+  // locks are, so it doesn't need a live feed of its own.
+  const [recentlyTestedIds] = useState<Set<string>>(new Set(initialRecentlyTestedIds))
   const [claimingId, setClaimingId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -80,49 +100,52 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
     if (stored) setTesterName(stored)
   }, [])
 
-  async function refreshLocks() {
-    const { locks, recentlyTestedHoseIds } = await getHoseTestingLiveState(slug)
-    const map: Record<string, string | null> = {}
-    for (const l of locks) {
-      if (l.session_token !== sessionToken) map[l.hose_id] = l.tester_name
-    }
-    setLockedByOthers(map)
-    setRecentlyTestedIds(new Set(recentlyTestedHoseIds))
-  }
-
+  // Live lock state — Realtime instead of polling, so an unattended tab costs
+  // an idle socket instead of a query every 5s (see 2026-08-13 incident: a
+  // forgotten tab polled overnight and drained the Supabase Disk IO budget).
+  // RLS scopes anon reads to departments with hose_testing_enabled = true.
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`hose_testing_locks_${departmentId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'hose_testing_locks', filter: `department_id=eq.${departmentId}` },
+        payload => {
+          const row = payload.new as Lock
+          if (row.session_token !== sessionToken) setLockedByOthers(prev => ({ ...prev, [row.hose_id]: row.tester_name }))
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'hose_testing_locks', filter: `department_id=eq.${departmentId}` },
+        payload => {
+          const row = payload.new as Lock
+          setLockedByOthers(prev => {
+            const next = { ...prev }
+            if (row.session_token !== sessionToken) next[row.hose_id] = row.tester_name
+            else delete next[row.hose_id]
+            return next
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'hose_testing_locks', filter: `department_id=eq.${departmentId}` },
+        payload => {
+          const row = payload.old as { hose_id: string }
+          setLockedByOthers(prev => {
+            const next = { ...prev }
+            delete next[row.hose_id]
+            return next
+          })
+        }
+      )
+      .subscribe()
 
-    function startPolling() {
-      if (interval) return
-      refreshLocks()
-      interval = setInterval(refreshLocks, 5000)
-    }
-
-    function stopPolling() {
-      if (interval) {
-        clearInterval(interval)
-        interval = null
-      }
-    }
-
-    // Public, no-login page — a phone left locked/backgrounded on this screen
-    // must not keep polling indefinitely. Without this, a screen-locked tab
-    // was found polling every 5s for 18+ hours overnight (2026-08-13).
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'visible') startPolling()
-      else stopPolling()
-    }
-
-    if (document.visibilityState === 'visible') startPolling()
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    return () => {
-      stopPolling()
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
+    return () => { supabase.removeChannel(channel) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [departmentId])
 
   function saveTesterName(name: string) {
     setTesterName(name)
@@ -133,7 +156,7 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
     setError(null)
     if (selected.has(hoseId)) {
       setSelected(prev => { const next = new Set(prev); next.delete(hoseId); return next })
-      releaseHose(slug, hoseId, sessionToken).then(refreshLocks)
+      releaseHose(slug, hoseId, sessionToken)
       return
     }
     if (hoseId in lockedByOthers) return
@@ -142,7 +165,6 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
     setClaimingId(null)
     if (result?.error) {
       setError(result.error)
-      refreshLocks()
       return
     }
     setSelected(prev => new Set(prev).add(hoseId))
@@ -160,7 +182,6 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
       const succeededIds = toClaim.filter((id, i) => !results[i]?.error)
       setSelected(prev => { const next = new Set(prev); succeededIds.forEach(id => next.add(id)); return next })
     }
-    refreshLocks()
   }
 
   // Manage sees the full roster (fixing a typo shouldn't require the hose to
@@ -292,7 +313,6 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
     setForcedIds(prev => { const next = new Set(prev); submittedIds.forEach(id => next.delete(id)); return next })
     setStep('select')
     setLoading(false)
-    refreshLocks()
   }
 
   return (
