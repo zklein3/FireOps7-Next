@@ -168,6 +168,19 @@ export default function HoseTestingClient({
             delete next[hoseId]
             return next
           })
+          // Covers force-release from the officer session page — if this was
+          // *our own* selection, someone else clearing the lock on the server
+          // wouldn't otherwise be reflected here (this session was never in
+          // lockedByOthers for its own claim, so nothing above touches it).
+          let wasMine = false
+          setSelected(prev => {
+            if (!prev.has(hoseId)) return prev
+            wasMine = true
+            const next = new Set(prev)
+            next.delete(hoseId)
+            return next
+          })
+          if (wasMine) setError(`Your selection on a hose was cleared by an officer.`)
         }
       )
       .subscribe()

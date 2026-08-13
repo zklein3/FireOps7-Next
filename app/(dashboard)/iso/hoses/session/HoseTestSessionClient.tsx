@@ -125,6 +125,18 @@ export default function HoseTestSessionClient({
             delete next[hoseId]
             return next
           })
+          // If this was *our own* selection, someone else force-releasing it
+          // wouldn't otherwise be reflected here (this session was never in
+          // lockedByOthers for its own claim, so nothing above touches it).
+          let wasMine = false
+          setSelected(prev => {
+            if (!prev.has(hoseId)) return prev
+            wasMine = true
+            const next = new Set(prev)
+            next.delete(hoseId)
+            return next
+          })
+          if (wasMine) setError('Your selection on a hose was cleared by another officer.')
         }
       )
       .subscribe()
