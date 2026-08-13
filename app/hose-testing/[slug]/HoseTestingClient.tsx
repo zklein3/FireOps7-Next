@@ -91,9 +91,36 @@ export default function HoseTestingClient({ slug, initialHoses }: { slug: string
   }
 
   useEffect(() => {
-    refreshLocks()
-    const interval = setInterval(refreshLocks, 5000)
-    return () => clearInterval(interval)
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    function startPolling() {
+      if (interval) return
+      refreshLocks()
+      interval = setInterval(refreshLocks, 5000)
+    }
+
+    function stopPolling() {
+      if (interval) {
+        clearInterval(interval)
+        interval = null
+      }
+    }
+
+    // Public, no-login page — a phone left locked/backgrounded on this screen
+    // must not keep polling indefinitely. Without this, a screen-locked tab
+    // was found polling every 5s for 18+ hours overnight (2026-08-13).
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') startPolling()
+      else stopPolling()
+    }
+
+    if (document.visibilityState === 'visible') startPolling()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      stopPolling()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
