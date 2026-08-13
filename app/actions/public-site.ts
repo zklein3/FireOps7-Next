@@ -46,6 +46,49 @@ export async function savePublicSiteSettings(formData: FormData) {
   return { success: true, slug: public_slug }
 }
 
+// Dept-admin self-service on/off — deliberately narrower than
+// savePublicSiteSettings above (which also edits the citizen-facing content
+// fields and stays sys-admin only for now). This only flips the flag + sets
+// a slug if one isn't already set, same shape as setHoseTestingConfig, since
+// hose testing and the public site share the one public_slug column.
+export async function setPublicSiteEnabled(enabled: boolean, slug: string | null) {
+  const ctx = await getCurrentDepartmentContext()
+  if (!ctx) return { error: 'Not authenticated.' }
+  if (!(await hasPermission(ctx, 'manage_department_settings'))) return { error: 'Only admins can update department settings.' }
+  if (!ctx.departmentId) return { error: 'No department selected.' }
+
+  const adminClient = createAdminClient()
+
+  const { data: current } = await adminClient
+    .from('departments')
+    .select('public_slug')
+    .eq('id', ctx.departmentId)
+    .single()
+
+  const cleanSlug = slug?.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || null
+  if (enabled && !current?.public_slug && !cleanSlug) {
+    return { error: 'A URL slug is required to enable the public site.' }
+  }
+
+  const update: { public_site_enabled: boolean; public_slug?: string } = { public_site_enabled: enabled }
+  if (!current?.public_slug && cleanSlug) update.public_slug = cleanSlug
+
+  const { error: dbErr } = await adminClient
+    .from('departments')
+    .update(update)
+    .eq('id', ctx.departmentId)
+
+  if (dbErr) {
+    if (dbErr.code === '23505') return { error: 'That slug is already in use by another department.' }
+    await logError(dbErr.message, '/dept-admin/settings', { department_id: ctx.departmentId })
+    return { error: dbErr.message }
+  }
+
+  revalidatePath('/dept-admin/settings')
+  revalidatePath('/dept-admin')
+  return { success: true, slug: update.public_slug ?? current?.public_slug ?? null }
+}
+
 export async function toggleEventSeriesPublic(eventSeriesId: string, isPublic: boolean, departmentId: string) {
   const supabase = await createClient()
   const adminClient = createAdminClient()

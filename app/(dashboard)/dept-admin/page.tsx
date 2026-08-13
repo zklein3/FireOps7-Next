@@ -4,7 +4,6 @@ import { getCurrentDepartmentContext } from '@/lib/current-department'
 import { hasPermission, getPermissionSnapshot } from '@/lib/permissions'
 import Image from 'next/image'
 import HubCard from '@/components/HubCard'
-import FuelStorageToggle from './FuelStorageToggle'
 import HelpText from '@/components/HelpText'
 
 export default async function DeptAdminPage() {
@@ -80,7 +79,7 @@ export default async function DeptAdminPage() {
         {perms.manage_department_settings && (
           <HubCard
             title="Department Settings"
-            description="Timezone and display preferences"
+            description="Timezone, feature toggles, and public-facing tools"
             href="/dept-admin/settings"
           />
         )}
@@ -182,11 +181,6 @@ export default async function DeptAdminPage() {
             href="/dept-admin/fuel-tanks"
           />
         )}
-      </div>
-
-      <div className="mt-8">
-        <h2 className="text-sm font-semibold text-zinc-700 mb-3">Department Features</h2>
-        <FuelStorageToggle enabled={moduleFuelStorage} />
       </div>
 
       {/* NERIS promo — fire depts only, shown only when module is not yet enabled */}

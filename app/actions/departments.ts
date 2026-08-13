@@ -138,6 +138,7 @@ export async function setFuelStorageModule(enabled: boolean) {
 
   if (dbErr) { await logError(dbErr.message, '/dept-admin', { department_id: ctx.departmentId }); return { error: dbErr.message } }
   revalidatePath('/dept-admin')
+  revalidatePath('/dept-admin/settings')
   revalidatePath('/fuel')
   return { success: true }
 }

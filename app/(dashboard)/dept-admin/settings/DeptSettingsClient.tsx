@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { saveDeptTimezone, saveWeeklyDigestEnabled } from '@/app/actions/departments'
+import { useEffect, useState } from 'react'
+import { saveDeptTimezone, saveWeeklyDigestEnabled, setFuelStorageModule } from '@/app/actions/departments'
 import { setHoseTestingConfig } from '@/app/actions/hose-testing'
+import { setPublicSiteEnabled } from '@/app/actions/public-site'
 import { TIMEZONES } from '@/lib/format-datetime'
 import HelpText from '@/components/HelpText'
 import QrPrintLabel from '@/components/QrPrintLabel'
@@ -12,18 +13,27 @@ export default function DeptSettingsClient({
   timezone: initial,
   weeklyDigestEnabled: initialDigestEnabled,
   hoseTestingEnabled: initialHoseTestingEnabled,
+  publicSiteEnabled: initialPublicSiteEnabled,
+  fuelStorageEnabled: initialFuelStorageEnabled,
   publicSlug: initialPublicSlug,
 }: {
   departmentId: string
   timezone: string
   weeklyDigestEnabled: boolean
   hoseTestingEnabled: boolean
+  publicSiteEnabled: boolean
+  fuelStorageEnabled: boolean
   publicSlug: string | null
 }) {
   const [timezone, setTimezone] = useState(initial)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
+
+  // Set after mount only, to avoid an SSR/client hydration mismatch — the
+  // server has no window.location, so this must never render server-side.
+  const [origin, setOrigin] = useState('')
+  useEffect(() => { setOrigin(window.location.origin) }, [])
 
   const [digestEnabled, setDigestEnabled] = useState(initialDigestEnabled)
   const [digestSaving, setDigestSaving] = useState(false)
@@ -35,6 +45,15 @@ export default function DeptSettingsClient({
   const [hoseTestingSaving, setHoseTestingSaving] = useState(false)
   const [hoseTestingError, setHoseTestingError] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
+
+  const [publicSiteEnabled, setPublicSiteEnabledState] = useState(initialPublicSiteEnabled)
+  const [publicSiteSaving, setPublicSiteSaving] = useState(false)
+  const [publicSiteError, setPublicSiteError] = useState<string | null>(null)
+  const [siteLinkCopied, setSiteLinkCopied] = useState(false)
+
+  const [fuelStorageEnabled, setFuelStorageEnabled] = useState(initialFuelStorageEnabled)
+  const [fuelStorageSaving, setFuelStorageSaving] = useState(false)
+  const [fuelStorageError, setFuelStorageError] = useState<string | null>(null)
 
   async function handleSave() {
     setSaving(true); setSaveError(null); setSaveSuccess(false)
@@ -63,11 +82,30 @@ export default function DeptSettingsClient({
     setHoseTestingSaving(false)
   }
 
+  async function handlePublicSiteToggle(next: boolean) {
+    setPublicSiteSaving(true); setPublicSiteError(null)
+    const result = await setPublicSiteEnabled(next, publicSlug ? null : slugInput)
+    if (result?.error) {
+      setPublicSiteError(result.error)
+    } else {
+      setPublicSiteEnabledState(next)
+      if (result?.slug) setPublicSlug(result.slug)
+    }
+    setPublicSiteSaving(false)
+  }
+
+  async function handleFuelStorageToggle(next: boolean) {
+    setFuelStorageEnabled(next); setFuelStorageSaving(true); setFuelStorageError(null)
+    const result = await setFuelStorageModule(next)
+    if (result?.error) { setFuelStorageError(result.error); setFuelStorageEnabled(!next) }
+    setFuelStorageSaving(false)
+  }
+
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-zinc-900">Department Settings</h1>
-        <p className="text-sm text-zinc-500 mt-1">Timezone and display preferences for this department.</p>
+        <p className="text-sm text-zinc-500 mt-1">Timezone, email reminders, and feature toggles for this department.</p>
       </div>
 
       <HelpText className="mb-4">
@@ -148,13 +186,13 @@ export default function DeptSettingsClient({
           <div className="mb-3 rounded-lg bg-zinc-50 border border-zinc-200 px-3 py-2">
             <p className="text-xs font-medium text-zinc-500 mb-0.5">Public link</p>
             <p className="text-sm font-mono text-zinc-800 break-all mb-2">
-              {typeof window !== 'undefined' ? window.location.origin : ''}/hose-testing/{publicSlug}
+              {origin}/hose-testing/{publicSlug}
             </p>
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/hose-testing/${publicSlug}`)
+                  navigator.clipboard.writeText(`${origin}/hose-testing/${publicSlug}`)
                   setLinkCopied(true)
                   setTimeout(() => setLinkCopied(false), 2000)
                 }}
@@ -196,6 +234,92 @@ export default function DeptSettingsClient({
           />
           <span className="text-sm text-zinc-700">
             {hoseTestingEnabled ? 'Public hose testing is on' : 'Public hose testing is off'}
+          </span>
+        </label>
+      </div>
+
+      <div className="rounded-xl bg-white border border-zinc-200 shadow-sm p-5 mt-6">
+        <h2 className="text-sm font-semibold text-zinc-900 mb-1">Public Site</h2>
+        <p className="text-xs text-zinc-500 mb-4">
+          A citizen-facing page for burn permits, records requests, and general info about your department.
+          Shares the same link/slug as public hose testing if you've already set one up.
+        </p>
+
+        {publicSiteError && (
+          <div className="mb-3 rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700">{publicSiteError}</div>
+        )}
+
+        {publicSlug ? (
+          <div className="mb-3 rounded-lg bg-zinc-50 border border-zinc-200 px-3 py-2">
+            <p className="text-xs font-medium text-zinc-500 mb-0.5">Public link</p>
+            <p className="text-sm font-mono text-zinc-800 break-all mb-2">
+              {origin}/dept/{publicSlug}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(`${origin}/dept/${publicSlug}`)
+                setSiteLinkCopied(true)
+                setTimeout(() => setSiteLinkCopied(false), 2000)
+              }}
+              className="text-xs font-medium text-red-700 hover:underline"
+            >
+              {siteLinkCopied ? 'Copied!' : 'Copy Link'}
+            </button>
+          </div>
+        ) : (
+          <div className="mb-3">
+            <label className="block text-xs font-medium text-zinc-600 mb-1">Choose a URL slug (required to enable)</label>
+            <input
+              type="text"
+              value={slugInput}
+              onChange={e => setSlugInput(e.target.value)}
+              placeholder="your-department-name"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+            />
+            <p className="text-xs text-zinc-400 mt-1">
+              This becomes your link: /dept/your-slug. Shared with public hose testing's URL if you set one up later.
+            </p>
+          </div>
+        )}
+
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={publicSiteEnabled}
+            disabled={publicSiteSaving}
+            onChange={e => handlePublicSiteToggle(e.target.checked)}
+            className="h-4 w-4 rounded border-zinc-300 text-red-600 focus:ring-red-500"
+          />
+          <span className="text-sm text-zinc-700">
+            {publicSiteEnabled ? 'Public site is on' : 'Public site is off'}
+          </span>
+        </label>
+        <p className="text-xs text-zinc-400 mt-2">
+          Content like your tagline, contact info, and about text is still set up by FireOps7 support — reach out once you've turned this on.
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-white border border-zinc-200 shadow-sm p-5 mt-6">
+        <h2 className="text-sm font-semibold text-zinc-900 mb-1">On-Site Fuel Storage</h2>
+        <p className="text-xs text-zinc-500 mb-4">
+          Track fuel deliveries into department-owned storage tanks and automatically deduct gallons when apparatus fill up on-site.
+        </p>
+
+        {fuelStorageError && (
+          <div className="mb-3 rounded-lg bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700">{fuelStorageError}</div>
+        )}
+
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={fuelStorageEnabled}
+            disabled={fuelStorageSaving}
+            onChange={e => handleFuelStorageToggle(e.target.checked)}
+            className="h-4 w-4 rounded border-zinc-300 text-red-600 focus:ring-red-500"
+          />
+          <span className="text-sm text-zinc-700">
+            {fuelStorageEnabled ? 'On-site fuel storage is on' : 'On-site fuel storage is off'}
           </span>
         </label>
       </div>
