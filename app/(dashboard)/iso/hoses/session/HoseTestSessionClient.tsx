@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { submitHoseTestSession, claimHoseInApp, releaseHoseInApp } from '@/app/actions/iso'
@@ -26,7 +26,7 @@ type HoseResult = {
   failure_reason: string
 }
 
-type Lock = { hose_id: string; session_token: string; tester_name: string | null }
+type Lock = { id: string; hose_id: string; session_token: string; tester_name: string | null }
 
 export default function HoseTestSessionClient({
   hoses,
@@ -64,6 +64,13 @@ export default function HoseTestSessionClient({
   const [lockedByOthers, setLockedByOthers] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(initialLocks.map(l => [l.hose_id, l.tester_name]))
   )
+  // Realtime DELETE payloads only ever carry the row's own primary key (`id`),
+  // never other columns, even with replica identity full — a hard Realtime+RLS
+  // restriction. This ref (built from INSERT/UPDATE payloads, which do carry
+  // full rows) lets a bare-PK DELETE resolve back to a hose_id.
+  const lockIdToHoseId = useRef<Record<string, string>>(
+    Object.fromEntries(initialLocks.map(l => [l.id, l.hose_id]))
+  )
 
   useEffect(() => {
     const supabase = createClient()
@@ -74,6 +81,7 @@ export default function HoseTestSessionClient({
         { event: 'INSERT', schema: 'public', table: 'hose_testing_locks', filter: `department_id=eq.${departmentId}` },
         payload => {
           const row = payload.new as Lock
+          lockIdToHoseId.current = { ...lockIdToHoseId.current, [row.id]: row.hose_id }
           if (row.session_token !== sessionToken) setLockedByOthers(prev => ({ ...prev, [row.hose_id]: row.tester_name }))
         }
       )
@@ -82,6 +90,7 @@ export default function HoseTestSessionClient({
         { event: 'UPDATE', schema: 'public', table: 'hose_testing_locks', filter: `department_id=eq.${departmentId}` },
         payload => {
           const row = payload.new as Lock
+          lockIdToHoseId.current = { ...lockIdToHoseId.current, [row.id]: row.hose_id }
           setLockedByOthers(prev => {
             const next = { ...prev }
             if (row.session_token !== sessionToken) next[row.hose_id] = row.tester_name
@@ -94,10 +103,15 @@ export default function HoseTestSessionClient({
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'hose_testing_locks', filter: `department_id=eq.${departmentId}` },
         payload => {
-          const row = payload.old as { hose_id: string }
+          const deletedId = (payload.old as { id: string }).id
+          const hoseId = lockIdToHoseId.current[deletedId]
+          if (!hoseId) return
+          const rest = { ...lockIdToHoseId.current }
+          delete rest[deletedId]
+          lockIdToHoseId.current = rest
           setLockedByOthers(prev => {
             const next = { ...prev }
-            delete next[row.hose_id]
+            delete next[hoseId]
             return next
           })
         }

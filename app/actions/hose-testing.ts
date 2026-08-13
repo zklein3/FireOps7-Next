@@ -92,7 +92,7 @@ export async function getHoseTestingLiveState(slug: string) {
   const [{ data: locks }, { data: recentTests }] = await Promise.all([
     adminClient
       .from('hose_testing_locks')
-      .select('hose_id, session_token, tester_name')
+      .select('id, hose_id, session_token, tester_name')
       .eq('department_id', dept.id),
     adminClient
       .from('hose_tests')
