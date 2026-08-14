@@ -474,6 +474,11 @@ Most small departments aren't actually set up to handle public records requests 
 
 **Note:** Facebook page now links to the public site (set up 2026-06-09) — public site is getting real outside traffic now, so any future removal should be a deliberate UI change, not a silent drop (residents may have bookmarked/shared links).
 
+### 9b. Burn Permit Reviewer / Feedback Notify Toggles — Reconsider Placement ⬅ PINNED FOR LATER (2026-08-14)
+`department_personnel.burn_permit_reviewer` and `.notify_feedback` (who reviews burn permits / gets notified on public feedback) are currently set per-person on the Personnel Profile page (`app/(dashboard)/personnel/[id]/PersonnelProfileClient.tsx`), not alongside the other public-site-related toggles.
+
+Open question: should these live in Personnel (since they're about a specific person's role) or move into the consolidated Dept Admin → Settings page (`/dept-admin/settings`, see §"Consolidate dept-admin feature toggles onto one Settings page", 2026-08-12) alongside Public Site/Fuel Storage/Hose Testing, since that's now the one place admins go to configure public-site-adjacent behavior. Not decided — revisit before building anything.
+
 ### 10. QR Self Check-In — Event / Training / Incident — SHIPPED ✅ (2026-07-10)
 `lib/checkin-token.ts` — HMAC-SHA256 signed token (`base64url(payload).signature`, no new dependency, signed with `SUPABASE_SERVICE_ROLE_KEY`), payload `{ type: 'event_instance' | 'training_event' | 'incident', id, exp }`. No DB table — tokens are minted on demand, not stored, so there's nothing to clean up and officers just regenerate a fresh QR if one expires.
 - `app/actions/checkin.ts` → `generateCheckinToken(type, id)` — officer/admin only, verifies the record's `department_id` matches the caller's current department before minting (blocks a multi-dept officer from generating a token for the wrong department). TTL: 24h for events/training, 7 days for incidents (matches the existing self-log windows those actions already enforce independently).
