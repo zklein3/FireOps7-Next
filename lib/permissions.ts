@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CurrentDepartmentContext } from '@/lib/current-department'
 import { PERMISSION_CATALOG, type PermissionKey } from '@/lib/permission-catalog'
@@ -23,10 +24,14 @@ function legacySnapshot(systemRole: string | null): PermissionSnapshot {
   ) as PermissionSnapshot
 }
 
-// One DB round trip per request/action — call once and pass the snapshot
-// around rather than calling hasPermission() repeatedly against fresh
-// queries in the same request.
-export async function getPermissionSnapshot(ctx: CurrentDepartmentContext): Promise<PermissionSnapshot> {
+// Wrapped in React's per-request cache() -- this used to run its own DB query
+// every time it was called, and both the dashboard layout and individual
+// pages' own hasPermission() checks were each triggering a fresh one on top
+// of each other for the same request. cache() keys on argument identity, so
+// this only actually dedupes when callers share the same ctx object — which
+// they do as long as it came from the (also cached) getCurrentDepartmentContext()
+// rather than a freshly-constructed object, as in hasPermissionForDepartment below.
+export const getPermissionSnapshot = cache(async (ctx: CurrentDepartmentContext): Promise<PermissionSnapshot> => {
   if (ctx.isSysAdmin) {
     // Sys admin is the platform/developer-level bypass — same as everywhere
     // else in the app, unrelated to department permission groups.
@@ -61,7 +66,7 @@ export async function getPermissionSnapshot(ctx: CurrentDepartmentContext): Prom
     if (key in group.permissions) merged[key] = !!group.permissions[key]
   }
   return merged
-}
+})
 
 export function checkPermission(snapshot: PermissionSnapshot, key: PermissionKey): boolean {
   return !!snapshot[key]

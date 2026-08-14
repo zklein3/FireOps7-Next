@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -26,10 +27,27 @@ export type CurrentDepartmentContext = {
  * honoring the SELECTED_DEPARTMENT_COOKIE for users with multiple active
  * department memberships. Falls back to the sole membership for everyone else.
  * Returns null if there's no authenticated user or personnel record.
+ *
+ * Wrapped in React's per-request cache() -- this used to run its own
+ * auth.getUser() network round trip plus 2 DB queries independently in both
+ * the dashboard layout and (redundantly) in nearly every page.tsx on top of
+ * it, on every single page load. cache() means every caller within the same
+ * request gets the same already-computed result instead of re-fetching; it
+ * resets cleanly per-request, so there's no cross-user staleness risk.
+ *
+ * Uses getSession() (local JWT signature check, no network call) rather than
+ * getUser() (re-verifies with Supabase's Auth server every time) -- safe here
+ * specifically because middleware.ts already ran the real, network-verified
+ * getUser() check on this exact request and would have redirected away on
+ * failure before this ever runs. This is not "verify once at login and trust
+ * forever" -- middleware re-verifies on every single request/navigation, same
+ * as before. This just avoids doing that same verification a second time for
+ * the request middleware already cleared.
  */
-export async function getCurrentDepartmentContext(): Promise<CurrentDepartmentContext | null> {
+export const getCurrentDepartmentContext = cache(async (): Promise<CurrentDepartmentContext | null> => {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user
   if (!user) return null
 
   const adminClient = createAdminClient()
@@ -83,4 +101,4 @@ export async function getCurrentDepartmentContext(): Promise<CurrentDepartmentCo
     hasMultipleDepartments: totalOptions > 1,
     selectionPending,
   }
-}
+})
