@@ -46,17 +46,12 @@ export default async function InboxPage({
     .not('reply_message', 'is', null)
     .order('replied_at', { ascending: false })
   const messages = messageRows ?? []
-  const unreadMessageCount = messages.filter(m => !m.message_read_at).length
 
-  // Mark unread messages read as soon as the tab is actually viewed, not on
-  // every Inbox page load regardless of tab.
-  if (tab === 'messages' && unreadMessageCount > 0) {
-    await adminClient
-      .from('system_logs')
-      .update({ message_read_at: new Date().toISOString() })
-      .eq('personnel_id', me.id)
-      .is('message_read_at', null)
-  }
+  // Marking read happens client-side in InboxClient (markMessagesRead(), fired
+  // when the Messages tab is actually opened) -- this used to also happen here
+  // gated on `tab === 'messages'` from the URL search param, but the tab
+  // switcher is pure client-side useState and never touches the URL, so that
+  // code path was unreachable through normal navigation.
 
   let signatureRows: any[] = []
 

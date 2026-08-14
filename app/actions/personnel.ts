@@ -175,6 +175,28 @@ export async function submitUserReport(formData: FormData) {
   return { success: true }
 }
 
+// Marks a member's own unread reply messages (replies to their Report/Feedback
+// submissions) as read, called when they open the Inbox "Messages" tab.
+export async function markMessagesRead() {
+  const supabase = await createClient()
+  const adminClient = createAdminClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Session expired.' }
+
+  const { data: meList } = await adminClient.from('personnel').select('id').eq('auth_user_id', user.id)
+  const me = meList?.[0]
+  if (!me) return { error: 'Unauthorized' }
+
+  await adminClient
+    .from('system_logs')
+    .update({ message_read_at: new Date().toISOString() })
+    .eq('personnel_id', me.id)
+    .is('message_read_at', null)
+
+  return { success: true }
+}
+
 
 // ─── Link a QR/barcode token to a personnel record ───────────────────────────
 export async function linkQrToken(

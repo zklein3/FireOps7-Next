@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import BurnPermitsTab from './BurnPermitsTab'
 import RecordRequestsTab from './RecordRequestsTab'
 import RestockTab, { type RestockRequest } from './RestockTab'
@@ -8,6 +9,7 @@ import FeedbackTab from './FeedbackTab'
 import IncidentSignaturePadModal from '../signatures/IncidentSignaturePadModal'
 import EventAttendanceSignaturePadModal from '../signatures/EventAttendanceSignaturePadModal'
 import HelpText from '@/components/HelpText'
+import { markMessagesRead } from '@/app/actions/personnel'
 
 type Tab = 'permits' | 'records' | 'signatures' | 'restock' | 'feedback' | 'messages'
 
@@ -96,11 +98,23 @@ export default function InboxClient({
   burnPermitRestrictions: string | null
   departmentTimezone: string
 }) {
+  const router = useRouter()
   const [tab, setTab] = useState<Tab>(initialTab)
   const [pendingSigs, setPendingSigs] = useState<SignatureRow[]>(signatureRows)
   const [activeSig, setActiveSig] = useState<SignatureRow | null>(null)
   const hasAnyOfficerInboxAccess = canReviewPermits || canManageInbox || canManageMedical
   const unreadMessageCount = messages.filter(m => !m.message_read_at).length
+
+  // The tab switcher below is client-side useState, not URL-driven, so this
+  // is the only place the Messages tab is ever actually "opened" -- mark read
+  // here rather than relying on a searchParams-gated check in the server
+  // page (that path was unreachable: switching tabs never touches the URL).
+  useEffect(() => {
+    if (tab === 'messages' && unreadMessageCount > 0) {
+      markMessagesRead().then(() => router.refresh())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
   const EVENT_TYPE_LABELS: Record<string, string> = {
     training: 'Training', meeting: 'Meeting', incident: 'Incident', special: 'Special Event',
