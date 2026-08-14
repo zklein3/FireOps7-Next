@@ -255,17 +255,27 @@ export default function DeptSettingsClient({
             <p className="text-sm font-mono text-zinc-800 break-all mb-2">
               {origin}/dept/{publicSlug}
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(`${origin}/dept/${publicSlug}`)
-                setSiteLinkCopied(true)
-                setTimeout(() => setSiteLinkCopied(false), 2000)
-              }}
-              className="text-xs font-medium text-red-700 hover:underline"
-            >
-              {siteLinkCopied ? 'Copied!' : 'Copy Link'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${origin}/dept/${publicSlug}`)
+                  setSiteLinkCopied(true)
+                  setTimeout(() => setSiteLinkCopied(false), 2000)
+                }}
+                className="text-xs font-medium text-red-700 hover:underline"
+              >
+                {siteLinkCopied ? 'Copied!' : 'Copy Link'}
+              </button>
+              <a
+                href={`/dept/${publicSlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-medium text-red-700 hover:underline"
+              >
+                Open Public Site ↗
+              </a>
+            </div>
           </div>
         ) : (
           <div className="mb-3">
