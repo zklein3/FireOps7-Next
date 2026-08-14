@@ -168,7 +168,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { items: [{ href: '/operations', label: 'Operations', badge: opsBadge }] },
     { items: [{ href: '/inbox', label: 'Inbox', badge: inboxBadge }] },
     ...(isOfficerOrAbove ? [{ items: [{ href: '/officer', label: 'Officer' }] }] : []),
-    ...(moduleIcs ? [{ items: [{ href: '/ics', label: 'ICS' }] }] : []),
+    // Accountability lives under ICS once a dept has ICS enabled -- otherwise
+    // it stays reachable via the Operations hub card (unchanged), since a
+    // dept without module_ics would have no way to reach it if it only lived
+    // in a group that never renders for them.
+    ...(moduleIcs ? [{ label: 'ICS', items: [
+      { href: '/ics', label: 'ICS Incidents' },
+      { href: '/accountability', label: 'Accountability' },
+    ] }] : []),
     { items: [{ href: '/personnel', label: 'Personnel' }] },
     { items: [{ href: '/training', label: 'Training' }] },
     { items: [{ href: '/equipment', label: 'Inventory' }] },

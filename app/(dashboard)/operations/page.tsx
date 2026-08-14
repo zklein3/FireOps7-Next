@@ -19,11 +19,12 @@ export default async function OperationsPage() {
   const departmentId = ctx.departmentId
   const { data: deptFlags } = await adminClient
     .from('departments')
-    .select('module_operations, public_site_enabled')
+    .select('module_operations, public_site_enabled, module_ics')
     .eq('id', departmentId)
     .single()
 
   const moduleOperations = (deptFlags as any)?.module_operations ?? false
+  const moduleIcs = (deptFlags as any)?.module_ics ?? false
 
   const [
     { data: allAnnouncements },
@@ -71,7 +72,7 @@ export default async function OperationsPage() {
             statLabel="Recent"
           />
         )}
-        {moduleOperations && (
+        {moduleOperations && !moduleIcs && (
           <HubCard
             title="Accountability"
             description="Scan cards, assign lanes, and run PAR checks"
