@@ -88,6 +88,7 @@ export default async function EventsAdminPage() {
     { data: allAttendanceRaw },
     { data: allPendingRaw },
     { data: allSignaturesRaw },
+    { data: trainingEventsRaw },
   ] = instanceIds.length > 0
     ? await Promise.all([
         adminClient
@@ -114,8 +115,13 @@ export default async function EventsAdminPage() {
           .from('event_attendance_signatures')
           .select('id, instance_id, personnel_id, signed_at')
           .in('instance_id', instanceIds),
+        adminClient
+          .from('training_events')
+          .select('event_instance_id, hours, certification_type_id, instructor, cancelled')
+          .in('event_instance_id', instanceIds)
+          .eq('cancelled', false),
       ])
-    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
+    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
 
   const myAttendanceMap = Object.fromEntries((myAttendance ?? []).map(a => [a.instance_id, a]))
   const pendingSigByInstance = Object.fromEntries((myPendingSigs ?? []).map(s => [s.instance_id, s.id]))
@@ -181,6 +187,10 @@ export default async function EventsAdminPage() {
     }
   }
 
+  const trainingByInstance = Object.fromEntries(
+    (trainingEventsRaw ?? []).map(t => [t.event_instance_id, t])
+  )
+
   const events = deptInstances.map(i => ({
     id: i.id,
     series_id: i.series_id,
@@ -190,10 +200,13 @@ export default async function EventsAdminPage() {
     recurrence_type: seriesMap[i.series_id]?.recurrence_type ?? 'one_time',
     duration_minutes: seriesMap[i.series_id]?.duration_minutes ?? null,
     is_public: seriesMap[i.series_id]?.is_public ?? false,
-    is_training: seriesMap[i.series_id]?.is_training ?? false,
-    training_hours: seriesMap[i.series_id]?.training_hours ?? null,
-    training_cert_type_id: seriesMap[i.series_id]?.training_cert_type_id ?? null,
-    training_instructor: seriesMap[i.series_id]?.training_instructor ?? null,
+    // An active training_events row is the real per-occurrence signal (set on
+    // creation and kept in sync by the series-level toggle) — it can diverge
+    // from the series default when a single instance was toggled on its own.
+    is_training: trainingByInstance[i.id] ? true : (seriesMap[i.series_id]?.is_training ?? false),
+    training_hours: trainingByInstance[i.id]?.hours ?? seriesMap[i.series_id]?.training_hours ?? null,
+    training_cert_type_id: trainingByInstance[i.id]?.certification_type_id ?? seriesMap[i.series_id]?.training_cert_type_id ?? null,
+    training_instructor: trainingByInstance[i.id]?.instructor ?? seriesMap[i.series_id]?.training_instructor ?? null,
     event_date: i.event_date,
     start_time: i.start_time,
     location: i.location,

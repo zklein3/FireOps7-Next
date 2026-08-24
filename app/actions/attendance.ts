@@ -221,6 +221,10 @@ export async function updateEventInstance(formData: FormData) {
   const requires_signature = formData.get('requires_signature') === 'true'
   const title = formData.get('title') as string | null
   const description = formData.get('description') as string | null
+  const is_training = formData.get('is_training') === 'true'
+  const training_hours = formData.get('training_hours') ? parseFloat(formData.get('training_hours') as string) : null
+  const training_cert_type_id = (formData.get('training_cert_type_id') as string) || null
+  const training_instructor = (formData.get('training_instructor') as string) || null
 
   const updatePayload: Record<string, unknown> = {
     location: location || null,
@@ -270,7 +274,50 @@ export async function updateEventInstance(formData: FormData) {
     }
   }
 
+  // Sync this instance's training_events row — training designation for this
+  // occurrence only, independent of the series-level default and every other
+  // instance (mirrors the per-instance sync updateEventSeries does in bulk).
+  const { data: existingTE } = await adminClient
+    .from('training_events')
+    .select('id')
+    .eq('event_instance_id', id)
+    .maybeSingle()
+
+  if (is_training) {
+    const { data: instRow } = await adminClient.from('event_instances').select('series_id, event_date').eq('id', id).single()
+    const { data: seriesRow } = instRow
+      ? await adminClient.from('event_series').select('title').eq('id', instRow.series_id).single()
+      : { data: null }
+    const topic = title?.trim() || seriesRow?.title || 'Training'
+
+    if (existingTE) {
+      await adminClient.from('training_events').update({
+        hours: training_hours, certification_type_id: training_cert_type_id, cancelled: false,
+        topic, description: description || null, instructor: training_instructor,
+        start_time: start_time || null, location: location || null,
+      }).eq('id', existingTE.id)
+    } else if (instRow) {
+      await adminClient.from('training_events').insert({
+        department_id: ctx.department_id,
+        event_instance_id: id,
+        topic,
+        description: description || null,
+        instructor: training_instructor,
+        event_date: instRow.event_date,
+        hours: training_hours,
+        certification_type_id: training_cert_type_id,
+        requires_verification,
+        start_time: start_time || null,
+        location: location || null,
+        created_by: ctx.me.id,
+      })
+    }
+  } else if (existingTE) {
+    await adminClient.from('training_events').update({ cancelled: true }).eq('id', existingTE.id)
+  }
+
   revalidatePath('/events')
+  revalidatePath('/training')
   return { success: true }
 }
 

@@ -220,42 +220,47 @@ export default function EventsAdminClient({
   async function handleEditSave(event: Event) {
     reset()
     setLoading(true)
-    const fd = new FormData()
-    fd.set('requires_verification', editForm.requires_verification ? 'true' : 'false')
-    fd.set('requires_signature', editForm.requires_signature ? 'true' : 'false')
-
-    if (editScope === 'series' || event.recurrence_type === 'one_time') {
-      fd.set('series_id', event.series_id)
-      fd.set('from_date', event.event_date)
-      fd.set('title', editForm.title)
-      fd.set('description', editForm.description)
-      fd.set('location', editForm.location)
-      fd.set('start_time', editForm.start_time)
-      fd.set('duration_minutes', editForm.duration_minutes)
+    try {
+      const fd = new FormData()
+      fd.set('requires_verification', editForm.requires_verification ? 'true' : 'false')
+      fd.set('requires_signature', editForm.requires_signature ? 'true' : 'false')
       fd.set('is_training', editForm.is_training ? 'true' : 'false')
       fd.set('training_hours', editForm.training_hours)
       fd.set('training_cert_type_id', editForm.training_cert_type_id)
       fd.set('training_instructor', editForm.training_instructor)
-      if (event.recurrence_type === 'one_time') fd.set('event_date', editForm.event_date)
-      const result = await updateEventSeries(fd)
-      if (result?.error) { setError(result.error); setLoading(false); return }
-    } else {
-      fd.set('id', event.id)
-      fd.set('title', editForm.title)
-      fd.set('description', editForm.description)
-      fd.set('location', editForm.location)
-      fd.set('start_time', editForm.start_time)
-      fd.set('event_date', editForm.event_date)
-      fd.set('notes', editForm.notes)
-      fd.set('status', event.status)
-      const result = await updateEventInstance(fd)
-      if (result?.error) { setError(result.error); setLoading(false); return }
-    }
 
-    setEditingId(null)
-    setSuccess('Event updated.')
-    router.refresh()
-    setLoading(false)
+      if (editScope === 'series' || event.recurrence_type === 'one_time') {
+        fd.set('series_id', event.series_id)
+        fd.set('from_date', event.event_date)
+        fd.set('title', editForm.title)
+        fd.set('description', editForm.description)
+        fd.set('location', editForm.location)
+        fd.set('start_time', editForm.start_time)
+        fd.set('duration_minutes', editForm.duration_minutes)
+        if (event.recurrence_type === 'one_time') fd.set('event_date', editForm.event_date)
+        const result = await updateEventSeries(fd)
+        if (result?.error) { setError(result.error); return }
+      } else {
+        fd.set('id', event.id)
+        fd.set('title', editForm.title)
+        fd.set('description', editForm.description)
+        fd.set('location', editForm.location)
+        fd.set('start_time', editForm.start_time)
+        fd.set('event_date', editForm.event_date)
+        fd.set('notes', editForm.notes)
+        fd.set('status', event.status)
+        const result = await updateEventInstance(fd)
+        if (result?.error) { setError(result.error); return }
+      }
+
+      setEditingId(null)
+      setSuccess('Event updated.')
+      router.refresh()
+    } catch {
+      setError('Connection issue — the save did not go through. Check your connection and try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   function reset() { setError(null); setSuccess(null) }
@@ -268,108 +273,135 @@ export default function EventsAdminClient({
     return true
   })
 
+  const CONNECTION_ERROR = 'Connection issue — that did not go through. Check your connection and try again.'
+
   async function handleSelfLog(event: Event) {
     reset(); setLoading(true)
-    const result = await logAttendance(event.id, [myPersonnelId])
-    if (result?.error) setError(result.error)
-    else { setSuccess('Attendance logged.'); router.refresh() }
-    setLoading(false)
+    try {
+      const result = await logAttendance(event.id, [myPersonnelId])
+      if (result?.error) setError(result.error)
+      else { setSuccess('Attendance logged.'); router.refresh() }
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   async function handleBulkLog(event: Event) {
     if (bulkSelected.size === 0) { setError('Select at least one person.'); return }
     reset(); setLoading(true)
-    const result = await logAttendance(event.id, Array.from(bulkSelected))
-    if (result?.error) setError(result.error)
-    else { setSuccess(`Logged attendance for ${bulkSelected.size} members.`); setBulkSelected(new Set()); router.refresh() }
-    setLoading(false)
+    try {
+      const result = await logAttendance(event.id, Array.from(bulkSelected))
+      if (result?.error) setError(result.error)
+      else { setSuccess(`Logged attendance for ${bulkSelected.size} members.`); setBulkSelected(new Set()); router.refresh() }
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   async function handleBulkAbsent(event: Event, excused: boolean) {
     if (bulkSelected.size === 0) { setError('Select at least one person.'); return }
     if (excused && !bulkAbsentExcuseType) { setError('Select an excuse type.'); return }
     reset(); setLoading(true)
-    const result = await logAbsentAttendance(event.id, Array.from(bulkSelected), excused, excused ? bulkAbsentExcuseType : undefined, bulkAbsentNotes || undefined)
-    if (result?.error) setError(result.error)
-    else {
-      setSuccess(`Marked ${bulkSelected.size} member(s) ${excused ? 'excused' : 'absent'}.`)
-      setBulkSelected(new Set()); setBulkAbsentExcuseType(''); setBulkAbsentNotes('')
-      router.refresh()
-    }
-    setLoading(false)
+    try {
+      const result = await logAbsentAttendance(event.id, Array.from(bulkSelected), excused, excused ? bulkAbsentExcuseType : undefined, bulkAbsentNotes || undefined)
+      if (result?.error) setError(result.error)
+      else {
+        setSuccess(`Marked ${bulkSelected.size} member(s) ${excused ? 'excused' : 'absent'}.`)
+        setBulkSelected(new Set()); setBulkAbsentExcuseType(''); setBulkAbsentNotes('')
+        router.refresh()
+      }
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   async function handleApprove(attendance_id: string) {
     reset(); setLoading(true)
-    const result = await verifyAttendance(attendance_id, 'present')
-    if (result?.error) setError(result.error)
-    else { setSuccess('Attendance approved.'); router.refresh() }
-    setLoading(false)
+    try {
+      const result = await verifyAttendance(attendance_id, 'present')
+      if (result?.error) setError(result.error)
+      else { setSuccess('Attendance approved.'); router.refresh() }
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   async function handleReject(attendance_id: string) {
     reset(); setLoading(true)
-    const result = await verifyAttendance(attendance_id, 'absent', rejectionReason || undefined)
-    if (result?.error) setError(result.error)
-    else { setSuccess('Attendance rejected.'); setRejectingId(null); setRejectionReason(''); router.refresh() }
-    setLoading(false)
+    try {
+      const result = await verifyAttendance(attendance_id, 'absent', rejectionReason || undefined)
+      if (result?.error) setError(result.error)
+      else { setSuccess('Attendance rejected.'); setRejectingId(null); setRejectionReason(''); router.refresh() }
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   async function handleApproveAll(submissions: PendingSubmission[]) {
     reset(); setLoading(true)
-    for (const s of submissions) await verifyAttendance(s.id, 'present')
-    setSuccess(`Approved ${submissions.length} submissions.`)
-    router.refresh(); setLoading(false)
+    try {
+      for (const s of submissions) await verifyAttendance(s.id, 'present')
+      setSuccess(`Approved ${submissions.length} submissions.`)
+      router.refresh()
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   async function handleApproveExcuse(attendance_id: string) {
     reset(); setLoading(true)
-    const result = await verifyAttendance(attendance_id, 'excused')
-    if (result?.error) setError(result.error)
-    else { setSuccess('Excuse approved.'); router.refresh() }
-    setLoading(false)
+    try {
+      const result = await verifyAttendance(attendance_id, 'excused')
+      if (result?.error) setError(result.error)
+      else { setSuccess('Excuse approved.'); router.refresh() }
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   async function handleDenyExcuse(attendance_id: string) {
     reset(); setLoading(true)
-    const result = await verifyAttendance(attendance_id, 'absent')
-    if (result?.error) setError(result.error)
-    else { setSuccess('Excuse denied.'); router.refresh() }
-    setLoading(false)
+    try {
+      const result = await verifyAttendance(attendance_id, 'absent')
+      if (result?.error) setError(result.error)
+      else { setSuccess('Excuse denied.'); router.refresh() }
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   async function handleGenerateCheckinQr(event: Event) {
-    const result = await generateCheckinToken('event_instance', event.id)
-    if (result.error || !result.token) { setError(result.error ?? 'Failed to generate check-in QR.'); return }
-    const params = new URLSearchParams({ type: 'checkin', code: result.token, title: event.title })
-    window.open(`/print/qr?${params.toString()}`, '_blank')
+    try {
+      const result = await generateCheckinToken('event_instance', event.id)
+      if (result.error || !result.token) { setError(result.error ?? 'Failed to generate check-in QR.'); return }
+      const params = new URLSearchParams({ type: 'checkin', code: result.token, title: event.title })
+      window.open(`/print/qr?${params.toString()}`, '_blank')
+    } catch { setError(CONNECTION_ERROR) }
   }
 
   async function handleCancel(instance_id: string) {
     if (!confirm('Cancel this event?')) return
     reset(); setLoading(true)
-    const result = await cancelEventInstance(instance_id)
-    if (result?.error) setError(result.error)
-    else { setSuccess('Event cancelled.'); router.refresh() }
-    setLoading(false)
+    try {
+      const result = await cancelEventInstance(instance_id)
+      if (result?.error) setError(result.error)
+      else { setSuccess('Event cancelled.'); router.refresh() }
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   async function handleDelete(instance_id: string) {
     if (!confirm('Permanently delete this event? This cannot be undone and will remove any logged attendance.')) return
     reset(); setLoading(true)
-    const result = await deleteEventInstance(instance_id)
-    if (result?.error) setError(result.error)
-    else { setSuccess('Event deleted.'); router.refresh() }
-    setLoading(false)
+    try {
+      const result = await deleteEventInstance(instance_id)
+      if (result?.error) setError(result.error)
+      else { setSuccess('Event deleted.'); router.refresh() }
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   async function handleCloseEvent(instance_id: string) {
     if (!confirm('Close this event? All members with no attendance record will be marked absent.')) return
     reset(); setLoading(true)
-    const result = await closeEventInstance(instance_id)
-    if (result?.error) setError(result.error)
-    else { setSuccess(`Event closed. ${(result as any).absent_count} member(s) marked absent.`); router.refresh() }
-    setLoading(false)
+    try {
+      const result = await closeEventInstance(instance_id)
+      if (result?.error) setError(result.error)
+      else { setSuccess(`Event closed. ${(result as any).absent_count} member(s) marked absent.`); router.refresh() }
+    } catch { setError(CONNECTION_ERROR) }
+    finally { setLoading(false) }
   }
 
   function toggleBulk(id: string) {
@@ -645,44 +677,39 @@ export default function EventsAdminClient({
                               className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500" />
                             <span className="text-xs text-zinc-700">Require member signature</span>
                           </label>
-                          {(editScope === 'series' || event.recurrence_type === 'one_time') ? (
-                            <>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" checked={editForm.is_training} onChange={e => setEditForm(f => ({ ...f, is_training: e.target.checked }))}
-                                  className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500" />
-                                <span className="text-xs text-zinc-700">Training event</span>
-                              </label>
-                              {editForm.is_training && (
-                                <div className="flex gap-2 ml-5 mt-1">
-                                  <div className="flex-1">
-                                    <label className="block text-xs font-medium text-zinc-600 mb-1">Hours</label>
-                                    <input type="number" min="0" step="0.5" value={editForm.training_hours}
-                                      onChange={e => setEditForm(f => ({ ...f, training_hours: e.target.value }))}
-                                      placeholder="2"
-                                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <label className="block text-xs font-medium text-zinc-600 mb-1">Instructor</label>
-                                    <input type="text" value={editForm.training_instructor}
-                                      onChange={e => setEditForm(f => ({ ...f, training_instructor: e.target.value }))}
-                                      placeholder="Name"
-                                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <label className="block text-xs font-medium text-zinc-600 mb-1">Issues Cert (optional)</label>
-                                    <select value={editForm.training_cert_type_id} onChange={e => setEditForm(f => ({ ...f, training_cert_type_id: e.target.value }))}
-                                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                                      <option value="">None</option>
-                                      {certTypes.map(c => <option key={c.id} value={c.id}>{c.cert_name}</option>)}
-                                    </select>
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <p className="text-xs text-zinc-400">
-                              Training designation applies to the whole series — switch to "This & all future" above to change it.
-                            </p>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={editForm.is_training} onChange={e => setEditForm(f => ({ ...f, is_training: e.target.checked }))}
+                              className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500" />
+                            <span className="text-xs text-zinc-700">Training event</span>
+                          </label>
+                          {editScope === 'instance' && event.recurrence_type !== 'one_time' && (
+                            <p className="text-xs text-zinc-400 -mt-1 ml-5">This occurrence only — other dates in the series are unaffected.</p>
+                          )}
+                          {editForm.is_training && (
+                            <div className="flex gap-2 ml-5 mt-1">
+                              <div className="flex-1">
+                                <label className="block text-xs font-medium text-zinc-600 mb-1">Hours</label>
+                                <input type="number" min="0" step="0.5" value={editForm.training_hours}
+                                  onChange={e => setEditForm(f => ({ ...f, training_hours: e.target.value }))}
+                                  placeholder="2"
+                                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                              </div>
+                              <div className="flex-1">
+                                <label className="block text-xs font-medium text-zinc-600 mb-1">Instructor</label>
+                                <input type="text" value={editForm.training_instructor}
+                                  onChange={e => setEditForm(f => ({ ...f, training_instructor: e.target.value }))}
+                                  placeholder="Name"
+                                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                              </div>
+                              <div className="flex-1">
+                                <label className="block text-xs font-medium text-zinc-600 mb-1">Issues Cert (optional)</label>
+                                <select value={editForm.training_cert_type_id} onChange={e => setEditForm(f => ({ ...f, training_cert_type_id: e.target.value }))}
+                                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                  <option value="">None</option>
+                                  {certTypes.map(c => <option key={c.id} value={c.id}>{c.cert_name}</option>)}
+                                </select>
+                              </div>
+                            </div>
                           )}
                         </div>
                         <div className="flex gap-2 pt-1">
