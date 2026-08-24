@@ -87,6 +87,7 @@ export default async function EventsAdminPage() {
     { data: myPendingSigs },
     { data: allAttendanceRaw },
     { data: allPendingRaw },
+    { data: allSignaturesRaw },
   ] = instanceIds.length > 0
     ? await Promise.all([
         adminClient
@@ -109,8 +110,12 @@ export default async function EventsAdminPage() {
           .select('id, instance_id, personnel_id, submitted_at, status, excuse_type_id, notes')
           .in('instance_id', instanceIds)
           .in('status', ['pending', 'excused_pending']),
+        adminClient
+          .from('event_attendance_signatures')
+          .select('id, instance_id, personnel_id, signed_at')
+          .in('instance_id', instanceIds),
       ])
-    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
 
   const myAttendanceMap = Object.fromEntries((myAttendance ?? []).map(a => [a.instance_id, a]))
   const pendingSigByInstance = Object.fromEntries((myPendingSigs ?? []).map(s => [s.instance_id, s.id]))
@@ -152,6 +157,30 @@ export default async function EventsAdminPage() {
     }
   }
 
+  let signatureByInstance: Record<string, { sig_id: string; personnel_id: string; name: string; signed_at: string | null }[]> = {}
+
+  if (allSignaturesRaw && allSignaturesRaw.length > 0) {
+    const sigPersonnelIds = [...new Set(allSignaturesRaw.map(s => s.personnel_id))]
+    const { data: sigPersonnel } = await adminClient
+      .from('personnel')
+      .select('id, first_name, last_name')
+      .in('id', sigPersonnelIds)
+
+    const sigNameMap = Object.fromEntries(
+      (sigPersonnel ?? []).map(p => [p.id, `${p.first_name} ${p.last_name}`])
+    )
+
+    for (const s of allSignaturesRaw) {
+      if (!signatureByInstance[s.instance_id]) signatureByInstance[s.instance_id] = []
+      signatureByInstance[s.instance_id].push({
+        sig_id: s.id,
+        personnel_id: s.personnel_id,
+        name: sigNameMap[s.personnel_id] ?? 'Unknown',
+        signed_at: s.signed_at,
+      })
+    }
+  }
+
   const events = deptInstances.map(i => ({
     id: i.id,
     series_id: i.series_id,
@@ -178,6 +207,7 @@ export default async function EventsAdminPage() {
     pending_submissions: pendingByInstance[i.id] ?? [],
     excuse_submissions: excuseByInstance[i.id] ?? [],
     logged_personnel_ids: loggedByInstance[i.id] ?? [],
+    signature_roster: (signatureByInstance[i.id] ?? []).sort((a, b) => a.name.localeCompare(b.name)),
   }))
 
   const personnelList = (personnel ?? []).map(p => ({

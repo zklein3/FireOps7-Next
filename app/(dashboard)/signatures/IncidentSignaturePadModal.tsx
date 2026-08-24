@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useTransition } from 'react'
 import SignaturePad from 'signature_pad'
 import { saveIncidentSignature } from '@/app/actions/signatures'
+import { queuePendingSignature } from '@/lib/pending-signatures'
 
 export default function IncidentSignaturePadModal({
   sig_id,
@@ -68,9 +69,18 @@ export default function IncidentSignaturePadModal({
       formData.append('signature', blob, 'signature.png')
 
       startTransition(async () => {
-        const result = await saveIncidentSignature(formData)
-        if (result?.error) { setError(result.error); return }
-        onSigned()
+        try {
+          const result = await saveIncidentSignature(formData)
+          if (result?.error && result.error !== 'Already signed') { setError(result.error); return }
+          onSigned()
+        } catch {
+          // Network dropped the request mid-flight — hold the signature on
+          // this device instead of losing it. It'll send automatically as
+          // soon as the connection is back (see lib/pending-signatures.ts).
+          const dataUrl = canvasRef.current!.toDataURL('image/png')
+          queuePendingSignature({ id: sig_id, kind: 'incident', dataUrl, savedAt: new Date().toISOString() })
+          onSigned()
+        }
       })
     }, 'image/png')
   }

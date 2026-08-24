@@ -37,6 +37,13 @@ interface ExcuseType {
   name: string
 }
 
+interface SignatureRosterEntry {
+  sig_id: string
+  personnel_id: string
+  name: string
+  signed_at: string | null
+}
+
 interface Event {
   id: string
   series_id: string
@@ -63,6 +70,7 @@ interface Event {
   pending_submissions: PendingSubmission[]
   excuse_submissions: ExcuseSubmission[]
   logged_personnel_ids: string[]
+  signature_roster: SignatureRosterEntry[]
 }
 
 interface Personnel {
@@ -432,6 +440,7 @@ export default function EventsAdminClient({
             const allIds = loggablePersonnel.map(p => p.id)
             const hasPending = event.pending_submissions.length > 0
             const hasExcuseRequests = event.excuse_submissions.length > 0
+            const unsignedCount = event.signature_roster.filter(s => !s.signed_at).length
 
             return (
               <div key={event.id} className={`rounded-xl bg-white shadow-sm border overflow-hidden ${cancelled ? 'border-zinc-100 opacity-60' : completed ? 'border-zinc-200 opacity-75' : 'border-zinc-200'}`}>
@@ -476,6 +485,9 @@ export default function EventsAdminClient({
                         {event.location && <span>📍 {event.location}</span>}
                         {hasPending && (
                           <span className="text-yellow-600 font-semibold">⏳ {event.pending_count} pending</span>
+                        )}
+                        {unsignedCount > 0 && (
+                          <span className="text-amber-600 font-semibold">✍ {unsignedCount} unsigned</span>
                         )}
                       </div>
                       {event.description && <p className="text-xs text-zinc-400 mt-1">{event.description}</p>}
@@ -633,36 +645,44 @@ export default function EventsAdminClient({
                               className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500" />
                             <span className="text-xs text-zinc-700">Require member signature</span>
                           </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={editForm.is_training} onChange={e => setEditForm(f => ({ ...f, is_training: e.target.checked }))}
-                              className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500" />
-                            <span className="text-xs text-zinc-700">Training event</span>
-                          </label>
-                          {editForm.is_training && (
-                            <div className="flex gap-2 ml-5 mt-1">
-                              <div className="flex-1">
-                                <label className="block text-xs font-medium text-zinc-600 mb-1">Hours</label>
-                                <input type="number" min="0" step="0.5" value={editForm.training_hours}
-                                  onChange={e => setEditForm(f => ({ ...f, training_hours: e.target.value }))}
-                                  placeholder="2"
-                                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                              </div>
-                              <div className="flex-1">
-                                <label className="block text-xs font-medium text-zinc-600 mb-1">Instructor</label>
-                                <input type="text" value={editForm.training_instructor}
-                                  onChange={e => setEditForm(f => ({ ...f, training_instructor: e.target.value }))}
-                                  placeholder="Name"
-                                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                              </div>
-                              <div className="flex-1">
-                                <label className="block text-xs font-medium text-zinc-600 mb-1">Issues Cert (optional)</label>
-                                <select value={editForm.training_cert_type_id} onChange={e => setEditForm(f => ({ ...f, training_cert_type_id: e.target.value }))}
-                                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                                  <option value="">None</option>
-                                  {certTypes.map(c => <option key={c.id} value={c.id}>{c.cert_name}</option>)}
-                                </select>
-                              </div>
-                            </div>
+                          {(editScope === 'series' || event.recurrence_type === 'one_time') ? (
+                            <>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={editForm.is_training} onChange={e => setEditForm(f => ({ ...f, is_training: e.target.checked }))}
+                                  className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500" />
+                                <span className="text-xs text-zinc-700">Training event</span>
+                              </label>
+                              {editForm.is_training && (
+                                <div className="flex gap-2 ml-5 mt-1">
+                                  <div className="flex-1">
+                                    <label className="block text-xs font-medium text-zinc-600 mb-1">Hours</label>
+                                    <input type="number" min="0" step="0.5" value={editForm.training_hours}
+                                      onChange={e => setEditForm(f => ({ ...f, training_hours: e.target.value }))}
+                                      placeholder="2"
+                                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <label className="block text-xs font-medium text-zinc-600 mb-1">Instructor</label>
+                                    <input type="text" value={editForm.training_instructor}
+                                      onChange={e => setEditForm(f => ({ ...f, training_instructor: e.target.value }))}
+                                      placeholder="Name"
+                                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <label className="block text-xs font-medium text-zinc-600 mb-1">Issues Cert (optional)</label>
+                                    <select value={editForm.training_cert_type_id} onChange={e => setEditForm(f => ({ ...f, training_cert_type_id: e.target.value }))}
+                                      className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                      <option value="">None</option>
+                                      {certTypes.map(c => <option key={c.id} value={c.id}>{c.cert_name}</option>)}
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-xs text-zinc-400">
+                              Training designation applies to the whole series — switch to "This & all future" above to change it.
+                            </p>
                           )}
                         </div>
                         <div className="flex gap-2 pt-1">
@@ -773,6 +793,32 @@ export default function EventsAdminClient({
                                   </button>
                                 </div>
                               </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── SIGNATURES ────────────────────────────────── */}
+                    {event.requires_signature && event.signature_roster.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-zinc-600 uppercase tracking-wider mb-2">
+                          Signatures ({event.signature_roster.length - unsignedCount}/{event.signature_roster.length})
+                        </p>
+                        <div className="flex flex-col gap-1.5">
+                          {event.signature_roster.map(s => (
+                            <div key={s.sig_id} className="flex items-center justify-between bg-white rounded-lg border border-zinc-200 px-4 py-2.5 gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-zinc-900 truncate">{s.name}</p>
+                                {s.signed_at && (
+                                  <p className="text-xs text-zinc-400">{formatLocalDateTime(s.signed_at, departmentTimezone)}</p>
+                                )}
+                              </div>
+                              {s.signed_at ? (
+                                <span className="text-xs font-semibold text-green-600 shrink-0">✓ Signed</span>
+                              ) : (
+                                <span className="text-xs font-semibold text-amber-600 shrink-0">Awaiting signature</span>
+                              )}
                             </div>
                           ))}
                         </div>

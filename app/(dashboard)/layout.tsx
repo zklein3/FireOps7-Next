@@ -13,6 +13,7 @@ import NavGroups from '@/components/NavGroups'
 import type { NavGroup } from '@/components/NavGroups'
 import PageNavBar from '@/components/PageNavBar'
 import PWAInstallButton from '@/components/PWAInstallButton'
+import PendingSignatureSync from '@/components/PendingSignatureSync'
 import { getDeptTheme, getDeptBrandName } from '@/lib/department-theme'
 import { isFireOps7Card, parseSalamanderCard, unescapeDebugRaw } from '@/lib/salamander'
 
@@ -269,6 +270,7 @@ function SidebarContent({ navGroups, adminNavItems, adminLabel, userInfo, theme,
             </div>
           )}
         </div>
+        <PendingSignatureSync />
         <HelpToggle theme={theme} />
         <PWAInstallButton />
         <FeedbackButton />
