@@ -369,6 +369,14 @@ export default function HoseTestingClient({
       {/* Test parameters — set once, carried into both steps */}
       <div className="rounded-xl bg-white border border-zinc-200 p-5 mb-5">
         <h2 className="text-sm font-semibold text-zinc-700 mb-3">Test Parameters</h2>
+        <p className="flex items-start gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 mb-3 text-xs leading-relaxed text-blue-700">
+          <span className="shrink-0">💡</span>
+          <span>
+            NFPA 1962 reference — Attack hose (1&Prime;&ndash;3&Prime;): 300 PSI. Supply hose (4&Prime;+): 200 PSI.
+            Hold test pressure for at least 3 minutes. Testing multiple sizes together? Enter the pressure for the
+            size you&apos;re testing now. Your department can enter a different value if it follows another standard.
+          </span>
+        </p>
         <div className="mb-3">
           <label className="block text-xs font-medium text-zinc-600 mb-1">Tester Name</label>
           <input type="text" value={testerName} onChange={e => saveTesterName(e.target.value)}
