@@ -37,9 +37,12 @@ export function formatWallClockDateTime(dt: string | null, opts?: Intl.DateTimeF
 
 export function formatLocalDateTime(dt: string | null, timezone: string, opts?: Intl.DateTimeFormatOptions): string {
   if (!dt) return '—'
+  // dateStyle/timeStyle can't be mixed with component options (month, day, hour, minute, etc.) —
+  // Intl.DateTimeFormat throws if both are present, so skip the component defaults when a caller opts in to style-based formatting.
+  const usesStyle = opts && ('dateStyle' in opts || 'timeStyle' in opts)
   return new Date(dt).toLocaleString('en-US', {
     timeZone: timezone || DEFAULT_TIMEZONE,
-    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    ...(usesStyle ? {} : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
     ...opts,
   })
 }
