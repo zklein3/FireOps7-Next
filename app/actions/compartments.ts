@@ -6,21 +6,20 @@ import { hasPermission } from '@/lib/permissions'
 import { logError } from '@/lib/logger'
 import { revalidatePath } from 'next/cache'
 
-// Sys admin passes department_id explicitly since they have no dept record
+// A sys-admin-flagged account can also have a real department selected (the
+// normal multi-department flow) -- prefer that resolved context over the
+// override so every call site works without having to remember to pass one.
+// The override only matters for a sys admin acting with no department
+// selected at all (e.g. from a sys-admin-only surface).
 async function verifyAdmin(override_department_id?: string) {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) return null
 
-  // Sys admin — use the override department_id passed from the form
-  if (ctx.isSysAdmin) {
-    if (!override_department_id) return null
-    return { me: { id: ctx.personnelId, is_sys_admin: true }, department_id: override_department_id }
-  }
+  const department_id = ctx.departmentId ?? (ctx.isSysAdmin ? override_department_id : null)
+  if (!department_id) return null
+  if (!ctx.isSysAdmin && !(await hasPermission(ctx, 'manage_dept_setup'))) return null
 
-  // Regular dept admin — respect the currently selected department
-  if (!ctx.departmentId || !(await hasPermission(ctx, 'manage_dept_setup'))) return null
-
-  return { me: { id: ctx.personnelId, is_sys_admin: false }, department_id: ctx.departmentId }
+  return { me: { id: ctx.personnelId, is_sys_admin: ctx.isSysAdmin }, department_id }
 }
 
 // ─── Create Compartment Name ──────────────────────────────────────────────────

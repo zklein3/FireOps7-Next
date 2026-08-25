@@ -69,6 +69,7 @@ export default function CompartmentsStep({
 
   async function handleUpdate(formData: FormData) {
     setError(null); setSuccess(null); setLoading(true)
+    formData.append('department_id', departmentId)
     const result = await updateCompartmentName(formData)
     if (result?.error) setError(result.error)
     else { setSuccess('Compartment updated.'); setEditingId(null); router.refresh() }
@@ -86,7 +87,7 @@ export default function CompartmentsStep({
   async function handleSaveAssignment() {
     if (!assigningId) return
     setError(null); setLoading(true)
-    const result = await bulkSetCompartmentApparatus(assigningId, Array.from(assignChecked))
+    const result = await bulkSetCompartmentApparatus(assigningId, Array.from(assignChecked), departmentId)
     if (result?.error) setError(result.error)
     else { setSuccess('Apparatus assignment saved.'); setAssigningId(null); router.refresh() }
     setLoading(false)
