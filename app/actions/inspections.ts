@@ -187,6 +187,15 @@ export async function submitInspection(payload: {
     actual_quantity?: number
     notes?: string
   }[]
+  medication_checks?: {
+    storeroom_id: string
+    storeroom_inventory_id: string
+    supply_type_id: string
+    present: boolean
+    actual_quantity?: number
+    expiration_status?: 'confirmed' | 'expiring_soon' | 'expired' | 'not_applicable'
+    notes?: string
+  }[]
 }) {
   const adminClient = createAdminClient()
 
@@ -278,6 +287,33 @@ export async function submitInspection(payload: {
       }
     }
 
+    // Store medication check results
+    if (payload.medication_checks && payload.medication_checks.length > 0) {
+      const medicationInserts = payload.medication_checks.map(mc => ({
+        department_id: payload.department_id,
+        storeroom_id: mc.storeroom_id,
+        storeroom_inventory_id: mc.storeroom_inventory_id,
+        supply_type_id: mc.supply_type_id,
+        apparatus_id: payload.apparatus_id,
+        compartment_id: payload.compartment_id,
+        inspection_session_id: payload.inspection_session_id || null,
+        inspected_at: now,
+        inspected_by_personnel_id: payload.personnel_id,
+        inspected_by_name: payload.inspector_name,
+        present: mc.present,
+        actual_quantity: mc.actual_quantity ?? null,
+        expiration_status: mc.expiration_status ?? null,
+        notes: mc.notes ?? null,
+      }))
+      const { error: medicationErr } = await adminClient
+        .from('medical_supply_presence_check_logs')
+        .insert(medicationInserts)
+      if (medicationErr) {
+        await logError(medicationErr.message, '/inspections/run')
+        return { error: medicationErr.message }
+      }
+    }
+
     if (payload.session_compartment_id) {
       const completeRes = await completeCompartmentInSession(payload.session_compartment_id)
       if (completeRes?.error) {
@@ -353,10 +389,10 @@ export async function getOrCreateInspectionSession(apparatus_id: string) {
     }
   }
 
-  return { session, ...(await fetchSessionCompartments(session.id, adminClient)) }
+  return { session, ...(await fetchSessionCompartments(session.id, adminClient, ctx.department_id)) }
 }
 
-async function fetchSessionCompartments(session_id: string, adminClient: ReturnType<typeof createAdminClient>) {
+async function fetchSessionCompartments(session_id: string, adminClient: ReturnType<typeof createAdminClient>, department_id?: string) {
   const { data: rows } = await adminClient
     .from('inspection_session_compartments')
     .select('*')
@@ -366,6 +402,37 @@ async function fetchSessionCompartments(session_id: string, adminClient: ReturnT
   const { data: compLinks } = compartmentIds.length > 0
     ? await adminClient.from('apparatus_compartments').select('id, compartment_name_id').in('id', compartmentIds)
     : { data: [] }
+
+  // Medication expiring/expired indicator per compartment
+  let expiringCompartmentIds = new Set<string>()
+  if (department_id && compartmentIds.length > 0) {
+    const { data: deptRow } = await adminClient.from('departments').select('module_medical').eq('id', department_id).single()
+    if (deptRow?.module_medical) {
+      const { data: rooms } = await adminClient
+        .from('medical_storerooms')
+        .select('id, compartment_id')
+        .in('compartment_id', compartmentIds)
+        .eq('active', true)
+      const roomIds = (rooms ?? []).map(r => r.id)
+      const { data: invRows } = roomIds.length > 0
+        ? await adminClient.from('medical_storeroom_inventory').select('id, storeroom_id').in('storeroom_id', roomIds)
+        : { data: [] }
+      const invIds = (invRows ?? []).map(i => i.id)
+      const soon = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      const { data: lots } = invIds.length > 0
+        ? await adminClient
+            .from('medical_stock_lots')
+            .select('storeroom_inventory_id, expiration_date')
+            .in('storeroom_inventory_id', invIds)
+            .eq('active', true)
+            .gt('quantity_remaining', 0)
+            .lte('expiration_date', soon.toISOString().slice(0, 10))
+        : { data: [] }
+      const expiringInvIds = new Set((lots ?? []).map(l => l.storeroom_inventory_id))
+      const expiringRoomIds = new Set((invRows ?? []).filter(i => expiringInvIds.has(i.id)).map(i => i.storeroom_id))
+      expiringCompartmentIds = new Set((rooms ?? []).filter(r => expiringRoomIds.has(r.id)).map(r => r.compartment_id))
+    }
+  }
 
   const nameIds = [...new Set((compLinks ?? []).map(c => c.compartment_name_id).filter(Boolean))]
   const { data: names } = nameIds.length > 0
@@ -392,6 +459,7 @@ async function fetchSessionCompartments(session_id: string, adminClient: ReturnT
       compartment_name: link ? (nameMap.get(link.compartment_name_id) ?? 'Unknown') : 'Unknown',
       claimed_by_name: r.claimed_by ? (personnelMap.get(r.claimed_by) ?? 'Unknown') : null,
       completed_by_name: r.completed_by ? (personnelMap.get(r.completed_by) ?? 'Unknown') : null,
+      medication_expiring: expiringCompartmentIds.has(r.compartment_id),
     }
   })
 

@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { assignItemToCompartment, removeItemFromCompartment, moveItemToCompartment, moveQuantityToStorage, updateItemQuantity } from '@/app/actions/equipment'
+import { assignMedicalSupplyToCompartment } from '@/app/actions/medical'
+import { MEDICAL_STATUS_COLORS, MEDICAL_STATUS_LABELS, type MedicalSupplyStatus } from '@/lib/medical-status'
 import HelpText from '@/components/HelpText'
 
 interface Apparatus {
@@ -45,6 +47,23 @@ interface Category {
   sort_order: number | null
 }
 
+interface MedicalSupplyType {
+  id: string
+  name: string
+  category: string
+  unit_of_measure: string
+}
+
+interface CompartmentMedication {
+  storeroom_inventory_id: string
+  supply_type_id: string
+  supply_name: string
+  unit_of_measure: string
+  par_level: number
+  current_quantity: number
+  status: MedicalSupplyStatus
+}
+
 interface ApparatusOption {
   id: string
   unit_number: string
@@ -74,6 +93,8 @@ export default function EquipmentDetailClient({
   isAdmin,
   isOfficerOrAbove,
   backHref,
+  medicalSupplyTypes,
+  medicationsByCompartment,
 }: {
   apparatus: Apparatus
   compartments: Compartment[]
@@ -83,6 +104,8 @@ export default function EquipmentDetailClient({
   isAdmin: boolean
   isOfficerOrAbove: boolean
   backHref?: string
+  medicalSupplyTypes: MedicalSupplyType[]
+  medicationsByCompartment: Record<string, CompartmentMedication[]>
 }) {
   const router = useRouter()
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
@@ -116,17 +139,32 @@ export default function EquipmentDetailClient({
     if (!selectedItem || !quantity) return
     setError(null)
     setLoading(true)
-    const formData = new FormData()
-    formData.set('apparatus_compartment_id', compartmentId)
-    formData.set('item_id', selectedItem)
-    formData.set('expected_quantity', quantity)
-    if (minQty) formData.set('minimum_quantity', minQty)
-    const result = await assignItemToCompartment(formData)
+
+    const isMedication = selectedItem.startsWith('med:')
+    const rawId = selectedItem.slice(selectedItem.indexOf(':') + 1)
+
+    let result: { error?: string } | undefined
+    if (isMedication) {
+      const formData = new FormData()
+      formData.set('apparatus_compartment_id', compartmentId)
+      formData.set('supply_type_id', rawId)
+      formData.set('par_level', quantity)
+      result = await assignMedicalSupplyToCompartment(formData)
+    } else {
+      const formData = new FormData()
+      formData.set('apparatus_compartment_id', compartmentId)
+      formData.set('item_id', rawId)
+      formData.set('expected_quantity', quantity)
+      if (minQty) formData.set('minimum_quantity', minQty)
+      result = await assignItemToCompartment(formData)
+    }
+
     if (result?.error) setError(result.error)
     else {
       setAssigningTo(null)
       setSelectedItem('')
       setQuantity('1')
+      router.refresh()
     }
     setLoading(false)
   }
@@ -321,14 +359,25 @@ export default function EquipmentDetailClient({
                           {cat.items
                             .filter(item => !c.items.some(ci => ci.item_id === item.id))
                             .map(item => (
-                              <option key={item.id} value={item.id}>{item.item_name}</option>
+                              <option key={item.id} value={`item:${item.id}`}>{item.item_name}</option>
                             ))}
                         </optgroup>
                       ))}
+                      {medicalSupplyTypes.length > 0 && (
+                        <optgroup label="Medications">
+                          {medicalSupplyTypes
+                            .filter(med => !(medicationsByCompartment[c.id] ?? []).some(cm => cm.supply_type_id === med.id))
+                            .map(med => (
+                              <option key={med.id} value={`med:${med.id}`}>💊 {med.name}</option>
+                            ))}
+                        </optgroup>
+                      )}
                     </select>
                     <div className="flex gap-2">
                       <div className="flex-1">
-                        <label className="block text-xs text-zinc-500 mb-0.5">Expected Qty</label>
+                        <label className="block text-xs text-zinc-500 mb-0.5">
+                          {selectedItem.startsWith('med:') ? 'PAR Level' : 'Expected Qty'}
+                        </label>
                         <input
                           type="number"
                           min="1"
@@ -351,7 +400,7 @@ export default function EquipmentDetailClient({
               )}
 
               {/* Item List */}
-              {c.items.length === 0 ? (
+              {c.items.length === 0 && (medicationsByCompartment[c.id] ?? []).length === 0 ? (
                 <div className="px-5 py-4 text-sm text-zinc-400">No items assigned to this compartment.</div>
               ) : (
                 <div className="divide-y divide-zinc-100">
@@ -463,6 +512,24 @@ export default function EquipmentDetailClient({
                             )}
                           </div>
                         )}
+                      </div>
+                    </div>
+                  ))}
+                  {(medicationsByCompartment[c.id] ?? []).map(med => (
+                    <div key={med.storeroom_inventory_id} className="flex items-center px-5 py-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium text-zinc-900">{med.supply_name}</p>
+                          <span className="text-xs rounded-full bg-purple-100 text-purple-700 px-2 py-0.5">💊 Medical</span>
+                          <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${MEDICAL_STATUS_COLORS[med.status]}`}>
+                            {MEDICAL_STATUS_LABELS[med.status]}
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-400">PAR {med.par_level} {med.unit_of_measure}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-zinc-900">{med.current_quantity}</p>
+                        <p className="text-xs text-zinc-400">on hand</p>
                       </div>
                     </div>
                   ))}

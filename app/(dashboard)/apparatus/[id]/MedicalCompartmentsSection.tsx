@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { dispenseStock, administerStock, wasteStock, transferStock } from '@/app/actions/medical'
 import { administeredDoseToVolume } from '@/lib/medical-dose'
+import { MEDICAL_STATUS_COLORS, MEDICAL_STATUS_LABELS, getMedicalSupplyStatus } from '@/lib/medical-status'
 import SignatureCapture, { SignatureCaptureHandle } from '../../medical/SignatureCapture'
 
 interface CompStoreroom { id: string; name: string; compartment_id: string; compartment_code: string; compartment_name: string | null }
@@ -20,11 +21,8 @@ interface SrcLot { id: string; storeroom_inventory_id: string; lot_number: strin
 interface ControlUnit { id: string; lot_id: string; control_number: string; status: string }
 interface Personnel { id: string; name: string }
 
-const STATUS_COLORS = {
-  expired: 'bg-red-100 text-red-700', expiring: 'bg-amber-100 text-amber-700',
-  low: 'bg-orange-100 text-orange-700', good: 'bg-green-100 text-green-700', empty: 'bg-zinc-100 text-zinc-500',
-}
-const STATUS_LABELS = { expired: 'Expired', expiring: 'Exp Soon', low: 'Below PAR', good: 'Good', empty: 'No Stock' }
+const STATUS_COLORS = MEDICAL_STATUS_COLORS
+const STATUS_LABELS = MEDICAL_STATUS_LABELS
 const WASTE_REASONS = ['Expired', 'Damaged', 'Contaminated', 'Administered / Used on Scene', 'Other']
 
 function fmtDate(d: string | null) {
@@ -32,13 +30,8 @@ function fmtDate(d: string | null) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function getStatus(total: number, par: number, lots: Lot[]): 'expired' | 'expiring' | 'low' | 'good' | 'empty' {
-  if (total === 0) return 'empty'
-  const now = new Date(); const soon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-  if (lots.some(l => l.expiration_date && new Date(l.expiration_date + 'T00:00:00') < now)) return 'expired'
-  if (par > 0 && total < par) return 'low'
-  if (lots.some(l => l.expiration_date && new Date(l.expiration_date + 'T00:00:00') <= soon)) return 'expiring'
-  return 'good'
+function getStatus(total: number, par: number, lots: Lot[]) {
+  return getMedicalSupplyStatus(total, par, lots)
 }
 
 export default function MedicalCompartmentsSection({

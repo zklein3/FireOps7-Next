@@ -2,21 +2,25 @@
 
 import { useState } from 'react'
 import { assignItemToCompartment, removeItemFromCompartment, updateItemQuantity, getApparatusInventory } from '@/app/actions/equipment'
+import { assignMedicalSupplyToCompartment } from '@/app/actions/medical'
 
 interface Apparatus { id: string; unit_number: string; apparatus_name: string | null; active: boolean }
 interface CompartmentItem { id: string; item_id: string; item_name: string; category_name: string; requires_inspection: boolean; expected_quantity: number; minimum_quantity: number | null }
 interface Compartment { id: string; compartment_code: string; compartment_name: string | null; sort_order: number; items: CompartmentItem[] }
 interface Item { id: string; item_name: string; category_id: string }
 interface Category { id: string; category_name: string; sort_order: number | null }
+interface MedicalSupplyType { id: string; name: string; category: string; unit_of_measure: string }
 
 export default function InventoryStep({
   apparatus,
   allItems,
   allCategories,
+  medicalSupplyTypes,
 }: {
   apparatus: Apparatus[]
   allItems: Item[]
   allCategories: Category[]
+  medicalSupplyTypes: MedicalSupplyType[]
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [compartments, setCompartments] = useState<Compartment[]>([])
@@ -50,11 +54,25 @@ export default function InventoryStep({
   async function handleAssign(compartmentId: string) {
     if (!selectedItem || !quantity) return
     setError(null); setLoading(true)
-    const fd = new FormData()
-    fd.set('apparatus_compartment_id', compartmentId)
-    fd.set('item_id', selectedItem)
-    fd.set('expected_quantity', quantity)
-    const result = await assignItemToCompartment(fd)
+
+    const isMedication = selectedItem.startsWith('med:')
+    const rawId = selectedItem.slice(selectedItem.indexOf(':') + 1)
+
+    let result: { error?: string } | undefined
+    if (isMedication) {
+      const fd = new FormData()
+      fd.set('apparatus_compartment_id', compartmentId)
+      fd.set('supply_type_id', rawId)
+      fd.set('par_level', quantity)
+      result = await assignMedicalSupplyToCompartment(fd)
+    } else {
+      const fd = new FormData()
+      fd.set('apparatus_compartment_id', compartmentId)
+      fd.set('item_id', rawId)
+      fd.set('expected_quantity', quantity)
+      result = await assignItemToCompartment(fd)
+    }
+
     if (result?.error) setError(result.error)
     else { setAssigningTo(null); setSelectedItem(''); setQuantity('1'); if (selectedId) await loadApparatus(selectedId) }
     setLoading(false)
@@ -156,13 +174,22 @@ export default function InventoryStep({
                             <optgroup key={cat.id} label={cat.category_name}>
                               {cat.items
                                 .filter(item => !c.items.some(ci => ci.item_id === item.id))
-                                .map(item => <option key={item.id} value={item.id}>{item.item_name}</option>)}
+                                .map(item => <option key={item.id} value={`item:${item.id}`}>{item.item_name}</option>)}
                             </optgroup>
                           ))}
+                          {medicalSupplyTypes.length > 0 && (
+                            <optgroup label="Medications">
+                              {medicalSupplyTypes.map(med => (
+                                <option key={med.id} value={`med:${med.id}`}>💊 {med.name}</option>
+                              ))}
+                            </optgroup>
+                          )}
                         </select>
                         <div className="flex gap-2">
                           <div className="flex-1">
-                            <label className="block text-xs text-zinc-500 mb-0.5">Expected Qty</label>
+                            <label className="block text-xs text-zinc-500 mb-0.5">
+                              {selectedItem.startsWith('med:') ? 'PAR Level' : 'Expected Qty'}
+                            </label>
                             <input type="number" min="1" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="1"
                               className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-center focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" />
                           </div>

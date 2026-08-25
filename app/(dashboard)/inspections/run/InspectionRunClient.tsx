@@ -64,6 +64,36 @@ type PresenceResponse = {
   notes?: string
 }
 
+interface MedicationItem {
+  storeroom_id: string
+  storeroom_inventory_id: string
+  supply_type_id: string
+  supply_name: string
+  unit_of_measure: string
+  par_level: number
+  tracks_expiration: boolean
+  current_quantity: number
+  lots: { id: string; lot_number: string | null; expiration_date: string | null; quantity_remaining: number }[]
+  status: string
+}
+
+type ExpirationStatus = 'confirmed' | 'expiring_soon' | 'expired' | 'not_applicable'
+
+type MedicationResponse = {
+  storeroom_inventory_id: string
+  present?: boolean
+  actual_quantity?: number
+  expiration_status?: ExpirationStatus
+  notes?: string
+}
+
+function lotIsExpiringOrExpired(lot: { expiration_date: string | null }): boolean {
+  if (!lot.expiration_date) return false
+  const now = new Date()
+  const soon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+  return new Date(lot.expiration_date + 'T00:00:00') <= soon
+}
+
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
 
 // Full asset inspection only when requires_inspection=true AND templates exist
@@ -72,13 +102,14 @@ function hasInspection(item: ChecklistItem): boolean {
 }
 
 export default function InspectionRunClient({
-  apparatus, compartment, compartmentId, checklistItems, inspectorName, personnelId, departmentId, presenceOnly,
+  apparatus, compartment, compartmentId, checklistItems, medicationItems, inspectorName, personnelId, departmentId, presenceOnly,
   inspectionSessionId, sessionCompartmentId, initialSubmittedAssets, initialSelectedAssets,
 }: {
   apparatus: { id: string; unit_number: string; apparatus_name: string | null }
   compartment: { code: string; name: string | null }
   compartmentId: string
   checklistItems: ChecklistItem[]
+  medicationItems?: MedicationItem[]
   inspectorName: string
   personnelId: string
   departmentId: string
@@ -89,8 +120,10 @@ export default function InspectionRunClient({
   initialSelectedAssets?: Record<string, string[]>
 }) {
   const router = useRouter()
+  const medications = medicationItems ?? []
 
   const [presenceResponses, setPresenceResponses] = useState<Record<string, PresenceResponse>>({})
+  const [medicationResponses, setMedicationResponses] = useState<Record<string, MedicationResponse>>({})
   const [selectedAssets, setSelectedAssets] = useState<Record<string, string[]>>(initialSelectedAssets ?? {})
   const [selectedTemplates, setSelectedTemplates] = useState<Record<string, string>>({})
   const [stepResponses, setStepResponses] = useState<Record<string, Record<string, StepResponse>>>({})
@@ -129,6 +162,22 @@ export default function InspectionRunClient({
       ...prev,
       [location_standard_id]: { ...prev[location_standard_id], location_standard_id, item_id, [field]: value },
     }))
+  }
+
+  function setMedication(storeroom_inventory_id: string, field: keyof MedicationResponse, value: unknown) {
+    setMedicationResponses(prev => ({
+      ...prev,
+      [storeroom_inventory_id]: { ...prev[storeroom_inventory_id], storeroom_inventory_id, [field]: value },
+    }))
+  }
+
+  function isMedicationComplete(med: MedicationItem): boolean {
+    const resp = medicationResponses[med.storeroom_inventory_id]
+    if (resp?.present === undefined) return false
+    if (resp.present === false) return true
+    if (resp.actual_quantity === undefined) return false
+    if (med.tracks_expiration && med.lots.length > 0 && !resp.expiration_status) return false
+    return true
   }
 
   function setStepResponse(asset_id: string, step_id: string, field: keyof StepResponse, value: unknown) {
@@ -235,6 +284,9 @@ export default function InspectionRunClient({
   }
 
   function isComplete(): boolean {
+    for (const med of medications) {
+      if (!isMedicationComplete(med)) return false
+    }
     for (const item of checklistItems) {
       if (presenceOnly || !hasInspection(item)) {
         const resp = presenceResponses[item.location_standard_id]
@@ -293,6 +345,19 @@ export default function InspectionRunClient({
       }
     }
 
+    const medicationChecks = medications.map(med => {
+      const resp = medicationResponses[med.storeroom_inventory_id]
+      return {
+        storeroom_id: med.storeroom_id,
+        storeroom_inventory_id: med.storeroom_inventory_id,
+        supply_type_id: med.supply_type_id,
+        present: resp?.present ?? false,
+        actual_quantity: resp?.actual_quantity,
+        expiration_status: resp?.expiration_status,
+        notes: resp?.notes,
+      }
+    })
+
     try {
       const result = await submitInspection({
         apparatus_id: apparatus.id,
@@ -304,6 +369,7 @@ export default function InspectionRunClient({
         session_compartment_id: sessionCompartmentId,
         asset_inspections: assetInspections,
         presence_checks: presenceChecks,
+        medication_checks: medicationChecks,
       })
       if (result?.error) {
         setError(result.error)
@@ -375,6 +441,106 @@ export default function InspectionRunClient({
       )}
 
       <div className="flex flex-col gap-4">
+        {medications.map(med => {
+          const resp = medicationResponses[med.storeroom_inventory_id]
+          const anyLotWarns = med.lots.some(lotIsExpiringOrExpired)
+          return (
+            <div key={med.storeroom_inventory_id} className="rounded-xl bg-white shadow-sm border border-zinc-200 overflow-hidden">
+              <div className="px-5 py-3 bg-zinc-50 border-b border-zinc-200 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900">💊 {med.supply_name}</p>
+                  <p className="text-xs text-zinc-400">
+                    On file: {med.current_quantity} {med.unit_of_measure} · PAR {med.par_level}
+                  </p>
+                </div>
+                <span className="text-xs rounded-full bg-purple-100 text-purple-700 px-2 py-0.5">Medical</span>
+              </div>
+
+              <div className="px-5 py-4">
+                {anyLotWarns && (
+                  <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                    ⚠ One or more lots are expiring within 30 days or already expired.
+                  </div>
+                )}
+
+                <p className="text-sm text-zinc-700 mb-3">Is {med.supply_name} present?</p>
+                <div className="flex gap-3 mb-3">
+                  <button
+                    onClick={() => setMedication(med.storeroom_inventory_id, 'present', true)}
+                    className={`flex-1 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors ${
+                      resp?.present === true
+                        ? 'bg-green-600 border-green-600 text-white'
+                        : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                    }`}>
+                    ✓ Present
+                  </button>
+                  <button
+                    onClick={() => setMedication(med.storeroom_inventory_id, 'present', false)}
+                    className={`flex-1 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors ${
+                      resp?.present === false
+                        ? 'bg-red-600 border-red-600 text-white'
+                        : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                    }`}>
+                    ✗ Missing
+                  </button>
+                </div>
+
+                {resp?.present === true && (
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <label className="text-xs text-zinc-500">Actual qty:</label>
+                      <input
+                        type="number" min="0"
+                        defaultValue={med.current_quantity}
+                        onChange={e => setMedication(med.storeroom_inventory_id, 'actual_quantity', parseInt(e.target.value))}
+                        className="w-20 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                      />
+                      <span className="text-xs text-zinc-500">{med.unit_of_measure}</span>
+                    </div>
+
+                    {med.tracks_expiration && med.lots.length > 0 && (
+                      <div>
+                        <p className="text-xs text-zinc-500 mb-1.5">
+                          On-file expiration: {med.lots.map(l => `${l.lot_number ?? 'no lot #'} — ${l.expiration_date ?? 'no date'}`).join(', ')}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setMedication(med.storeroom_inventory_id, 'expiration_status', anyLotWarns ? 'expiring_soon' : 'confirmed')}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                              resp?.expiration_status === 'confirmed' || resp?.expiration_status === 'expiring_soon'
+                                ? 'bg-green-600 border-green-600 text-white'
+                                : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                            }`}>
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => setMedication(med.storeroom_inventory_id, 'expiration_status', 'expired')}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                              resp?.expiration_status === 'expired'
+                                ? 'bg-red-600 border-red-600 text-white'
+                                : 'border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                            }`}>
+                            Flag Issue
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <textarea
+                        rows={2}
+                        value={resp?.notes ?? ''}
+                        onChange={e => setMedication(med.storeroom_inventory_id, 'notes', e.target.value)}
+                        placeholder="Notes (optional)..."
+                        className={`${inputCls} resize-none`}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
         {checklistItems.map(item => {
           const isInspection = !presenceOnly && hasInspection(item)
           return (

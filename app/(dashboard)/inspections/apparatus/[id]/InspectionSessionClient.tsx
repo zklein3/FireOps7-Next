@@ -15,6 +15,7 @@ interface SessionCompartment {
   claimed_by_name: string | null
   completed_by_name: string | null
   completed_at: string | null
+  medication_expiring?: boolean
 }
 
 interface Session {
@@ -202,7 +203,14 @@ export default function InspectionSessionClient({
         {compartments.map(sc => (
           <div key={sc.id} className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-zinc-900 truncate">{apparatus_unit_number} - {sc.compartment_name}</p>
+              <p className="text-sm font-medium text-zinc-900 truncate flex items-center gap-1.5">
+                {apparatus_unit_number} - {sc.compartment_name}
+                {sc.medication_expiring && (
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 shrink-0">
+                    ⚠ Med Expiring
+                  </span>
+                )}
+              </p>
               {sc.status === 'in_progress' && sc.claimed_by_name && (
                 <p className="text-xs text-amber-600 mt-0.5">In progress — {sc.claimed_by_name}</p>
               )}

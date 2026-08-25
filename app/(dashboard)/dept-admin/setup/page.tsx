@@ -17,10 +17,19 @@ export default async function SetupPage() {
   // Fetch department name
   const { data: deptData } = await adminClient
     .from('departments')
-    .select('id, name, module_iso')
+    .select('id, name, module_iso, module_medical')
     .eq('id', department_id)
     .single()
   const department = { id: deptData?.id ?? department_id, name: deptData?.name ?? 'Your Department' }
+
+  const { data: medicalSupplyTypes } = deptData?.module_medical
+    ? await adminClient
+        .from('medical_supply_types')
+        .select('id, name, category, unit_of_measure')
+        .eq('department_id', department_id)
+        .eq('active', true)
+        .order('name')
+    : { data: [] }
 
   // Parallel fetches for all setup data
   const [
@@ -179,6 +188,7 @@ export default async function SetupPage() {
       departmentId={department_id}
       moduleIso={deptData?.module_iso ?? false}
       customFieldDefs={customFieldDefs}
+      medicalSupplyTypes={medicalSupplyTypes ?? []}
     />
   )
 }

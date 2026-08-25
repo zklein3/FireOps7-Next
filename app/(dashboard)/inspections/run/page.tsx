@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPath } from '@/lib/current-path'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
+import { getMedicalSupplyStatus } from '@/lib/medical-status'
 import InspectionRunClient from './InspectionRunClient'
 
 export default async function InspectionRunPage({
@@ -164,12 +165,81 @@ export default async function InspectionRunPage({
     }
   }).filter(Boolean)
 
+  // Medications assigned to this compartment (if module_medical is on)
+  let medicationItems: {
+    storeroom_id: string
+    storeroom_inventory_id: string
+    supply_type_id: string
+    supply_name: string
+    unit_of_measure: string
+    par_level: number
+    tracks_expiration: boolean
+    current_quantity: number
+    lots: { id: string; lot_number: string | null; expiration_date: string | null; quantity_remaining: number }[]
+    status: string
+  }[] = []
+
+  const { data: deptRow } = await adminClient.from('departments').select('module_medical').eq('id', ctx.departmentId).single()
+  if (deptRow?.module_medical) {
+    const { data: roomList } = await adminClient
+      .from('medical_storerooms')
+      .select('id')
+      .eq('apparatus_id', apparatus_id)
+      .eq('compartment_id', compartment_id)
+      .eq('active', true)
+    const room = roomList?.[0]
+
+    if (room) {
+      const { data: invRows } = await adminClient
+        .from('medical_storeroom_inventory')
+        .select('id, supply_type_id, par_level')
+        .eq('storeroom_id', room.id)
+
+      const invIds = (invRows ?? []).map(i => i.id)
+      const supplyTypeIds = [...new Set((invRows ?? []).map(i => i.supply_type_id))]
+
+      const [{ data: lots }, { data: supplyTypes }] = await Promise.all([
+        invIds.length > 0
+          ? adminClient
+              .from('medical_stock_lots')
+              .select('id, storeroom_inventory_id, lot_number, expiration_date, quantity_remaining')
+              .in('storeroom_inventory_id', invIds)
+              .eq('active', true)
+              .gt('quantity_remaining', 0)
+              .order('expiration_date', { ascending: true, nullsFirst: false })
+          : Promise.resolve({ data: [] }),
+        supplyTypeIds.length > 0
+          ? adminClient.from('medical_supply_types').select('id, name, unit_of_measure, tracks_expiration').in('id', supplyTypeIds)
+          : Promise.resolve({ data: [] }),
+      ])
+
+      medicationItems = (invRows ?? []).map(inv => {
+        const supply = (supplyTypes ?? []).find(s => s.id === inv.supply_type_id)
+        const invLots = (lots ?? []).filter(l => l.storeroom_inventory_id === inv.id)
+        const current_quantity = invLots.reduce((sum, l) => sum + l.quantity_remaining, 0)
+        return {
+          storeroom_id: room.id,
+          storeroom_inventory_id: inv.id,
+          supply_type_id: inv.supply_type_id,
+          supply_name: supply?.name ?? 'Unknown',
+          unit_of_measure: supply?.unit_of_measure ?? '',
+          par_level: inv.par_level,
+          tracks_expiration: supply?.tracks_expiration ?? false,
+          current_quantity,
+          lots: invLots.map(l => ({ id: l.id, lot_number: l.lot_number, expiration_date: l.expiration_date, quantity_remaining: l.quantity_remaining })),
+          status: getMedicalSupplyStatus(current_quantity, inv.par_level, invLots),
+        }
+      })
+    }
+  }
+
   return (
     <InspectionRunClient
       apparatus={{ id: apparatus.id, unit_number: apparatus.unit_number, apparatus_name: apparatus.apparatus_name }}
       compartment={{ code: compName?.compartment_code ?? '—', name: compName?.compartment_name ?? null }}
       compartmentId={compartment_id}
       checklistItems={checklistItems as any}
+      medicationItems={medicationItems}
       inspectorName={`${me.first_name} ${me.last_name}`}
       personnelId={me.id}
       departmentId={ctx.departmentId}

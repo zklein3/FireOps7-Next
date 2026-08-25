@@ -19,6 +19,92 @@ async function getContext() {
   }
 }
 
+// Resolves the medical storeroom scoped to a specific apparatus compartment,
+// auto-creating it (named from the apparatus unit + compartment code) if this
+// is the first time anything medical has touched that compartment. Shared by
+// transferToCompartment (moving physical stock) and assignMedicalSupplyToCompartment
+// (assigning a supply type with no stock yet) so both paths converge on the
+// same storeroom instead of creating duplicates.
+async function getOrCreateCompartmentStoreroom(
+  adminClient: ReturnType<typeof createAdminClient>,
+  department_id: string,
+  compartment_id: string
+) {
+  const { data: existingRooms } = await adminClient
+    .from('medical_storerooms')
+    .select('id')
+    .eq('department_id', department_id)
+    .eq('compartment_id', compartment_id)
+    .eq('active', true)
+
+  if (existingRooms && existingRooms.length > 0) return { storeroom_id: existingRooms[0].id as string }
+
+  const { data: acRow } = await adminClient
+    .from('apparatus_compartments')
+    .select('apparatus_id, compartment_name_id')
+    .eq('id', compartment_id)
+    .single()
+  if (!acRow) return { error: 'Compartment not found.' }
+
+  const [{ data: apRow }, { data: cnRow }] = await Promise.all([
+    adminClient.from('apparatus').select('unit_number').eq('id', acRow.apparatus_id).single(),
+    acRow.compartment_name_id
+      ? adminClient.from('compartment_names').select('compartment_code').eq('id', acRow.compartment_name_id).single()
+      : Promise.resolve({ data: null }),
+  ])
+
+  const name = `${apRow?.unit_number ?? 'Unit'} — ${(cnRow as any)?.compartment_code ?? 'Compartment'}`
+  const { data: newRoom, error: roomErr } = await adminClient
+    .from('medical_storerooms')
+    .insert({ department_id, apparatus_id: acRow.apparatus_id, compartment_id, name, active: true })
+    .select('id')
+    .single()
+  if (roomErr) return { error: roomErr.message }
+
+  return { storeroom_id: newRoom.id as string }
+}
+
+// ─── Assign Supply Type to a Compartment ──────────────────────────────────────
+// The medical counterpart to assignItemToCompartment (app/actions/equipment.ts) --
+// lets a compartment's "+ Add Item" flow add a medication the same way it adds
+// regular equipment, without requiring stock to already exist anywhere.
+export async function assignMedicalSupplyToCompartment(formData: FormData) {
+  const ctx = await getContext()
+  if (!ctx?.isOfficerOrAbove) return { error: 'Only officers and admins can assign medications.' }
+  if (!ctx.department_id) return { error: 'Department not found.' }
+  const adminClient = createAdminClient()
+
+  const apparatus_compartment_id = formData.get('apparatus_compartment_id') as string
+  const supply_type_id = formData.get('supply_type_id') as string
+  const par_level = parseInt(formData.get('par_level') as string) || 0
+  if (!apparatus_compartment_id || !supply_type_id) return { error: 'Compartment and medication are required.' }
+
+  const room = await getOrCreateCompartmentStoreroom(adminClient, ctx.department_id, apparatus_compartment_id)
+  if ('error' in room) return { error: room.error }
+
+  const { data: existingInv } = await adminClient
+    .from('medical_storeroom_inventory')
+    .select('id')
+    .eq('storeroom_id', room.storeroom_id)
+    .eq('supply_type_id', supply_type_id)
+    .maybeSingle()
+
+  if (existingInv) return { error: 'This medication is already assigned to this compartment.' }
+
+  const { error: invErr } = await adminClient.from('medical_storeroom_inventory').insert({
+    storeroom_id: room.storeroom_id,
+    supply_type_id,
+    department_id: ctx.department_id,
+    par_level,
+  })
+  if (invErr) { await logError(invErr.message, '/equipment'); return { error: invErr.message } }
+
+  revalidatePath('/equipment')
+  revalidatePath('/apparatus')
+  revalidatePath('/dept-admin/setup')
+  return { success: true }
+}
+
 // ─── Supply Types ─────────────────────────────────────────────────────────────
 
 export async function createMedicalSupplyType(formData: FormData) {
@@ -884,48 +970,10 @@ export async function transferToCompartment(data: {
   if (supplyTypeRow?.is_controlled && !ctx.isOfficerOrAbove)
     return { error: 'Controlled substances can only be transferred by officers or admins.' }
 
-  // Resolve compartment → apparatus_id + display name
-  const { data: acRow } = await adminClient
-    .from('apparatus_compartments')
-    .select('apparatus_id, compartment_name_id')
-    .eq('id', data.compartment_id)
-    .single()
-  if (!acRow) return { error: 'Compartment not found.' }
-
-  const [{ data: apRow }, { data: cnRow }] = await Promise.all([
-    adminClient.from('apparatus').select('unit_number').eq('id', acRow.apparatus_id).single(),
-    acRow.compartment_name_id
-      ? adminClient.from('compartment_names').select('compartment_code').eq('id', acRow.compartment_name_id).single()
-      : Promise.resolve({ data: null }),
-  ])
-
-  // Get or auto-create compartment storeroom
-  const { data: existingRooms } = await adminClient
-    .from('medical_storerooms')
-    .select('id')
-    .eq('department_id', ctx.department_id)
-    .eq('compartment_id', data.compartment_id)
-    .eq('active', true)
-
-  let destStoreroomId: string
-  if (existingRooms && existingRooms.length > 0) {
-    destStoreroomId = existingRooms[0].id
-  } else {
-    const name = `${apRow?.unit_number ?? 'Unit'} — ${(cnRow as any)?.compartment_code ?? 'Compartment'}`
-    const { data: newRoom, error: roomErr } = await adminClient
-      .from('medical_storerooms')
-      .insert({
-        department_id: ctx.department_id,
-        apparatus_id: acRow.apparatus_id,
-        compartment_id: data.compartment_id,
-        name,
-        active: true,
-      })
-      .select('id')
-      .single()
-    if (roomErr) { await logError(roomErr.message, '/medical'); return { error: roomErr.message } }
-    destStoreroomId = newRoom.id
-  }
+  // Resolve (or auto-create) the compartment's medical storeroom
+  const room = await getOrCreateCompartmentStoreroom(adminClient, ctx.department_id, data.compartment_id)
+  if ('error' in room) { await logError(room.error, '/medical'); return { error: room.error } }
+  const destStoreroomId = room.storeroom_id
 
   // Get or auto-create inventory assignment for this supply type
   const { data: existingInv } = await adminClient

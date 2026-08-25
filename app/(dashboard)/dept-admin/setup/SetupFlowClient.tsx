@@ -38,6 +38,7 @@ export default function SetupFlowClient({
   departmentId,
   moduleIso,
   customFieldDefs,
+  medicalSupplyTypes,
 }: {
   department: { id: string; name: string }
   stations: any[]
@@ -57,6 +58,7 @@ export default function SetupFlowClient({
   departmentId: string
   moduleIso: boolean
   customFieldDefs: Record<string, { id: string; item_id: string; field_label: string; field_order: number }[]>
+  medicalSupplyTypes: { id: string; name: string; category: string; unit_of_measure: string }[]
 }) {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') ?? 'stations')
@@ -159,6 +161,7 @@ export default function SetupFlowClient({
               apparatus={apparatus}
               allItems={items}
               allCategories={categories}
+              medicalSupplyTypes={medicalSupplyTypes}
             />
           )}
         </div>

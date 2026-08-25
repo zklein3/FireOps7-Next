@@ -6,6 +6,7 @@ import { getPermissionSnapshot } from '@/lib/permissions'
 import EquipmentDetailClient from './EquipmentDetailClient'
 import MedicalBagsSection from '@/app/(dashboard)/apparatus/[id]/MedicalBagsSection'
 import MedicalCompartmentsSection from '@/app/(dashboard)/apparatus/[id]/MedicalCompartmentsSection'
+import { getMedicalSupplyStatus, type MedicalSupplyStatus } from '@/lib/medical-status'
 
 export default async function EquipmentDetailPage({
   params,
@@ -204,6 +205,16 @@ export default async function EquipmentDetailPage({
 
   let medicalBagData: any = null
   let medicalCompartmentData: any = null
+  let medicalSupplyTypes: { id: string; name: string; category: string; unit_of_measure: string }[] = []
+  let medicationsByCompartment: Record<string, {
+    storeroom_inventory_id: string
+    supply_type_id: string
+    supply_name: string
+    unit_of_measure: string
+    par_level: number
+    current_quantity: number
+    status: MedicalSupplyStatus
+  }[]> = {}
   if (moduleMedical) {
     const [{ data: bags }, { data: bagTemplates }, { data: deptStorerooms }, { data: deptPersonnel }] = await Promise.all([
       adminClient.from('medical_storerooms').select('id, name, template_id, inventory_mode').eq('apparatus_id', id).eq('active', true).is('compartment_id', null).order('name'),
@@ -316,6 +327,35 @@ export default async function EquipmentDetailPage({
       personnel,
       apparatusId: id,
     }
+
+    // All active supply types for the department, for the unified "+ Add Item"
+    // picker's Medications group -- independent of what's already assigned.
+    const { data: allSupplyTypes } = await adminClient
+      .from('medical_supply_types')
+      .select('id, name, category, unit_of_measure')
+      .eq('department_id', ctx.departmentId)
+      .eq('active', true)
+      .order('name')
+    medicalSupplyTypes = allSupplyTypes ?? []
+
+    // Summarize each compartment's assigned medications for the merged item list.
+    for (const room of compStoreroomsWithInfo) {
+      const invRows = (compInv ?? []).filter((i: any) => i.storeroom_id === room.id)
+      medicationsByCompartment[room.compartment_id] = invRows.map((inv: any) => {
+        const supply = (compSupplyTypes ?? []).find((s: any) => s.id === inv.supply_type_id)
+        const lots = (compLots ?? []).filter((l: any) => l.storeroom_inventory_id === inv.id)
+        const current_quantity = lots.reduce((sum: number, l: any) => sum + l.quantity_remaining, 0)
+        return {
+          storeroom_inventory_id: inv.id,
+          supply_type_id: inv.supply_type_id,
+          supply_name: supply?.name ?? 'Unknown',
+          unit_of_measure: supply?.unit_of_measure ?? '',
+          par_level: inv.par_level,
+          current_quantity,
+          status: getMedicalSupplyStatus(current_quantity, inv.par_level, lots),
+        }
+      })
+    }
   }
 
   return (
@@ -323,12 +363,14 @@ export default async function EquipmentDetailPage({
       <EquipmentDetailClient
         apparatus={apparatusWithRefs}
         compartments={compartments}
-        allItems={[]}
-        allCategories={[]}
+        allItems={allItems ?? []}
+        allCategories={allCategories ?? []}
         allApparatus={allApparatus}
         isAdmin={isAdmin}
         isOfficerOrAbove={isOfficerOrAbove}
         backHref={from}
+        medicalSupplyTypes={medicalSupplyTypes}
+        medicationsByCompartment={medicationsByCompartment}
       />
       {medicalCompartmentData && medicalCompartmentData.compartmentStorerooms.length > 0 && (
         <div className="max-w-2xl mt-2">
