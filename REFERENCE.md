@@ -204,7 +204,7 @@ Every key here is wired to at least one real gate — the original 55-key catalo
 |---|---|---|
 | `manage_medical_inventory` | officer | Officer UI on `/equipment`, `/medical` · `/reports/medical` page · medical CS log print page · waste/transfer actions · Inbox Restock tab (reorder requests, expired lots) |
 | `dispense_controlled_substances` | member | Dispense or administer a controlled substance (`dispenseStock`, `administerStock`) |
-| `manage_medical_supply_setup` | admin | `/dept-admin/medical` page · admin UI on `/medical` (setup links, stock adjustment) |
+| `manage_medical_supply_setup` | admin | Medical tab on `/dept-admin/setup` (`?tab=medical` — `/dept-admin/medical` redirects there) · admin UI on `/medical` (setup links, stock adjustment) |
 
 #### Public Site / Inbox
 | Key | `legacyMinRole` | Grants |

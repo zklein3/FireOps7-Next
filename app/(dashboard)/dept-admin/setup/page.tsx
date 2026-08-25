@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { getCurrentDepartmentContext } from '@/lib/current-department'
-import { hasPermission } from '@/lib/permissions'
+import { getPermissionSnapshot } from '@/lib/permissions'
 import SetupFlowClient from './SetupFlowClient'
 
 export default async function SetupPage() {
@@ -10,26 +10,68 @@ export default async function SetupPage() {
   const ctx = await getCurrentDepartmentContext()
   if (!ctx) redirect('/login')
   if (!ctx.departmentId) redirect('/dashboard')
-  if (!(await hasPermission(ctx, 'manage_dept_setup'))) redirect('/dashboard')
+  const perms = await getPermissionSnapshot(ctx)
+  const canManageDeptSetup = perms.manage_dept_setup
+  const canManageMedical = perms.manage_medical_supply_setup
+  if (!canManageDeptSetup && !canManageMedical) redirect('/dashboard')
 
   const department_id = ctx.departmentId
 
   // Fetch department name
   const { data: deptData } = await adminClient
     .from('departments')
-    .select('id, name, module_iso, module_medical')
+    .select('id, name, module_iso, module_medical, module_medical_controlled')
     .eq('id', department_id)
     .single()
   const department = { id: deptData?.id ?? department_id, name: deptData?.name ?? 'Your Department' }
+  const moduleMedical = deptData?.module_medical ?? false
 
-  const { data: medicalSupplyTypes } = deptData?.module_medical
+  const { data: medicalSupplyTypesFull } = moduleMedical
     ? await adminClient
         .from('medical_supply_types')
-        .select('id, name, category, unit_of_measure')
+        .select('id, name, category, unit_of_measure, is_controlled, tracks_expiration, required_signatures, notes, active')
         .eq('department_id', department_id)
-        .eq('active', true)
+        .order('category')
         .order('name')
     : { data: [] }
+  const medicalSupplyTypes = (medicalSupplyTypesFull ?? []).filter(s => s.active)
+
+  // Medical admin data — storerooms, bag templates, deployments (only when the module is on)
+  const { data: medicalStorerooms } = moduleMedical
+    ? await adminClient.from('medical_storerooms')
+        .select('id, name, station_id, apparatus_id, compartment_id, notes, active')
+        .eq('department_id', department_id)
+        .order('name')
+    : { data: [] }
+
+  const medicalStoreroomIds = (medicalStorerooms ?? []).map(s => s.id)
+  const { data: medicalStoreroomInventory } = medicalStoreroomIds.length > 0
+    ? await adminClient.from('medical_storeroom_inventory')
+        .select('id, storeroom_id, supply_type_id, par_level')
+        .in('storeroom_id', medicalStoreroomIds)
+    : { data: [] }
+
+  const { data: bagTemplates } = moduleMedical
+    ? await adminClient.from('medical_bag_templates')
+        .select('id, name, description, active')
+        .eq('department_id', department_id)
+        .order('name')
+    : { data: [] }
+
+  const bagTemplateIds = (bagTemplates ?? []).map(t => t.id)
+  const [{ data: templateItems }, { data: bagDeployments }] = await Promise.all([
+    bagTemplateIds.length > 0
+      ? adminClient.from('medical_bag_template_items').select('id, template_id, supply_type_id, par_level').in('template_id', bagTemplateIds)
+      : Promise.resolve({ data: [] }),
+    moduleMedical
+      ? adminClient.from('medical_storerooms')
+          .select('id, name, apparatus_id, template_id, inventory_mode')
+          .eq('department_id', department_id)
+          .eq('active', true)
+          .not('apparatus_id', 'is', null)
+          .is('compartment_id', null)
+      : Promise.resolve({ data: [] }),
+  ])
 
   // Parallel fetches for all setup data
   const [
@@ -94,6 +136,28 @@ export default async function SetupPage() {
     type_name: a.apparatus_type_id ? (typeMap[a.apparatus_type_id] ?? null) : null,
     station: a.station_id ? (stationMap[a.station_id] ?? null) : null,
   }))
+
+  // Medical: apparatus + compartment lookups for storeroom creation (active apparatus only, matches prior /dept-admin/medical behavior)
+  const medicalApparatus = apparatus.filter(a => a.active).map(a => ({ id: a.id, unit_number: a.unit_number, type_name: a.type_name }))
+  const medicalApparatusIds = medicalApparatus.map(a => a.id)
+  const { data: medicalCompartmentLinks } = moduleMedical && medicalApparatusIds.length > 0
+    ? await adminClient.from('apparatus_compartments')
+        .select('id, apparatus_id, compartment_name_id')
+        .in('apparatus_id', medicalApparatusIds)
+        .eq('active', true)
+    : { data: [] }
+  const medicalCompartmentNameIds = [...new Set((medicalCompartmentLinks ?? []).map(c => c.compartment_name_id))]
+  const { data: medicalCompartmentNameRows } = medicalCompartmentNameIds.length > 0
+    ? await adminClient.from('compartment_names').select('id, compartment_code, compartment_name, sort_order').in('id', medicalCompartmentNameIds)
+    : { data: [] }
+  const medicalCompartmentNameMap = Object.fromEntries((medicalCompartmentNameRows ?? []).map(c => [c.id, c]))
+  const medicalApparatusCompartments = (medicalCompartmentLinks ?? []).map(c => ({
+    id: c.id,
+    apparatus_id: c.apparatus_id,
+    compartment_code: medicalCompartmentNameMap[c.compartment_name_id]?.compartment_code ?? '—',
+    compartment_name: medicalCompartmentNameMap[c.compartment_name_id]?.compartment_name ?? null,
+    sort_order: medicalCompartmentNameMap[c.compartment_name_id]?.sort_order ?? 999,
+  })).sort((a, b) => a.sort_order - b.sort_order)
 
   // Build compartment assignment maps
   const usageMap: Record<string, number> = {}
@@ -189,6 +253,21 @@ export default async function SetupPage() {
       moduleIso={deptData?.module_iso ?? false}
       customFieldDefs={customFieldDefs}
       medicalSupplyTypes={medicalSupplyTypes ?? []}
+      canManageDeptSetup={canManageDeptSetup}
+      canManageMedical={canManageMedical}
+      moduleMedical={moduleMedical}
+      medicalAdminData={{
+        supplyTypes: medicalSupplyTypesFull ?? [],
+        storerooms: medicalStorerooms ?? [],
+        stations: stations ?? [],
+        apparatus: medicalApparatus,
+        apparatusCompartments: medicalApparatusCompartments,
+        storeroomInventory: medicalStoreroomInventory ?? [],
+        bagTemplates: bagTemplates ?? [],
+        templateItems: templateItems ?? [],
+        bagDeployments: bagDeployments ?? [],
+        moduleMedicalControlled: deptData?.module_medical_controlled ?? false,
+      }}
     />
   )
 }

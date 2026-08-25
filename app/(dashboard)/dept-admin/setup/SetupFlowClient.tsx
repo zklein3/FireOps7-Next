@@ -8,9 +8,10 @@ import ApparatusStep from './ApparatusStep'
 import CompartmentsStep from './CompartmentsStep'
 import ItemsStep from './ItemsStep'
 import InventoryStep from './InventoryStep'
+import MedicalAdminClient from '../medical/MedicalAdminClient'
 import HelpText from '@/components/HelpText'
 
-const TABS = [
+const DEPT_SETUP_TABS = [
   { id: 'stations',     label: 'Stations'      },
   { id: 'apparatus',    label: 'Apparatus'     },
   { id: 'compartments', label: 'Compartments'  },
@@ -39,6 +40,10 @@ export default function SetupFlowClient({
   moduleIso,
   customFieldDefs,
   medicalSupplyTypes,
+  canManageDeptSetup,
+  canManageMedical,
+  moduleMedical,
+  medicalAdminData,
 }: {
   department: { id: string; name: string }
   stations: any[]
@@ -59,9 +64,31 @@ export default function SetupFlowClient({
   moduleIso: boolean
   customFieldDefs: Record<string, { id: string; item_id: string; field_label: string; field_order: number }[]>
   medicalSupplyTypes: { id: string; name: string; category: string; unit_of_measure: string }[]
+  canManageDeptSetup: boolean
+  canManageMedical: boolean
+  moduleMedical: boolean
+  medicalAdminData: {
+    supplyTypes: any[]
+    storerooms: any[]
+    stations: any[]
+    apparatus: any[]
+    apparatusCompartments: any[]
+    storeroomInventory: any[]
+    bagTemplates: any[]
+    templateItems: any[]
+    bagDeployments: any[]
+    moduleMedicalControlled: boolean
+  }
 }) {
   const searchParams = useSearchParams()
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') ?? 'stations')
+
+  const TABS = [
+    ...(canManageDeptSetup ? DEPT_SETUP_TABS : []),
+    ...(moduleMedical && canManageMedical ? [{ id: 'medical', label: 'Medical' }] : []),
+  ]
+
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') ?? TABS[0]?.id ?? 'stations')
+  const effectiveTab = TABS.some(t => t.id === activeTab) ? activeTab : (TABS[0]?.id ?? 'stations')
 
   const helpProps = { showHelp: false, helpResetKey: 0 }
 
@@ -87,7 +114,7 @@ export default function SetupFlowClient({
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-              activeTab === tab.id
+              effectiveTab === tab.id
                 ? 'bg-red-700 text-white'
                 : 'bg-white border border-zinc-200 text-zinc-600 hover:border-red-300'
             }`}
@@ -105,7 +132,7 @@ export default function SetupFlowClient({
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${
-                activeTab === tab.id
+                effectiveTab === tab.id
                   ? 'bg-red-700 text-white'
                   : 'text-zinc-600 hover:bg-zinc-100'
               }`}
@@ -117,10 +144,10 @@ export default function SetupFlowClient({
 
         {/* Tab content */}
         <div className="flex-1 min-w-0">
-          {activeTab === 'stations' && (
+          {effectiveTab === 'stations' && (
             <StationsStep stations={stations} departmentId={departmentId} {...helpProps} />
           )}
-          {activeTab === 'apparatus' && (
+          {effectiveTab === 'apparatus' && (
             <ApparatusStep
               apparatus={apparatus}
               stations={stations}
@@ -129,7 +156,7 @@ export default function SetupFlowClient({
               {...helpProps}
             />
           )}
-          {activeTab === 'compartments' && (
+          {effectiveTab === 'compartments' && (
             <CompartmentsStep
               compartments={compartments}
               usageMap={usageMap}
@@ -139,7 +166,7 @@ export default function SetupFlowClient({
               {...helpProps}
             />
           )}
-          {activeTab === 'items' && (
+          {effectiveTab === 'items' && (
             <ItemsStep
               categories={categories}
               items={items}
@@ -156,12 +183,27 @@ export default function SetupFlowClient({
               {...helpProps}
             />
           )}
-          {activeTab === 'inventory' && (
+          {effectiveTab === 'inventory' && (
             <InventoryStep
               apparatus={apparatus}
               allItems={items}
               allCategories={categories}
               medicalSupplyTypes={medicalSupplyTypes}
+            />
+          )}
+          {effectiveTab === 'medical' && (
+            <MedicalAdminClient
+              supplyTypes={medicalAdminData.supplyTypes}
+              storerooms={medicalAdminData.storerooms}
+              stations={medicalAdminData.stations}
+              apparatus={medicalAdminData.apparatus}
+              apparatusCompartments={medicalAdminData.apparatusCompartments}
+              storeroomInventory={medicalAdminData.storeroomInventory}
+              bagTemplates={medicalAdminData.bagTemplates}
+              templateItems={medicalAdminData.templateItems}
+              bagDeployments={medicalAdminData.bagDeployments}
+              departmentId={departmentId}
+              moduleMedicalControlled={medicalAdminData.moduleMedicalControlled}
             />
           )}
         </div>

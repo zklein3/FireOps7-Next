@@ -97,13 +97,6 @@ export default async function DeptAdminPage() {
             href="/dept-admin/attendance"
           />
         )}
-        {moduleMedical && perms.manage_medical_supply_setup && (
-          <HubCard
-            title="Medical"
-            description="Supply types, storerooms, and medical inventory setup"
-            href="/dept-admin/medical"
-          />
-        )}
         {perms.record_training_completion && (
           <HubCard
             title="Training & Certs"
@@ -132,10 +125,14 @@ export default async function DeptAdminPage() {
             href="/dept-admin/kiosk"
           />
         )}
-        {perms.manage_dept_setup && (
+        {(perms.manage_dept_setup || (moduleMedical && perms.manage_medical_supply_setup)) && (
           <HubCard
             title="Dept Setup"
-            description="Stations, apparatus, personnel roles, and equipment items"
+            description={
+              moduleMedical
+                ? 'Stations, apparatus, personnel roles, equipment items, and medical supplies'
+                : 'Stations, apparatus, personnel roles, and equipment items'
+            }
             href="/dept-admin/setup"
           />
         )}
