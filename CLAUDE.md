@@ -144,6 +144,18 @@ Claude can drive the actual app in a real headless browser — log in, click thr
 
 ## IMMEDIATE NEXT — Resume Here Next Session
 
+### Fire/EMS Item Split — NOT started, discussed only (2026-08-24)
+
+User wants to split inventory items between Fire and EMS for entry and reporting/logging purposes. `item_categories.category_type` already exists as a column in the schema but is entirely unused/unpopulated (null on every row, no code references it anywhere in `app/`) — the natural move is to repurpose this dormant column as a Fire/EMS tag rather than adding a new one.
+
+**Open question, not yet decided:** category-level tagging (simpler, matches how categories are already informally named — "Medical Supply" vs "Fire Hand Tools" — but a mixed-use category can't be split further) vs. item-level tagging (more flexible, but means retagging every item and touching entry forms, inspection sessions, reports, and movement log everywhere they filter/display by category). Leaning category-level to start unless the user says otherwise next session.
+
+### Medical Supply — No Logged Presence Check — NOT started, discussed only (2026-08-24)
+
+Gap found while walking through getting Normal Saline onto a truck: standard equipment items get a discrete, timestamped presence-check (compartment presence-check logs, Vehicle Check, inspection sessions), but medical supplies don't have an equivalent. The Medical module only shows a live quantity + status badge (Good/Low/Expiring/Expired) driven by the receive/use/waste/transfer transaction ledger — there's no "officer confirmed this is physically present" logged event the way there is for regular compartment items.
+
+**Open question, not yet decided:** is the live-status view sufficient (current behavior), or does the user want an actual "Check" action added to `MedicalCompartmentsSection.tsx`/`MedicalBagsSection.tsx` that logs a timestamped confirmation (mirroring `compartment_presence_check_logs`) separate from the transactional receive/use/waste/transfer actions already in `app/actions/medical.ts`. User said "need to fix that flow a little bit" — leaning toward building the logged check, but scope/UI not discussed yet.
+
 ### Global Help/Instruction System — BUILT, committed locally, NOT pushed — resume by testing live (2026-08-11)
 
 Two-component system, purely additive (no existing functionality changed), no DB column — toggle state lives in `localStorage`.
