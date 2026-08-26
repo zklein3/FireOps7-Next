@@ -65,11 +65,11 @@ export default async function SetupPage() {
       : Promise.resolve({ data: [] }),
     moduleMedical
       ? adminClient.from('medical_storerooms')
-          .select('id, name, apparatus_id, template_id, inventory_mode')
+          .select('id, name, apparatus_id, template_id, inventory_mode, compartment_id')
           .eq('department_id', department_id)
           .eq('active', true)
           .not('apparatus_id', 'is', null)
-          .is('compartment_id', null)
+          .not('template_id', 'is', null)
       : Promise.resolve({ data: [] }),
   ])
 

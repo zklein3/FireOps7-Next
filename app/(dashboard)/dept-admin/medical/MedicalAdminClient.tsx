@@ -3,11 +3,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  createMedicalSupplyType, updateMedicalSupplyType,
+  createMedicalSupplyType, updateMedicalSupplyType, deleteMedicalSupplyType,
   createMedicalStoreroom, updateMedicalStoreroom,
   assignSupplyToStoreroom, updateStoreroomPar, removeSupplyFromStoreroom,
   createBagTemplate, updateBagTemplate, addTemplateItem, removeTemplateItem,
-  assignBagToApparatus, removeBagFromApparatus,
+  assignBagToApparatus, removeBagFromApparatus, updateBagCompartment,
 } from '@/app/actions/medical'
 import HelpText from '@/components/HelpText'
 
@@ -33,7 +33,7 @@ interface ApparatusCompartment { id: string; apparatus_id: string; compartment_c
 interface StoreroomInventory { id: string; storeroom_id: string; supply_type_id: string; par_level: number }
 interface BagTemplate { id: string; name: string; description: string | null; active: boolean }
 interface TemplateItem { id: string; template_id: string; supply_type_id: string; par_level: number }
-interface BagDeployment { id: string; name: string; apparatus_id: string; template_id: string | null; inventory_mode: string | null }
+interface BagDeployment { id: string; name: string; apparatus_id: string; template_id: string | null; inventory_mode: string | null; compartment_id: string | null }
 
 type Tab = 'supplies' | 'storerooms' | 'templates'
 
@@ -69,6 +69,7 @@ export default function MedicalAdminClient({
 
   // Storeroom assignment state (for supply type form)
   const [assignStoreroomPars, setAssignStoreroomPars] = useState<Record<string, string>>({})
+  const [confirmDeleteSupplyId, setConfirmDeleteSupplyId] = useState<string | null>(null)
 
   // Storeroom form state
   const [showStoreroomForm, setShowStoreroomForm] = useState(false)
@@ -86,6 +87,9 @@ export default function MedicalAdminClient({
   const [assignApparatusId, setAssignApparatusId] = useState('')
   const [assignBagName, setAssignBagName] = useState('')
   const [assignMode, setAssignMode] = useState<'standard' | 'independent'>('standard')
+  const [assignCompartmentId, setAssignCompartmentId] = useState('')
+  const [editingBagCompartmentId, setEditingBagCompartmentId] = useState<string | null>(null)
+  const [bagCompartmentDraft, setBagCompartmentDraft] = useState('')
 
   // Storeroom inventory state
   const [expandedStoreroomId, setExpandedStoreroomId] = useState<string | null>(null)
@@ -112,6 +116,11 @@ export default function MedicalAdminClient({
     setSupplyActive(true)
     setAssignStoreroomPars({})
     setShowSupplyForm(true)
+  }
+
+  async function handleDeleteSupply(id: string) {
+    setConfirmDeleteSupplyId(null)
+    await wrap(() => deleteMedicalSupplyType(id))
   }
 
   function openEditSupply(s: SupplyType) {
@@ -417,10 +426,31 @@ export default function MedicalAdminClient({
                             {s.unit_of_measure} · {s.required_signatures === 0 ? 'No signatures' : s.required_signatures === 1 ? '1 signature' : '2 signatures'}
                           </p>
                         </div>
-                        <button onClick={() => openEditSupply(s)}
-                          className="text-xs font-semibold text-blue-600 hover:text-blue-800 shrink-0">
-                          Edit
-                        </button>
+                        <div className="flex items-center gap-3 shrink-0">
+                          {confirmDeleteSupplyId === s.id ? (
+                            <>
+                              <button onClick={() => handleDeleteSupply(s.id)} disabled={loading}
+                                className="text-xs font-semibold text-red-600 hover:text-red-800 disabled:opacity-50">
+                                Confirm
+                              </button>
+                              <button onClick={() => setConfirmDeleteSupplyId(null)}
+                                className="text-xs text-zinc-400 hover:text-zinc-600">
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => openEditSupply(s)}
+                                className="text-xs font-semibold text-blue-600 hover:text-blue-800">
+                                Edit
+                              </button>
+                              <button onClick={() => setConfirmDeleteSupplyId(s.id)}
+                                className="text-xs font-medium text-red-500 hover:text-red-700">
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -769,6 +799,7 @@ export default function MedicalAdminClient({
                                 setAssignApparatusId(unassignedApparatus[0]?.id ?? '')
                                 setAssignBagName(tmpl.name)
                                 setAssignMode('standard')
+                                setAssignCompartmentId('')
                               }} className="text-xs font-semibold text-red-600 hover:text-red-800">
                                 {assigningToApparatus === tmpl.id ? 'Cancel' : '+ Assign to Apparatus'}
                               </button>
@@ -780,7 +811,7 @@ export default function MedicalAdminClient({
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
                                   <label className="mb-1 block text-xs font-medium text-zinc-700">Apparatus</label>
-                                  <select value={assignApparatusId} onChange={e => setAssignApparatusId(e.target.value)} className={inputCls}>
+                                  <select value={assignApparatusId} onChange={e => { setAssignApparatusId(e.target.value); setAssignCompartmentId('') }} className={inputCls}>
                                     {unassignedApparatus.map(a => (
                                       <option key={a.id} value={a.id}>{a.unit_number}{a.type_name ? ` — ${a.type_name}` : ''}</option>
                                     ))}
@@ -790,6 +821,18 @@ export default function MedicalAdminClient({
                                   <label className="mb-1 block text-xs font-medium text-zinc-700">Bag Name</label>
                                   <input type="text" value={assignBagName} onChange={e => setAssignBagName(e.target.value)} className={inputCls} />
                                 </div>
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-xs font-medium text-zinc-700">Compartment (optional)</label>
+                                <select value={assignCompartmentId} onChange={e => setAssignCompartmentId(e.target.value)} className={inputCls}>
+                                  <option value="">Not pinned — apparatus-level</option>
+                                  {apparatusCompartments.filter(c => c.apparatus_id === assignApparatusId).map(c => (
+                                    <option key={c.id} value={c.id}>{c.compartment_code}{c.compartment_name ? ` — ${c.compartment_name}` : ''}</option>
+                                  ))}
+                                </select>
+                                <p className="mt-1 text-xs text-zinc-400">
+                                  Pin this bag to the physical compartment it lives in so it shows up during inspection sessions. Leave unpinned for a bag that isn't tracked at inspection time.
+                                </p>
                               </div>
                               <div>
                                 <label className="mb-2 block text-xs font-medium text-zinc-700">Inventory Mode</label>
@@ -811,6 +854,7 @@ export default function MedicalAdminClient({
                                   apparatus_id: assignApparatusId,
                                   name: assignBagName || tmpl.name,
                                   inventory_mode: assignMode,
+                                  compartment_id: assignCompartmentId || null,
                                 }))
                                 if (!r?.error) setAssigningToApparatus(null)
                               }} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50 w-fit">
@@ -825,19 +869,47 @@ export default function MedicalAdminClient({
                             <div className="flex flex-col gap-1">
                               {deployments.map(dep => {
                                 const ap = apparatus.find(a => a.id === dep.apparatus_id)
+                                const isEditingCompartment = editingBagCompartmentId === dep.id
                                 return (
-                                  <div key={dep.id} className="flex items-center justify-between bg-zinc-50 rounded-lg border border-zinc-200 px-4 py-2.5 gap-3">
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium text-zinc-900">{dep.name}</p>
-                                      <p className="text-xs text-zinc-400">{ap ? `Unit ${ap.unit_number}${ap.type_name ? ' — ' + ap.type_name : ''}` : '—'}</p>
+                                  <div key={dep.id} className="bg-zinc-50 rounded-lg border border-zinc-200 px-4 py-2.5">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-zinc-900">{dep.name}</p>
+                                        <p className="text-xs text-zinc-400">
+                                          {ap ? `Unit ${ap.unit_number}${ap.type_name ? ' — ' + ap.type_name : ''}` : '—'}
+                                          {dep.compartment_id
+                                            ? ` · Pinned to ${compartmentLabel(dep.compartment_id) ?? '—'}`
+                                            : ' · Not pinned to a compartment'}
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-3 shrink-0">
+                                        <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${dep.inventory_mode === 'standard' ? 'bg-blue-100 text-blue-700' : 'bg-zinc-100 text-zinc-500'}`}>
+                                          {dep.inventory_mode === 'standard' ? 'Standard' : 'Independent'}
+                                        </span>
+                                        <button onClick={() => { setEditingBagCompartmentId(dep.id); setBagCompartmentDraft(dep.compartment_id ?? '') }}
+                                          disabled={loading} className="text-xs font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50">
+                                          {dep.compartment_id ? 'Move' : 'Pin'}
+                                        </button>
+                                        <button onClick={() => wrap(() => removeBagFromApparatus(dep.id))} disabled={loading}
+                                          className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50">Remove</button>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-3 shrink-0">
-                                      <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${dep.inventory_mode === 'standard' ? 'bg-blue-100 text-blue-700' : 'bg-zinc-100 text-zinc-500'}`}>
-                                        {dep.inventory_mode === 'standard' ? 'Standard' : 'Independent'}
-                                      </span>
-                                      <button onClick={() => wrap(() => removeBagFromApparatus(dep.id))} disabled={loading}
-                                        className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50">Remove</button>
-                                    </div>
+                                    {isEditingCompartment && (
+                                      <div className="mt-2 flex items-center gap-2">
+                                        <select value={bagCompartmentDraft} onChange={e => setBagCompartmentDraft(e.target.value)}
+                                          className="flex-1 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500">
+                                          <option value="">Not pinned — apparatus-level</option>
+                                          {apparatusCompartments.filter(c => c.apparatus_id === dep.apparatus_id).map(c => (
+                                            <option key={c.id} value={c.id}>{c.compartment_code}{c.compartment_name ? ` — ${c.compartment_name}` : ''}</option>
+                                          ))}
+                                        </select>
+                                        <button disabled={loading} onClick={async () => {
+                                          const r = await wrap(() => updateBagCompartment(dep.id, bagCompartmentDraft || null))
+                                          if (!r?.error) setEditingBagCompartmentId(null)
+                                        }} className="text-xs font-semibold text-green-700 hover:text-green-900 disabled:opacity-50">Save</button>
+                                        <button onClick={() => setEditingBagCompartmentId(null)} className="text-xs text-zinc-400 hover:text-zinc-600">Cancel</button>
+                                      </div>
+                                    )}
                                   </div>
                                 )
                               })}
