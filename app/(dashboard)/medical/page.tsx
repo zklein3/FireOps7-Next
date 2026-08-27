@@ -169,7 +169,7 @@ export default async function MedicalPage() {
   const { data: transactions } = storeroomIds.length > 0
     ? await adminClient
         .from('medical_stock_transactions')
-        .select('id, storeroom_id, supply_type_id, lot_id, transaction_type, quantity, administered_amount, waste_amount, volume_unit, performed_by, signer_1_id, signer_2_id, notes, created_at')
+        .select('id, storeroom_id, supply_type_id, supply_type_name, lot_id, transaction_type, quantity, administered_amount, waste_amount, volume_unit, performed_by, signer_1_id, signer_2_id, notes, created_at')
         .in('storeroom_id', storeroomIds)
         .gte('created_at', since)
         .order('created_at', { ascending: false })

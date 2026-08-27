@@ -191,6 +191,7 @@ export async function submitInspection(payload: {
     storeroom_id: string
     storeroom_inventory_id: string
     supply_type_id: string
+    supply_type_name?: string
     present: boolean
     actual_quantity?: number
     expiration_status?: 'confirmed' | 'expiring_soon' | 'expired' | 'not_applicable'
@@ -289,13 +290,35 @@ export async function submitInspection(payload: {
 
     // Store medication check results
     if (payload.medication_checks && payload.medication_checks.length > 0) {
+      const [{ data: apparatusRow }, { data: compartmentRow }, { data: storeroomRows }] = await Promise.all([
+        adminClient.from('apparatus').select('unit_number').eq('id', payload.apparatus_id).single(),
+        adminClient.from('apparatus_compartments').select('compartment_name_id').eq('id', payload.compartment_id).single(),
+        adminClient.from('medical_storerooms').select('id, name').in(
+          'id', [...new Set(payload.medication_checks.map(mc => mc.storeroom_id))]
+        ),
+      ])
+      let compartmentCode: string | null = null
+      if (compartmentRow?.compartment_name_id) {
+        const { data: nameRow } = await adminClient
+          .from('compartment_names')
+          .select('compartment_code')
+          .eq('id', compartmentRow.compartment_name_id)
+          .single()
+        compartmentCode = nameRow?.compartment_code ?? null
+      }
+      const storeroomNameById = new Map((storeroomRows ?? []).map(s => [s.id, s.name]))
+
       const medicationInserts = payload.medication_checks.map(mc => ({
         department_id: payload.department_id,
         storeroom_id: mc.storeroom_id,
+        storeroom_name: storeroomNameById.get(mc.storeroom_id) ?? null,
         storeroom_inventory_id: mc.storeroom_inventory_id,
         supply_type_id: mc.supply_type_id,
+        supply_type_name: mc.supply_type_name ?? null,
         apparatus_id: payload.apparatus_id,
+        apparatus_name: apparatusRow?.unit_number ?? null,
         compartment_id: payload.compartment_id,
+        compartment_name: compartmentCode,
         inspection_session_id: payload.inspection_session_id || null,
         inspected_at: now,
         inspected_by_personnel_id: payload.personnel_id,

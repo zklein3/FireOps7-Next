@@ -24,6 +24,7 @@ interface Transaction {
   id: string
   storeroom_id: string
   supply_type_id: string
+  supply_type_name: string | null
   lot_id: string | null
   transaction_type: string
   quantity: number
@@ -905,7 +906,7 @@ export default function MedicalStoreClient({
                         <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${TX_TYPE_COLORS[tx.transaction_type] ?? 'bg-zinc-100 text-zinc-600'}`}>
                           {TX_TYPE_LABELS[tx.transaction_type] ?? tx.transaction_type}
                         </span>
-                        <p className="text-sm font-semibold text-zinc-900">{supply?.name ?? '—'}</p>
+                        <p className="text-sm font-semibold text-zinc-900">{tx.supply_type_name ?? supply?.name ?? '—'}</p>
                         {storerooms.length > 1 && storeroom && (
                           <p className="text-xs text-zinc-400">{storeroom.name}</p>
                         )}

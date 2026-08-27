@@ -51,6 +51,15 @@ export default async function SetupPage() {
         .in('storeroom_id', medicalStoreroomIds)
     : { data: [] }
 
+  const medicalInventoryIds = (medicalStoreroomInventory ?? []).map(i => i.id)
+  const { data: medicalStockLots } = medicalInventoryIds.length > 0
+    ? await adminClient.from('medical_stock_lots')
+        .select('id, storeroom_inventory_id, lot_number, quantity_remaining, expiration_date')
+        .in('storeroom_inventory_id', medicalInventoryIds)
+        .eq('active', true)
+        .gt('quantity_remaining', 0)
+    : { data: [] }
+
   const { data: bagTemplates } = moduleMedical
     ? await adminClient.from('medical_bag_templates')
         .select('id, name, description, active')
@@ -263,6 +272,7 @@ export default async function SetupPage() {
         apparatus: medicalApparatus,
         apparatusCompartments: medicalApparatusCompartments,
         storeroomInventory: medicalStoreroomInventory ?? [],
+        lots: medicalStockLots ?? [],
         bagTemplates: bagTemplates ?? [],
         templateItems: templateItems ?? [],
         bagDeployments: bagDeployments ?? [],

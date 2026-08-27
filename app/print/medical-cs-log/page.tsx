@@ -75,7 +75,7 @@ export default async function MedicalCSLogPrintPage({
   // Transactions — controlled supplies only, filtered by date + optional storeroom/supply
   let query = adminClient
     .from('medical_stock_transactions')
-    .select('id, storeroom_id, supply_type_id, lot_id, transaction_type, quantity, administered_amount, waste_amount, volume_unit, performed_by, signer_1_id, signer_1_signature_data, signer_2_id, signer_2_signature_data, notes, created_at')
+    .select('id, storeroom_id, supply_type_id, supply_type_name, lot_id, transaction_type, quantity, administered_amount, waste_amount, volume_unit, performed_by, signer_1_id, signer_1_signature_data, signer_2_id, signer_2_signature_data, notes, created_at')
     .in('storeroom_id', storeroomIds)
     .in('supply_type_id', csTypeIds)
     .gte('created_at', fromDate)
@@ -181,7 +181,7 @@ export default async function MedicalCSLogPrintPage({
               {(transactions ?? []).map(tx => (
                 <tr key={tx.id}>
                   <td>{fmtDate(tx.created_at)}</td>
-                  <td>{supplyMap[tx.supply_type_id] ?? '—'}</td>
+                  <td>{tx.supply_type_name ?? supplyMap[tx.supply_type_id] ?? '—'}</td>
                   <td>{TX_LABELS[tx.transaction_type] ?? tx.transaction_type}</td>
                   <td style={{ textAlign: 'center' }}>
                     {tx.transaction_type === 'administered'

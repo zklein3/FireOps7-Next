@@ -125,7 +125,7 @@ export default async function MedicalReportsPage({
   const { data: transactions } = storeroomIds.length > 0
     ? await adminClient
         .from('medical_stock_transactions')
-        .select('supply_type_id, storeroom_id, transaction_type, quantity')
+        .select('supply_type_id, supply_type_name, storeroom_id, transaction_type, quantity')
         .in('storeroom_id', storeroomIds)
         .in('transaction_type', ['dispensed', 'administered', 'wasted'])
         .gte('created_at', since)
@@ -134,14 +134,15 @@ export default async function MedicalReportsPage({
   // ── Build consumption summary ──────────────────────────────────────────────
   // 'administered' (controlled substances, one vial per transaction) counts as Used
   // alongside 'dispensed' — both represent whole units leaving stock via legitimate use.
-  const consumptionBySupply: Record<string, { dispensed: number; wasted: number }> = {}
+  const consumptionBySupply: Record<string, { dispensed: number; wasted: number; supplyTypeId: string | null; name: string | null }> = {}
   for (const tx of transactions ?? []) {
-    if (!consumptionBySupply[tx.supply_type_id]) consumptionBySupply[tx.supply_type_id] = { dispensed: 0, wasted: 0 }
-    if (tx.transaction_type === 'dispensed' || tx.transaction_type === 'administered') consumptionBySupply[tx.supply_type_id]!.dispensed += tx.quantity
-    if (tx.transaction_type === 'wasted') consumptionBySupply[tx.supply_type_id]!.wasted += tx.quantity
+    const key = tx.supply_type_id ?? `deleted:${tx.supply_type_name ?? 'unknown'}`
+    if (!consumptionBySupply[key]) consumptionBySupply[key] = { dispensed: 0, wasted: 0, supplyTypeId: tx.supply_type_id, name: tx.supply_type_name }
+    if (tx.transaction_type === 'dispensed' || tx.transaction_type === 'administered') consumptionBySupply[key]!.dispensed += tx.quantity
+    if (tx.transaction_type === 'wasted') consumptionBySupply[key]!.wasted += tx.quantity
   }
   const consumptionRows = Object.entries(consumptionBySupply)
-    .map(([id, c]) => ({ id, ...c, total: c.dispensed + c.wasted }))
+    .map(([key, c]) => ({ id: key, ...c, total: c.dispensed + c.wasted }))
     .sort((a, b) => b.total - a.total)
 
   // ── Build stock vs PAR table ───────────────────────────────────────────────
@@ -259,11 +260,11 @@ export default async function MedicalReportsPage({
         ) : (
           <div className="rounded-xl bg-white border border-zinc-200 overflow-hidden divide-y divide-zinc-100">
             {consumptionRows.map(row => {
-              const supply = supplyMap[row.id]
+              const supply = row.supplyTypeId ? supplyMap[row.supplyTypeId] : undefined
               return (
                 <div key={row.id} className="flex items-center px-5 py-3 gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-zinc-900">{supply?.name ?? '—'}</p>
+                    <p className="text-sm font-semibold text-zinc-900">{row.name ?? supply?.name ?? '—'}</p>
                     <p className="text-xs text-zinc-400">{supply?.unit_of_measure ?? ''}</p>
                   </div>
                   <div className="flex items-center gap-4 shrink-0 text-right text-xs">

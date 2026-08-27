@@ -351,6 +351,7 @@ export default function InspectionRunClient({
         storeroom_id: med.storeroom_id,
         storeroom_inventory_id: med.storeroom_inventory_id,
         supply_type_id: med.supply_type_id,
+        supply_type_name: med.supply_name,
         present: resp?.present ?? false,
         actual_quantity: resp?.actual_quantity,
         expiration_status: resp?.expiration_status,

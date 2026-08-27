@@ -8,6 +8,7 @@ import {
   assignSupplyToStoreroom, updateStoreroomPar, removeSupplyFromStoreroom,
   createBagTemplate, updateBagTemplate, addTemplateItem, removeTemplateItem,
   assignBagToApparatus, removeBagFromApparatus, updateBagCompartment,
+  adjustStock, receiveStock,
 } from '@/app/actions/medical'
 import HelpText from '@/components/HelpText'
 
@@ -31,6 +32,7 @@ interface Station { id: string; station_name: string; station_number: string | n
 interface Apparatus { id: string; unit_number: string; type_name: string | null }
 interface ApparatusCompartment { id: string; apparatus_id: string; compartment_code: string; compartment_name: string | null; sort_order: number }
 interface StoreroomInventory { id: string; storeroom_id: string; supply_type_id: string; par_level: number }
+interface StockLot { id: string; storeroom_inventory_id: string; lot_number: string | null; quantity_remaining: number; expiration_date: string | null }
 interface BagTemplate { id: string; name: string; description: string | null; active: boolean }
 interface TemplateItem { id: string; template_id: string; supply_type_id: string; par_level: number }
 interface BagDeployment { id: string; name: string; apparatus_id: string; template_id: string | null; inventory_mode: string | null; compartment_id: string | null }
@@ -38,7 +40,7 @@ interface BagDeployment { id: string; name: string; apparatus_id: string; templa
 type Tab = 'supplies' | 'storerooms' | 'templates'
 
 export default function MedicalAdminClient({
-  supplyTypes, storerooms, stations, apparatus, apparatusCompartments, storeroomInventory,
+  supplyTypes, storerooms, stations, apparatus, apparatusCompartments, storeroomInventory, lots,
   bagTemplates, templateItems, bagDeployments, departmentId, moduleMedicalControlled,
 }: {
   supplyTypes: SupplyType[]
@@ -47,6 +49,7 @@ export default function MedicalAdminClient({
   apparatus: Apparatus[]
   apparatusCompartments: ApparatusCompartment[]
   storeroomInventory: StoreroomInventory[]
+  lots: StockLot[]
   bagTemplates: BagTemplate[]
   templateItems: TemplateItem[]
   bagDeployments: BagDeployment[]
@@ -96,6 +99,10 @@ export default function MedicalAdminClient({
   const [addingSupplyToStoreroom, setAddingSupplyToStoreroom] = useState<string | null>(null)
   const [editingParId, setEditingParId] = useState<string | null>(null)
   const [parDraft, setParDraft] = useState('')
+  const [editingQtyId, setEditingQtyId] = useState<string | null>(null)
+  const [qtyDraft, setQtyDraft] = useState('')
+  const [receivingInvId, setReceivingInvId] = useState<string | null>(null)
+  const [receiveDraft, setReceiveDraft] = useState('')
 
   function reset() { setError(null); setSuccess(null) }
 
@@ -211,6 +218,27 @@ export default function MedicalAdminClient({
 
   const supplyName = (supplyTypeId: string) =>
     supplyTypes.find(s => s.id === supplyTypeId)?.name ?? '—'
+
+  const lotsForInventory = (invId: string) => lots.filter(l => l.storeroom_inventory_id === invId)
+
+  async function handleAdjustQtySubmit(invId: string, lotId: string) {
+    const newQty = parseInt(qtyDraft)
+    if (isNaN(newQty) || newQty < 0) return
+    await wrap(() => adjustStock({ lot_id: lotId, storeroom_inventory_id: invId, new_quantity: newQty, reason: 'Dept Admin quantity edit', notes: null }))
+    setEditingQtyId(null)
+  }
+
+  async function handleQuickReceiveSubmit(invId: string) {
+    const qty = parseInt(receiveDraft)
+    if (isNaN(qty) || qty < 1) return
+    await wrap(() => receiveStock({
+      storeroom_inventory_id: invId, quantity_received: qty, lot_number: null, expiration_date: null, notes: null,
+      signer_1_id: null, signer_2_id: null, signer_1_signature: null, signer_2_signature: null,
+      concentration_amount: null, concentration_unit: null, volume_per_unit: null, volume_unit: null, control_numbers: null,
+    }))
+    setReceivingInvId(null)
+    setReceiveDraft('')
+  }
 
   const assignedSupplyIds = (storeroomId: string) =>
     new Set(storeroomInventory.filter(i => i.storeroom_id === storeroomId).map(i => i.supply_type_id))
@@ -599,31 +627,81 @@ export default function MedicalAdminClient({
                           <p className="text-xs text-zinc-400">No supply types assigned yet.</p>
                         ) : (
                           <div className="flex flex-col gap-1">
-                            {inv.map(i => (
-                              <div key={i.id} className="flex items-center justify-between bg-white rounded-lg border border-zinc-200 px-4 py-2.5 gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-zinc-900">{supplyName(i.supply_type_id)}</p>
+                            {inv.map(i => {
+                              const invLots = lotsForInventory(i.id)
+                              const totalQty = invLots.reduce((s, l) => s + l.quantity_remaining, 0)
+                              return (
+                              <div key={i.id} className="flex flex-col bg-white rounded-lg border border-zinc-200 px-4 py-2.5 gap-2">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-zinc-900">{supplyName(i.supply_type_id)}</p>
+                                  </div>
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    {editingParId === i.id ? (
+                                      <div className="flex items-center gap-2">
+                                        <input type="number" min="0" value={parDraft} onChange={e => setParDraft(e.target.value)}
+                                          className="w-16 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-center focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" autoFocus />
+                                        <button onClick={() => wrap(() => updateStoreroomPar(i.id, parseInt(parDraft) || 0)).then(() => setEditingParId(null))}
+                                          disabled={loading} className="text-xs font-semibold text-green-700 hover:text-green-900 disabled:opacity-50">Save</button>
+                                        <button onClick={() => setEditingParId(null)} className="text-xs text-zinc-400 hover:text-zinc-600">Cancel</button>
+                                      </div>
+                                    ) : (
+                                      <button onClick={() => { setEditingParId(i.id); setParDraft(String(i.par_level)) }}
+                                        className="text-xs text-zinc-500 hover:text-zinc-800" title="Click to edit PAR">
+                                        PAR: {i.par_level}
+                                      </button>
+                                    )}
+                                    <button onClick={() => wrap(() => removeSupplyFromStoreroom(i.id))} disabled={loading}
+                                      className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50">Remove</button>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-3 shrink-0">
-                                  {editingParId === i.id ? (
-                                    <div className="flex items-center gap-2">
-                                      <input type="number" min="0" value={parDraft} onChange={e => setParDraft(e.target.value)}
-                                        className="w-16 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-center focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" autoFocus />
-                                      <button onClick={() => wrap(() => updateStoreroomPar(i.id, parseInt(parDraft) || 0)).then(() => setEditingParId(null))}
-                                        disabled={loading} className="text-xs font-semibold text-green-700 hover:text-green-900 disabled:opacity-50">Save</button>
-                                      <button onClick={() => setEditingParId(null)} className="text-xs text-zinc-400 hover:text-zinc-600">Cancel</button>
-                                    </div>
+
+                                {/* Quantity — inline editable when there's exactly one lot, which covers
+                                    the vast majority of non-expiration-tracked items like tools/equipment
+                                    mistakenly set up as a medical supply type. Multi-lot items (typically
+                                    expiration-tracked) route to /medical where per-lot detail already lives. */}
+                                <div className="flex items-center gap-3 border-t border-zinc-100 pt-2">
+                                  {invLots.length === 0 ? (
+                                    receivingInvId === i.id ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-zinc-500">Qty:</span>
+                                        <input type="number" min="1" value={receiveDraft} onChange={e => setReceiveDraft(e.target.value)}
+                                          className="w-16 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-center focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" autoFocus />
+                                        <button onClick={() => handleQuickReceiveSubmit(i.id)} disabled={loading}
+                                          className="text-xs font-semibold text-green-700 hover:text-green-900 disabled:opacity-50">Save</button>
+                                        <button onClick={() => { setReceivingInvId(null); setReceiveDraft('') }} className="text-xs text-zinc-400 hover:text-zinc-600">Cancel</button>
+                                      </div>
+                                    ) : (
+                                      <button onClick={() => { setReceivingInvId(i.id); setReceiveDraft('1') }}
+                                        className="text-xs text-zinc-500 hover:text-zinc-800">
+                                        Qty: 0 — click to add stock
+                                      </button>
+                                    )
+                                  ) : invLots.length === 1 ? (
+                                    editingQtyId === i.id ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-zinc-500">Qty:</span>
+                                        <input type="number" min="0" value={qtyDraft} onChange={e => setQtyDraft(e.target.value)}
+                                          className="w-16 rounded-lg border border-zinc-300 px-2 py-1 text-sm text-center focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" autoFocus />
+                                        <button onClick={() => handleAdjustQtySubmit(i.id, invLots[0].id)} disabled={loading}
+                                          className="text-xs font-semibold text-green-700 hover:text-green-900 disabled:opacity-50">Save</button>
+                                        <button onClick={() => setEditingQtyId(null)} className="text-xs text-zinc-400 hover:text-zinc-600">Cancel</button>
+                                      </div>
+                                    ) : (
+                                      <button onClick={() => { setEditingQtyId(i.id); setQtyDraft(String(invLots[0].quantity_remaining)) }}
+                                        className="text-xs text-zinc-500 hover:text-zinc-800" title="Click to edit quantity">
+                                        Qty: {invLots[0].quantity_remaining}
+                                      </button>
+                                    )
                                   ) : (
-                                    <button onClick={() => { setEditingParId(i.id); setParDraft(String(i.par_level)) }}
-                                      className="text-xs text-zinc-500 hover:text-zinc-800" title="Click to edit PAR">
-                                      PAR: {i.par_level}
-                                    </button>
+                                    <span className="text-xs text-zinc-400">
+                                      Qty: {totalQty} across {invLots.length} lots — manage lot detail on the Medical page
+                                    </span>
                                   )}
-                                  <button onClick={() => wrap(() => removeSupplyFromStoreroom(i.id))} disabled={loading}
-                                    className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50">Remove</button>
                                 </div>
                               </div>
-                            ))}
+                              )
+                            })}
                           </div>
                         )}
                       </div>

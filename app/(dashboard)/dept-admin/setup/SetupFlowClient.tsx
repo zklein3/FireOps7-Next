@@ -74,6 +74,7 @@ export default function SetupFlowClient({
     apparatus: any[]
     apparatusCompartments: any[]
     storeroomInventory: any[]
+    lots: any[]
     bagTemplates: any[]
     templateItems: any[]
     bagDeployments: any[]
@@ -199,6 +200,7 @@ export default function SetupFlowClient({
               apparatus={medicalAdminData.apparatus}
               apparatusCompartments={medicalAdminData.apparatusCompartments}
               storeroomInventory={medicalAdminData.storeroomInventory}
+              lots={medicalAdminData.lots}
               bagTemplates={medicalAdminData.bagTemplates}
               templateItems={medicalAdminData.templateItems}
               bagDeployments={medicalAdminData.bagDeployments}

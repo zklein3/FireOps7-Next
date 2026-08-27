@@ -131,6 +131,27 @@ export async function removeCompartmentFromApparatus(compartment_id: string, app
 
   const adminClient = createAdminClient()
 
+  // Removing a compartment silently unpins any medical storeroom/bag pointed at it
+  // (that FK is ON DELETE SET NULL, by design, so a bag survives as apparatus-level)
+  // and hard-deletes any item location standards pointed at it (ON DELETE CASCADE,
+  // wiping that compartment's equipment checklist config with no way back). Both are
+  // surprising if the admin didn't mean to detach/lose them, so block and name what's there.
+  const [{ data: medicalRooms }, { count: itemStandardCount }] = await Promise.all([
+    adminClient.from('medical_storerooms').select('name').eq('compartment_id', compartment_id),
+    adminClient.from('item_location_standards').select('id', { count: 'exact', head: true }).eq('apparatus_compartment_id', compartment_id),
+  ])
+
+  const blockers: string[] = []
+  if (medicalRooms && medicalRooms.length > 0) {
+    blockers.push(`has a medical storeroom/bag pinned here (${medicalRooms.map(r => r.name).join(', ')}) — unpin or remove it first`)
+  }
+  if ((itemStandardCount ?? 0) > 0) {
+    blockers.push('has equipment items assigned here — remove them from the compartment first')
+  }
+  if (blockers.length > 0) {
+    return { error: `Can't remove this compartment — it ${blockers.join('; ')}.` }
+  }
+
   const { error } = await adminClient
     .from('apparatus_compartments')
     .delete()
@@ -175,10 +196,26 @@ export async function bulkSetCompartmentApparatus(
   }
 
   if (toRemove.length > 0) {
+    const toRemoveIds = toRemove.map(r => r.id)
+    const [{ data: medicalRooms }, { count: itemStandardCount }] = await Promise.all([
+      adminClient.from('medical_storerooms').select('name').in('compartment_id', toRemoveIds),
+      adminClient.from('item_location_standards').select('id', { count: 'exact', head: true }).in('apparatus_compartment_id', toRemoveIds),
+    ])
+    const blockers: string[] = []
+    if (medicalRooms && medicalRooms.length > 0) {
+      blockers.push(`a medical storeroom/bag is pinned to one of these compartments (${medicalRooms.map(r => r.name).join(', ')}) — unpin or remove it first`)
+    }
+    if ((itemStandardCount ?? 0) > 0) {
+      blockers.push('one of these compartments has equipment items assigned — remove them first')
+    }
+    if (blockers.length > 0) {
+      return { error: `Can't remove this compartment from those apparatus — ${blockers.join('; ')}.` }
+    }
+
     const { error } = await adminClient
       .from('apparatus_compartments')
       .delete()
-      .in('id', toRemove.map(r => r.id))
+      .in('id', toRemoveIds)
     if (error) { await logError(error, '/dept-admin/setup'); return { error: error.message } }
   }
 

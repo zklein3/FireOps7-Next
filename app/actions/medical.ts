@@ -166,21 +166,15 @@ export async function deleteMedicalSupplyType(id: string) {
 
   const [
     { count: inventoryCount },
-    { count: transactionCount },
     { count: templateItemCount },
-    { count: checkLogCount },
   ] = await Promise.all([
     adminClient.from('medical_storeroom_inventory').select('id', { count: 'exact', head: true }).eq('supply_type_id', id),
-    adminClient.from('medical_stock_transactions').select('id', { count: 'exact', head: true }).eq('supply_type_id', id),
     adminClient.from('medical_bag_template_items').select('id', { count: 'exact', head: true }).eq('supply_type_id', id),
-    adminClient.from('medical_supply_presence_check_logs').select('id', { count: 'exact', head: true }).eq('supply_type_id', id),
   ])
 
   const blockers: string[] = []
   if ((inventoryCount ?? 0) > 0) blockers.push('assigned to a storeroom, bag, or compartment')
-  if ((transactionCount ?? 0) > 0) blockers.push('has stock transaction history')
   if ((templateItemCount ?? 0) > 0) blockers.push('used in a bag template')
-  if ((checkLogCount ?? 0) > 0) blockers.push('has inspection check history')
 
   if (blockers.length > 0) {
     return { error: `Can't delete — this supply type ${blockers.join('; ')}. Deactivate it instead.` }
@@ -632,6 +626,7 @@ export async function receiveStock(data: {
     department_id: invRow.department_id,
     storeroom_id: invRow.storeroom_id,
     supply_type_id: invRow.supply_type_id,
+    supply_type_name: supplyType?.name ?? null,
     lot_id: lot.id,
     transaction_type: 'received',
     quantity: data.quantity_received,
@@ -707,7 +702,7 @@ export async function dispenseStock(data: {
   // Check signature requirements
   const { data: supplyType } = await adminClient
     .from('medical_supply_types')
-    .select('required_signatures')
+    .select('name, required_signatures')
     .eq('id', invRow.supply_type_id)
     .single()
 
@@ -732,6 +727,7 @@ export async function dispenseStock(data: {
     department_id: invRow.department_id,
     storeroom_id: invRow.storeroom_id,
     supply_type_id: invRow.supply_type_id,
+    supply_type_name: supplyType?.name ?? null,
     lot_id: data.lot_id,
     transaction_type: 'dispensed',
     quantity: data.quantity,
@@ -799,7 +795,7 @@ export async function administerStock(data: {
 
   const { data: supplyType } = await adminClient
     .from('medical_supply_types')
-    .select('required_signatures')
+    .select('name, required_signatures')
     .eq('id', invRow.supply_type_id)
     .single()
 
@@ -823,6 +819,7 @@ export async function administerStock(data: {
     department_id: invRow.department_id,
     storeroom_id: invRow.storeroom_id,
     supply_type_id: invRow.supply_type_id,
+    supply_type_name: supplyType?.name ?? null,
     lot_id: unit.lot_id,
     transaction_type: 'administered',
     quantity: 1,
@@ -887,7 +884,7 @@ export async function wasteStock(data: {
 
   const { data: supplyType } = await adminClient
     .from('medical_supply_types')
-    .select('required_signatures, is_controlled')
+    .select('name, required_signatures, is_controlled')
     .eq('id', invRow.supply_type_id)
     .single()
 
@@ -927,6 +924,7 @@ export async function wasteStock(data: {
     department_id: invRow.department_id,
     storeroom_id: invRow.storeroom_id,
     supply_type_id: invRow.supply_type_id,
+    supply_type_name: supplyType?.name ?? null,
     lot_id: data.lot_id,
     transaction_type: 'wasted',
     quantity: data.quantity,
@@ -990,7 +988,7 @@ export async function transferStock(data: {
   // Controlled substances require officer+
   const { data: supplyTypeRow } = await adminClient
     .from('medical_supply_types')
-    .select('is_controlled')
+    .select('name, is_controlled')
     .eq('id', srcInv.supply_type_id)
     .single()
   if (supplyTypeRow?.is_controlled && !ctx.isOfficerOrAbove)
@@ -1062,6 +1060,7 @@ export async function transferStock(data: {
     department_id: srcInv.department_id,
     storeroom_id: srcInv.storeroom_id,
     supply_type_id: srcInv.supply_type_id,
+    supply_type_name: supplyTypeRow?.name ?? null,
     lot_id: data.lot_id,
     transaction_type: 'transferred_out',
     quantity: data.quantity,
@@ -1075,6 +1074,7 @@ export async function transferStock(data: {
     department_id: srcInv.department_id,
     storeroom_id: data.destination_storeroom_id,
     supply_type_id: srcInv.supply_type_id,
+    supply_type_name: supplyTypeRow?.name ?? null,
     lot_id: newLot.id,
     transaction_type: 'transferred_in',
     quantity: data.quantity,
@@ -1199,6 +1199,12 @@ export async function adjustStock(data: {
     .single()
   if (!invRow) return { error: 'Inventory record not found.' }
 
+  const { data: supplyType } = await adminClient
+    .from('medical_supply_types')
+    .select('name')
+    .eq('id', invRow.supply_type_id)
+    .single()
+
   const now = new Date().toISOString()
   const noteText = [data.reason, data.notes].filter(Boolean).join(' — ')
 
@@ -1212,6 +1218,7 @@ export async function adjustStock(data: {
     department_id: invRow.department_id,
     storeroom_id: invRow.storeroom_id,
     supply_type_id: invRow.supply_type_id,
+    supply_type_name: supplyType?.name ?? null,
     lot_id: data.lot_id,
     transaction_type: 'adjusted',
     quantity: Math.abs(delta),
@@ -1332,7 +1339,7 @@ export async function wasteExpiredLots(data: {
 
   const { data: supplyType } = await adminClient
     .from('medical_supply_types')
-    .select('required_signatures')
+    .select('name, required_signatures')
     .eq('id', invRow.supply_type_id)
     .single()
 
@@ -1367,6 +1374,7 @@ export async function wasteExpiredLots(data: {
       department_id: invRow.department_id,
       storeroom_id: invRow.storeroom_id,
       supply_type_id: invRow.supply_type_id,
+      supply_type_name: supplyType?.name ?? null,
       lot_id: lot.id,
       transaction_type: 'wasted',
       quantity: lot.quantity_remaining,
