@@ -144,6 +144,77 @@ Claude can drive the actual app in a real headless browser — log in, click thr
 
 ## IMMEDIATE NEXT — Resume Here Next Session
 
+### ⬅ RESUME HERE — Container Unification, Steps 6–7 of 7 (afternoon of 2026-08-30)
+
+Work lives on branch **`feature/items-in-containers`** — 5 commits, local, never pushed.
+**Its resume notes are on that branch, not here:** `git checkout feature/items-in-containers`
+and read `PLAN_CONTAINER_UNIFICATION.md` (repo root, STATUS section first) plus that branch's
+own CLAUDE.md "START HERE" section. Both arrived in commit `1e7e40a` and deliberately do not
+exist on `main`.
+
+**`main` has moved since that branch was cut.** Branch base is `7856caa`; main is now
+`dfe234c` (4 events commits from the morning of 2026-08-30, below). No overlap in files —
+the events work touched `app/actions/attendance.ts`, the events pages, the public site, and
+two new `lib/` files; the container work touches equipment/medical. Rebase or merge should be
+clean, but it hasn't been attempted.
+
+Remaining: **Step 6** (movement-log `'storeroom'`/`'bag'` values + extend the
+compartment-delete guard to storeroom-attached items) and **Step 7** (bag-pinned items in the
+housing compartment's inspection checklist). Nothing on that branch has been click-tested.
+
+### Events — Irregular Schedules, CAD Import, End Times — SHIPPED ✅ (2026-08-30, 4 commits pushed to main)
+
+Driven by a real need: **football standbys.** Scheduled, irregular dates, attendance tracked,
+no dispatch number.
+
+- `88f2ccc` — **`custom_dates` recurrence mode.** Fifth mode alongside one_time/weekly/
+  monthly_by_dow/monthly_by_date; the existing four are untouched. Pick each date as a chip,
+  get one series with an occurrence per date sharing title/time/location/settings.
+  `addEventDates(series_id, dates[])` appends later dates (reschedule, playoff round), skipping
+  dates already present and mirroring the `training_events` row when the series is training.
+  Migration `add_custom_dates_recurrence_type` applied (additive — `main` ran fine before it).
+  **Plus three flow fixes:** the 60-day forward trim on both events pages exempted only
+  `event_type='special'`, so a season entered in August for November games would have been
+  created and then invisible — custom-dates occurrences are now exempt too; the management
+  page's history cap went 30d → 365d (it has a Past filter tab, which is exactly where
+  backfilling happens); and that page fetched *every department's* event instances and filtered
+  in JS afterwards — now fetches this dept's series first and scopes the instance query, matching
+  the member page.
+- `b95912d` — **CAD sheet import on `/events/new`.** Reuses `parseRunSheet` (no second Anthropic
+  prompt to keep in sync); new `lib/cad-to-event.ts` maps its output to event fields. Fills date,
+  start time, end time, location, description, and sets type to Special Event. **Title is
+  deliberately not filled** — a CAD sheet can't know it was "Football Standby vs. Ashland".
+  Apparatus/mutual-aid halves of the parse are ignored; attendance is still bulk-logged from the
+  roster afterwards. The success message names the fields actually filled so a thin parse reads
+  as thin.
+- `cb6e2d9` — **End time replaces duration as the input** on both event forms.
+  `duration_minutes` stays the stored column (4 of its 5 display sites already converted it back
+  into an end time, and duration survives an occurrence crossing midnight where a bare end time
+  is ambiguous). `lib/event-times.ts` converts both ways; end ≤ start reads as next-day, equal
+  times yield null rather than 24h. Edit form derives the end time from stored duration on open.
+- `dfe234c` — **Public site shows "6:00 PM – 10:00 PM"** instead of a start time plus a duration
+  badge. The dept home page was worse: it selected `duration_minutes`, dropped it while mapping,
+  and rendered no end time at all. `formatTimeRange`/`formatClockTime` now live in
+  `lib/event-times.ts`; the two dashboard event clients still carry their own copies (not
+  refactored).
+
+**Built then fully reverted — do not rebuild:** a `cad_number` column on `event_instances` plus
+CAD-import UI on the admin edit panel. Cause was misreading "CAD sheet but no incident number"
+as "can't be an incident." **The dept's actual rule: a CAD/CFS number *or* an external agency
+number ⇒ file as an incident; no dispatch number at all ⇒ event.** The IR number is not the
+test — it's optional on the form and nullable in the DB, and `standby` is already a valid
+`incident_type`, so that path already worked with no changes. Events keep the CAD sheet's *data*
+as a typing shortcut but never the number. Migration `drop_event_instances_cad_number` reverted
+the column (0 rows).
+
+**No dedicated column exists for an external agency number** anywhere — it currently has to go
+in Incident # or CAD #. Open question if runs start arriving identified only by one.
+
+**Nothing from this session was click-tested** — build- and typecheck-clean only, plus a unit
+check of the duration/end-time conversion. Highest-risk item is `88f2ccc`'s restructured
+management-page fetch, since it affects existing meetings and training events, not just the new
+mode.
+
 ### Medical History Decoupling + Supply Type Delete — SHIPPED ✅, committed locally, NOT pushed until this session (2026-08-27)
 
 **Trigger:** user is trying to actually hard-delete the "Backboards" medical supply type (it was set up as a medication but should be a regular item instead) and hit `deleteMedicalSupplyType()`'s blockers — it refuses to delete when any row exists in `medical_storeroom_inventory` (current assignment), `medical_stock_transactions` (transaction history), `medical_bag_template_items` (bag template usage), or `medical_supply_presence_check_logs` (inspection check history).
