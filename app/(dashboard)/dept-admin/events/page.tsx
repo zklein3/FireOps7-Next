@@ -16,8 +16,10 @@ export default async function EventsAdminPage() {
   const isAdmin = ctx.systemRole === 'admin'
   const department_id = ctx.departmentId
 
-  const past30 = new Date()
-  past30.setDate(past30.getDate() - 30)
+  // A full year back — this page has a "Past" filter tab and is where officers backfill
+  // attendance for details that already happened, so history has to actually be reachable.
+  const past365 = new Date()
+  past365.setDate(past365.getDate() - 365)
   const future365 = new Date()
   future365.setDate(future365.getDate() + 365)
   const future60cutoff = new Date()
@@ -27,7 +29,7 @@ export default async function EventsAdminPage() {
   const [
     { data: excuseTypesRaw },
     { data: certTypesRaw },
-    { data: instances },
+    { data: seriesData },
     { data: deptData },
     { data: personnel },
   ] = await Promise.all([
@@ -44,11 +46,9 @@ export default async function EventsAdminPage() {
       .eq('active', true)
       .order('cert_name'),
     adminClient
-      .from('event_instances')
-      .select('id, series_id, event_date, start_time, location, status, notes, requires_verification, requires_signature, title_override, description_override')
-      .gte('event_date', past30.toISOString().split('T')[0])
-      .lte('event_date', future365.toISOString().split('T')[0])
-      .order('event_date', { ascending: true }),
+      .from('event_series')
+      .select('id, title, event_type, department_id, recurrence_type, description, is_public, duration_minutes, is_training, training_hours, training_cert_type_id, training_instructor')
+      .eq('department_id', department_id),
     adminClient
       .from('departments')
       .select('public_site_enabled')
@@ -62,21 +62,28 @@ export default async function EventsAdminPage() {
   ])
   const publicSiteEnabled = deptData?.public_site_enabled ?? false
 
-  const seriesIds = [...new Set((instances ?? []).map(i => i.series_id))]
-  const { data: seriesData } = seriesIds.length > 0
+  const seriesIds = (seriesData ?? []).map(s => s.id)
+  const seriesMap = Object.fromEntries((seriesData ?? []).map(s => [s.id, s]))
+
+  // Scope instances to this department's series up front rather than pulling every
+  // department's rows and filtering in JS afterwards.
+  const { data: instances } = seriesIds.length > 0
     ? await adminClient
-        .from('event_series')
-        .select('id, title, event_type, department_id, recurrence_type, description, is_public, duration_minutes, is_training, training_hours, training_cert_type_id, training_instructor')
-        .in('id', seriesIds)
-        .eq('department_id', department_id)
+        .from('event_instances')
+        .select('id, series_id, event_date, start_time, location, status, notes, requires_verification, requires_signature, title_override, description_override')
+        .in('series_id', seriesIds)
+        .gte('event_date', past365.toISOString().split('T')[0])
+        .lte('event_date', future365.toISOString().split('T')[0])
+        .order('event_date', { ascending: true })
     : { data: [] }
 
-  const deptSeriesIds = new Set((seriesData ?? []).map(s => s.id))
-  const seriesMap = Object.fromEntries((seriesData ?? []).map(s => [s.id, s]))
+  // The 60-day forward trim exists to stop a year of auto-generated weekly meetings from
+  // burying the list. Dates entered by hand — special events, and every occurrence of a
+  // custom-dates series — are deliberate, so they always show.
   const deptInstances = (instances ?? []).filter(i => {
-    if (!deptSeriesIds.has(i.series_id)) return false
-    const isSpecial = seriesMap[i.series_id]?.event_type === 'special'
-    if (!isSpecial && i.event_date > future60str) return false
+    const series = seriesMap[i.series_id]
+    const alwaysShow = series?.event_type === 'special' || series?.recurrence_type === 'custom_dates'
+    if (!alwaysShow && i.event_date > future60str) return false
     return true
   })
 

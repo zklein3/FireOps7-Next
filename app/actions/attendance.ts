@@ -18,6 +18,17 @@ async function getContext() {
   }
 }
 
+// ─── Parse a comma-separated YYYY-MM-DD list into sorted, de-duplicated dates ─
+function parseDateList(raw: string | null): string[] {
+  if (!raw) return []
+  const seen = new Set<string>()
+  for (const part of raw.split(',')) {
+    const d = part.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) seen.add(d)
+  }
+  return Array.from(seen).sort()
+}
+
 // ─── Generate instances for a series (up to 1 year out) ──────────────────────
 function getNextOccurrences(series: {
   recurrence_type: string
@@ -106,11 +117,21 @@ export async function createEventSeries(formData: FormData) {
 
   if (recentDupe) return { success: true, series_id: recentDupe.id }
 
+  // Custom-dates series: an explicit list of irregular dates (football standbys, parades,
+  // fair details) that no weekly/monthly rule can express. Comes in as a comma-separated
+  // list of YYYY-MM-DD strings.
+  const custom_dates = parseDateList(formData.get('custom_dates') as string)
+  if (recurrence_type === 'custom_dates' && custom_dates.length === 0) {
+    return { error: 'Add at least one date for a multiple-dates event.' }
+  }
+
   const oneYearOut = new Date()
   oneYearOut.setFullYear(oneYearOut.getFullYear() + 1)
 
   const generate_through_date_raw = formData.get('generate_through_date') as string
-  const generate_through_date = generate_through_date_raw || oneYearOut.toISOString().split('T')[0]
+  const generate_through_date = recurrence_type === 'custom_dates'
+    ? custom_dates[custom_dates.length - 1]
+    : (generate_through_date_raw || oneYearOut.toISOString().split('T')[0])
 
   const { data: series, error: seriesErr } = await adminClient.from('event_series').insert({
     department_id,
@@ -148,6 +169,18 @@ export async function createEventSeries(formData: FormData) {
       requires_signature,
       status: 'scheduled',
     })
+  } else if (recurrence_type === 'custom_dates') {
+    await adminClient.from('event_instances').insert(
+      custom_dates.map(d => ({
+        series_id: series.id,
+        event_date: d,
+        start_time: start_time || null,
+        location: location || null,
+        requires_verification,
+        requires_signature,
+        status: 'scheduled',
+      }))
+    )
   } else {
     const today = new Date()
     const occurrences = getNextOccurrences({
@@ -203,6 +236,90 @@ export async function createEventSeries(formData: FormData) {
   revalidatePath('/events')
   revalidatePath('/training')
   return { success: true, series_id: series.id }
+}
+
+// ─── Add Dates to an Existing Series ─────────────────────────────────────────
+// For irregular-schedule series (standbys, details, parades) where another date gets
+// added after the series was created — a rescheduled game, a playoff round. Appends
+// occurrences to the existing series instead of forcing a whole new event.
+export async function addEventDates(series_id: string, dates: string[]) {
+  const ctx = await getContext()
+  if (!ctx?.isOfficerOrAbove) return { error: 'Only officers and admins can add event dates.' }
+  if (!ctx.department_id) return { error: 'Department not found.' }
+
+  const adminClient = createAdminClient()
+
+  const wanted = parseDateList(dates.join(','))
+  if (wanted.length === 0) return { error: 'Enter at least one valid date.' }
+
+  // Series must belong to the caller's current department
+  const { data: series } = await adminClient
+    .from('event_series')
+    .select('id, department_id, title, description, location, start_time, requires_verification, requires_signature, is_training, training_hours, training_cert_type_id, training_instructor, generate_through_date')
+    .eq('id', series_id)
+    .maybeSingle()
+
+  if (!series || series.department_id !== ctx.department_id) return { error: 'Event not found.' }
+
+  // Skip dates already on the series so a double-submit can't duplicate an occurrence
+  const { data: existing } = await adminClient
+    .from('event_instances')
+    .select('event_date')
+    .eq('series_id', series_id)
+    .in('event_date', wanted)
+
+  const existingDates = new Set((existing ?? []).map(i => i.event_date))
+  const toAdd = wanted.filter(d => !existingDates.has(d))
+
+  if (toAdd.length === 0) return { error: 'Those dates are already on this event.' }
+
+  const { data: inserted, error: insertErr } = await adminClient
+    .from('event_instances')
+    .insert(toAdd.map(d => ({
+      series_id,
+      event_date: d,
+      start_time: series.start_time,
+      location: series.location,
+      requires_verification: series.requires_verification,
+      requires_signature: series.requires_signature,
+      status: 'scheduled',
+    })))
+    .select('id, event_date')
+
+  if (insertErr) { await logError(insertErr.message, '/dept-admin/events'); return { error: insertErr.message } }
+
+  // Keep the series window covering its own latest occurrence
+  const latest = toAdd[toAdd.length - 1]
+  if (!series.generate_through_date || latest > series.generate_through_date) {
+    await adminClient.from('event_series')
+      .update({ generate_through_date: latest, updated_at: new Date().toISOString() })
+      .eq('id', series_id)
+  }
+
+  // Mirror the training record onto each new occurrence, same as series creation does
+  if (series.is_training && inserted?.length) {
+    await adminClient.from('training_events').insert(
+      inserted.map(inst => ({
+        department_id: ctx.department_id,
+        event_instance_id: inst.id,
+        topic: series.title,
+        description: series.description,
+        instructor: series.training_instructor,
+        event_date: inst.event_date,
+        hours: series.training_hours,
+        certification_type_id: series.training_cert_type_id,
+        requires_verification: series.requires_verification,
+        start_time: series.start_time,
+        location: series.location,
+        created_by: ctx.me.id,
+      }))
+    )
+  }
+
+  revalidatePath('/events')
+  revalidatePath('/dept-admin/events')
+  revalidatePath('/training')
+  return { success: true, added: toAdd.length, skipped: wanted.length - toAdd.length }
 }
 
 // ─── Update Event Instance (this one only) ────────────────────────────────────

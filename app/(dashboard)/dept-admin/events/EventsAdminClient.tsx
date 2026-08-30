@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { logAttendance, logAbsentAttendance, verifyAttendance, cancelEventInstance, closeEventInstance, requestExcuse, deleteEventInstance, updateEventInstance, updateEventSeries } from '@/app/actions/attendance'
+import { logAttendance, logAbsentAttendance, verifyAttendance, cancelEventInstance, closeEventInstance, requestExcuse, deleteEventInstance, updateEventInstance, updateEventSeries, addEventDates } from '@/app/actions/attendance'
 import { toggleEventSeriesPublic } from '@/app/actions/public-site'
 import { generateCheckinToken } from '@/app/actions/checkin'
 import EventAttendanceSignaturePadModal from '@/app/(dashboard)/signatures/EventAttendanceSignaturePadModal'
@@ -166,6 +166,7 @@ export default function EventsAdminClient({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'all'>('all')
+  const [newSeriesDate, setNewSeriesDate] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
 
   const [rejectingId, setRejectingId] = useState<string | null>(null)
@@ -283,6 +284,20 @@ export default function EventsAdminClient({
       else { setSuccess('Attendance logged.'); router.refresh() }
     } catch { setError(CONNECTION_ERROR) }
     finally { setLoading(false) }
+  }
+
+  async function handleAddSeriesDate(event: Event) {
+    if (!newSeriesDate) { setError('Pick a date to add.'); return }
+    setLoading(true); reset()
+    try {
+      const result = await addEventDates(event.series_id, [newSeriesDate])
+      if (result?.error) setError(result.error)
+      else {
+        setSuccess(`Added ${formatDate(newSeriesDate)} to "${event.title}".`)
+        setNewSeriesDate('')
+        router.refresh()
+      }
+    } finally { setLoading(false) }
   }
 
   async function handleBulkLog(event: Event) {
@@ -604,6 +619,31 @@ export default function EventsAdminClient({
                                 {s === 'instance' ? 'This event only' : 'This & all future'}
                               </button>
                             ))}
+                          </div>
+                        )}
+
+                        {/* Irregular-schedule series: append another occurrence without
+                            re-creating the whole event (rescheduled game, playoff round). */}
+                        {event.recurrence_type === 'custom_dates' && (
+                          <div className="rounded-lg border border-zinc-200 bg-white p-3">
+                            <p className="text-xs font-semibold text-zinc-700 mb-1">Add another date to this event</p>
+                            <p className="text-xs text-zinc-400 mb-2">
+                              Creates a new occurrence using this event&apos;s title, time, location, and attendance settings.
+                            </p>
+                            <div className="flex gap-2">
+                              <input
+                                type="date"
+                                value={newSeriesDate}
+                                onChange={e => setNewSeriesDate(e.target.value)}
+                                className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                              <button
+                                type="button"
+                                onClick={() => handleAddSeriesDate(event)}
+                                disabled={loading || !newSeriesDate}
+                                className="shrink-0 rounded-lg bg-zinc-700 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-40">
+                                Add Date
+                              </button>
+                            </div>
                           </div>
                         )}
                         <div className="grid grid-cols-2 gap-3">

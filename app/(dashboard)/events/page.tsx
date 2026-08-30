@@ -51,10 +51,12 @@ export default async function EventsPage() {
         .order('event_date', { ascending: true })
     : { data: [] }
 
-  // Trim non-special events to 60-day future window
+  // Trim auto-generated recurring events to a 60-day future window. Special events and
+  // custom-dates occurrences are entered by hand, so members see the whole schedule.
   const deptInstances = (instances ?? []).filter(i => {
-    const isSpecial = seriesMap[i.series_id]?.event_type === 'special'
-    if (!isSpecial && i.event_date > future60str) return false
+    const series = seriesMap[i.series_id]
+    const alwaysShow = series?.event_type === 'special' || series?.recurrence_type === 'custom_dates'
+    if (!alwaysShow && i.event_date > future60str) return false
     return true
   })
 

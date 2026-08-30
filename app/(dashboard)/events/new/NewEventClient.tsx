@@ -19,6 +19,14 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
   const [requiresVerification, setRequiresVerification] = useState(true)
   const [requiresSignature, setRequiresSignature] = useState(false)
   const [isTraining, setIsTraining] = useState(false)
+  const [customDates, setCustomDates] = useState<string[]>([])
+  const [dateToAdd, setDateToAdd] = useState('')
+
+  function addCustomDate() {
+    if (!dateToAdd) return
+    setCustomDates(prev => prev.includes(dateToAdd) ? prev : [...prev, dateToAdd].sort())
+    setDateToAdd('')
+  }
 
   async function handleSubmit(formData: FormData) {
     setError(null)
@@ -26,6 +34,10 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
     formData.set('requires_verification', requiresVerification ? 'true' : 'false')
     formData.set('requires_signature', requiresSignature ? 'true' : 'false')
     formData.set('is_training', isTraining ? 'true' : 'false')
+    if (recurrenceType === 'custom_dates') {
+      if (customDates.length === 0) { setError('Add at least one date.'); setLoading(false); return }
+      formData.set('custom_dates', customDates.join(','))
+    }
     const result = await createEventSeries(formData)
     if (result?.error) { setError(result.error); setLoading(false); return }
     router.push('/events')
@@ -99,6 +111,7 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
             <label className="mb-1 block text-sm font-medium text-zinc-700">Recurrence <span className="text-red-500">*</span></label>
             <select name="recurrence_type" required value={recurrenceType} onChange={e => setRecurrenceType(e.target.value)} className={inputCls}>
               <option value="one_time">One Time</option>
+              <option value="custom_dates">Multiple Dates — Pick Each One</option>
               <option value="weekly">Weekly</option>
               <option value="monthly_by_dow">Monthly — Day of Week (e.g. 2nd Monday)</option>
               <option value="monthly_by_date">Monthly — Date (e.g. 15th)</option>
@@ -109,6 +122,57 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700">Event Date <span className="text-red-500">*</span></label>
               <input name="event_date" type="date" required className={inputCls} />
+            </div>
+          )}
+
+          {recurrenceType === 'custom_dates' && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Dates <span className="text-red-500">*</span>
+              </label>
+              <p className="text-xs text-zinc-400 mb-2">
+                For schedules that don&apos;t follow a pattern — game-day standbys, parades, fair details.
+                Add each date; they all share this event&apos;s title, time, location, and attendance settings.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={dateToAdd}
+                  onChange={e => setDateToAdd(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomDate() } }}
+                  className={inputCls}
+                />
+                <button
+                  type="button"
+                  onClick={addCustomDate}
+                  disabled={!dateToAdd}
+                  className="shrink-0 rounded-lg bg-zinc-700 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-40">
+                  Add
+                </button>
+              </div>
+              {customDates.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {customDates.map(d => (
+                    <span key={d} className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 border border-zinc-200 pl-3 pr-1.5 py-1 text-xs font-medium text-zinc-700">
+                      {new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                      <button
+                        type="button"
+                        onClick={() => setCustomDates(prev => prev.filter(x => x !== d))}
+                        aria-label={`Remove ${d}`}
+                        className="rounded-full h-4 w-4 leading-none text-zinc-400 hover:bg-zinc-300 hover:text-zinc-800">
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-zinc-400">No dates added yet.</p>
+              )}
+              {customDates.length > 0 && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  {customDates.length} occurrence{customDates.length === 1 ? '' : 's'} will be created. You can add more dates later from Event Management.
+                </p>
+              )}
             </div>
           )}
 
@@ -150,7 +214,7 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
             </div>
           )}
 
-          {recurrenceType !== 'one_time' && (
+          {recurrenceType !== 'one_time' && recurrenceType !== 'custom_dates' && (
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700">
                 Series Ends On <span className="text-zinc-400 font-normal">(optional — defaults to 1 year out)</span>
