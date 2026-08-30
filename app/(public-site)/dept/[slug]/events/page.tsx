@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { formatTimeRange } from '@/lib/event-times'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 
@@ -8,12 +9,6 @@ function formatDate(d: string) {
   })
 }
 
-function formatTime(t: string | null) {
-  if (!t) return null
-  const [h, m] = t.split(':')
-  const hour = parseInt(h)
-  return `${hour % 12 || 12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`
-}
 
 export default async function DeptEventsPage({
   params,
@@ -107,13 +102,7 @@ export default async function DeptEventsPage({
 
                   <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-zinc-400">
                     {ev.start_time && (
-                      <span>🕐 {formatTime(ev.start_time)}</span>
-                    )}
-                    {ev.duration_minutes && (
-                      <span>⏱ {ev.duration_minutes >= 60
-                        ? `${Math.floor(ev.duration_minutes / 60)}h${ev.duration_minutes % 60 > 0 ? ` ${ev.duration_minutes % 60}m` : ''}`
-                        : `${ev.duration_minutes}m`}
-                      </span>
+                      <span>🕐 {formatTimeRange(ev.start_time, ev.duration_minutes)}</span>
                     )}
                     {ev.location && (
                       <span>📍 {ev.location}</span>

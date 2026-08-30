@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { formatTimeRange } from '@/lib/event-times'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -107,6 +108,7 @@ export default async function DeptLandingPage({
       title: series?.title ?? '—',
       event_type: series?.event_type ?? null,
       start_time: series?.start_time ?? null,
+      duration_minutes: series?.duration_minutes ?? null,
       location: series?.location ?? null,
       event_date: inst.event_date,
     }
@@ -217,7 +219,7 @@ export default async function DeptLandingPage({
                   <p className="text-sm font-semibold text-zinc-900 truncate">{ev.title}</p>
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-zinc-400">
                     <span>{formatDate(ev.event_date)}</span>
-                    {ev.start_time && <span>{formatTime(ev.start_time)}</span>}
+                    {ev.start_time && <span>{formatTimeRange(ev.start_time, ev.duration_minutes)}</span>}
                     {ev.location && <span>📍 {ev.location}</span>}
                   </div>
                 </div>
