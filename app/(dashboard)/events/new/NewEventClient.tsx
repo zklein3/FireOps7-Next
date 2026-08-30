@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createEventSeries } from '@/app/actions/attendance'
 import { parseRunSheet } from '@/app/actions/parse-run-sheet'
 import { cadToEventFields } from '@/lib/cad-to-event'
+import { durationFromTimes } from '@/lib/event-times'
 import HelpText from '@/components/HelpText'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
@@ -38,7 +39,7 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
   const [formKey, setFormKey] = useState(0)
   const [prefill, setPrefill] = useState({
     title: '', event_type: 'meeting', location: '', description: '',
-    start_time: '', duration_minutes: '', event_date: '',
+    start_time: '', end_time: '', event_date: '',
   })
   const formRef = useRef<HTMLFormElement>(null)
 
@@ -66,7 +67,7 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
       location: f.location || typed('location') || prev.location,
       description: f.description || typed('description') || prev.description,
       start_time: f.start_time || typed('start_time') || prev.start_time,
-      duration_minutes: f.duration_minutes || typed('duration_minutes') || prev.duration_minutes,
+      end_time: f.end_time || typed('end_time') || prev.end_time,
       event_date: f.event_date || typed('event_date') || prev.event_date,
     }))
 
@@ -79,7 +80,7 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
     setFormKey(k => k + 1)
     const filled = [
       f.event_date && 'date', f.start_time && 'time',
-      f.duration_minutes && 'duration', f.location && 'location',
+      f.end_time && 'end time', f.location && 'location',
       f.description && 'description',
     ].filter(Boolean)
     setImportSuccess(
@@ -96,6 +97,16 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
     formData.set('requires_verification', requiresVerification ? 'true' : 'false')
     formData.set('requires_signature', requiresSignature ? 'true' : 'false')
     formData.set('is_training', isTraining ? 'true' : 'false')
+
+    // The column stores minutes; the form asks for an end time.
+    const startVal = (formData.get('start_time') as string) || ''
+    const endVal = (formData.get('end_time') as string) || ''
+    formData.delete('end_time')
+    if (startVal && endVal) {
+      const mins = durationFromTimes(startVal, endVal)
+      if (mins === null) { setError('End time must be different from the start time.'); setLoading(false); return }
+      formData.set('duration_minutes', String(mins))
+    }
     if (recurrenceType === 'custom_dates') {
       if (customDates.length === 0) { setError('Add at least one date.'); setLoading(false); return }
       formData.set('custom_dates', customDates.join(','))
@@ -176,8 +187,8 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
               <input name="start_time" type="time" step="60" defaultValue={prefill.start_time} className={inputCls} />
             </div>
             <div className="flex-1">
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Duration (minutes)</label>
-              <input name="duration_minutes" type="number" min="1" step="1" defaultValue={prefill.duration_minutes} placeholder="60" className={inputCls} />
+              <label className="mb-1 block text-sm font-medium text-zinc-700">End Time</label>
+              <input name="end_time" type="time" step="60" defaultValue={prefill.end_time} className={inputCls} />
             </div>
           </div>
         </div>

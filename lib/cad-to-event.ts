@@ -4,7 +4,7 @@ export type EventFieldsFromCad = {
   event_type: string
   event_date: string        // YYYY-MM-DD
   start_time: string        // HH:MM
-  duration_minutes: string  // whole minutes, '' when it can't be derived
+  end_time: string          // HH:MM, '' when the sheet has no completed time
   location: string
   description: string
 }
@@ -25,14 +25,18 @@ function splitStamp(stamp: string | undefined): [string, string] {
   return m ? [m[1], m[2]] : ['', '']
 }
 
-function minutesBetween(from: string | undefined, to: string | undefined): string {
-  if (!from || !to) return ''
-  const a = new Date(from).getTime()
-  const b = new Date(to).getTime()
+/**
+ * The sheet's Completed Time, but only when it lands within a day of the call —
+ * a detail that reads as multi-day is a parse artifact, not a real end time.
+ */
+function endTimeIfSane(callTime: string | undefined, completed: string | undefined): string {
+  if (!callTime || !completed) return ''
+  const a = new Date(callTime).getTime()
+  const b = new Date(completed).getTime()
   if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return ''
   const mins = Math.round((b - a) / 60000)
-  // A detail that reads as multi-day is a parse artifact, not a real duration.
-  return mins > 0 && mins <= 24 * 60 ? String(mins) : ''
+  if (mins <= 0 || mins > 24 * 60) return ''
+  return splitStamp(completed)[1]
 }
 
 /**
@@ -51,7 +55,7 @@ export function cadToEventFields(d: ParsedRunSheet): EventFieldsFromCad {
     event_type: toEventType(),
     event_date: d.incident_date || callDate || pagedDate || '',
     start_time: callTime || pagedTime || '',
-    duration_minutes: minutesBetween(d.call_time, d.in_service_at),
+    end_time: endTimeIfSane(d.call_time, d.in_service_at),
     location: [d.address, d.city].filter(Boolean).join(', '),
     description: d.narrative || '',
   }

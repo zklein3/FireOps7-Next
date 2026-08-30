@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { logAttendance, logAbsentAttendance, verifyAttendance, cancelEventInstance, closeEventInstance, requestExcuse, deleteEventInstance, updateEventInstance, updateEventSeries, addEventDates } from '@/app/actions/attendance'
 import { toggleEventSeriesPublic } from '@/app/actions/public-site'
 import { generateCheckinToken } from '@/app/actions/checkin'
+import { durationFromTimes, endTimeFromDuration } from '@/lib/event-times'
 import EventAttendanceSignaturePadModal from '@/app/(dashboard)/signatures/EventAttendanceSignaturePadModal'
 import { formatLocalDateTime } from '@/lib/format-datetime'
 import HelpText from '@/components/HelpText'
@@ -178,7 +179,7 @@ export default function EventsAdminClient({
   const [editScope, setEditScope] = useState<'instance' | 'series'>('instance')
   const [editForm, setEditForm] = useState({
     title: '', event_type: 'meeting', description: '', location: '',
-    event_date: '', start_time: '', duration_minutes: '', notes: '',
+    event_date: '', start_time: '', end_time: '', notes: '',
     requires_verification: true, requires_signature: false,
     is_training: false, training_hours: '', training_cert_type_id: '', training_instructor: '',
   })
@@ -204,7 +205,7 @@ export default function EventsAdminClient({
       location: event.location ?? '',
       event_date: event.event_date,
       start_time: event.start_time ?? '',
-      duration_minutes: event.duration_minutes != null ? String(event.duration_minutes) : '',
+      end_time: endTimeFromDuration(event.start_time, event.duration_minutes),
       notes: event.notes ?? '',
       requires_verification: event.requires_verification,
       requires_signature: event.requires_signature,
@@ -237,7 +238,14 @@ export default function EventsAdminClient({
         fd.set('description', editForm.description)
         fd.set('location', editForm.location)
         fd.set('start_time', editForm.start_time)
-        fd.set('duration_minutes', editForm.duration_minutes)
+        // Stored as minutes, entered as an end time.
+        if (editForm.start_time && editForm.end_time) {
+          const mins = durationFromTimes(editForm.start_time, editForm.end_time)
+          if (mins === null) { setError('End time must be different from the start time.'); return }
+          fd.set('duration_minutes', String(mins))
+        } else {
+          fd.set('duration_minutes', '')
+        }
         if (event.recurrence_type === 'one_time') fd.set('event_date', editForm.event_date)
         const result = await updateEventSeries(fd)
         if (result?.error) { setError(result.error); return }
@@ -668,8 +676,8 @@ export default function EventsAdminClient({
                                 </select>
                               </div>
                               <div>
-                                <label className="block text-xs font-medium text-zinc-700 mb-1">Duration (min)</label>
-                                <input type="number" min="1" value={editForm.duration_minutes} onChange={e => setEditForm(f => ({ ...f, duration_minutes: e.target.value }))}
+                                <label className="block text-xs font-medium text-zinc-700 mb-1">End Time</label>
+                                <input type="time" step="60" value={editForm.end_time} onChange={e => setEditForm(f => ({ ...f, end_time: e.target.value }))}
                                   className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                               </div>
                             </>
