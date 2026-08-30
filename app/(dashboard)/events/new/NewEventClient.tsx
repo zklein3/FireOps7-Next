@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createEventSeries } from '@/app/actions/attendance'
+import { parseRunSheet } from '@/app/actions/parse-run-sheet'
+import { cadToEventFields } from '@/lib/cad-to-event'
 import HelpText from '@/components/HelpText'
 
 const inputCls = "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
@@ -26,6 +28,66 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
     if (!dateToAdd) return
     setCustomDates(prev => prev.includes(dateToAdd) ? prev : [...prev, dateToAdd].sort())
     setDateToAdd('')
+  }
+
+  // CAD-sheet import. The form fields stay uncontrolled — importing swaps in new
+  // defaults and remounts the form via formKey rather than making every field stateful.
+  const [isParsing, setIsParsing] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importSuccess, setImportSuccess] = useState<string | null>(null)
+  const [formKey, setFormKey] = useState(0)
+  const [prefill, setPrefill] = useState({
+    title: '', event_type: 'meeting', location: '', description: '',
+    start_time: '', duration_minutes: '', event_date: '',
+  })
+  const formRef = useRef<HTMLFormElement>(null)
+
+  async function handleCadImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setIsParsing(true); setImportError(null); setImportSuccess(null)
+
+    const fd = new FormData()
+    fd.append('pdf', file)
+    const result = await parseRunSheet(fd)
+    if (result.error) { setImportError(result.error); setIsParsing(false); return }
+
+    const f = cadToEventFields(result.data!)
+
+    // Importing remounts the form, so carry over anything already typed — a title
+    // entered before uploading must not be wiped by the import.
+    const current = formRef.current ? new FormData(formRef.current) : null
+    const typed = (name: string) => ((current?.get(name) as string) ?? '').trim()
+
+    setPrefill(prev => ({
+      title: typed('title') || prev.title,
+      event_type: f.event_type,
+      location: f.location || typed('location') || prev.location,
+      description: f.description || typed('description') || prev.description,
+      start_time: f.start_time || typed('start_time') || prev.start_time,
+      duration_minutes: f.duration_minutes || typed('duration_minutes') || prev.duration_minutes,
+      event_date: f.event_date || typed('event_date') || prev.event_date,
+    }))
+
+    // A CAD sheet documents one occurrence. In multiple-dates mode that means adding
+    // its date to the list; otherwise it fills the one-time date field.
+    if (f.event_date && recurrenceType === 'custom_dates') {
+      setCustomDates(prev => prev.includes(f.event_date) ? prev : [...prev, f.event_date].sort())
+    }
+
+    setFormKey(k => k + 1)
+    const filled = [
+      f.event_date && 'date', f.start_time && 'time',
+      f.duration_minutes && 'duration', f.location && 'location',
+      f.description && 'description',
+    ].filter(Boolean)
+    setImportSuccess(
+      filled.length
+        ? `Filled ${filled.join(', ')}. Add a title, then review below.`
+        : 'Nothing could be read from that PDF — enter the details manually.'
+    )
+    setIsParsing(false)
   }
 
   async function handleSubmit(formData: FormData) {
@@ -55,25 +117,42 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
 
       {error && <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">{error}</div>}
 
+      {/* CAD Sheet Import */}
+      <div className="mb-4 rounded-xl bg-zinc-50 border border-zinc-200 p-4 flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-zinc-700">Import from CAD Sheet</p>
+          <p className="text-xs text-zinc-400">
+            Reads a Central Square CFS PDF to fill the date, time, duration, location, and
+            description. Saves typing only — nothing from the sheet is stored on the event.
+          </p>
+        </div>
+        <label className={`relative cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold transition-colors shrink-0 ${isParsing ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed' : 'bg-red-700 text-white hover:bg-red-800'}`}>
+          {isParsing ? 'Reading PDF…' : 'Upload PDF'}
+          <input type="file" accept=".pdf,application/pdf" className="sr-only" onChange={handleCadImport} disabled={isParsing} />
+        </label>
+        {importSuccess && <p className="w-full text-xs text-green-700 font-medium">{importSuccess}</p>}
+        {importError && <p className="w-full text-xs text-red-600">{importError}</p>}
+      </div>
+
       <HelpText className="mb-4">
         This creates an event <em>series</em>. A one-time event makes a single occurrence; a recurring schedule
         (weekly, monthly) generates individual occurrences a year out, each with its own attendance tracking.
       </HelpText>
 
-      <form action={handleSubmit} className="flex flex-col gap-5">
+      <form key={formKey} ref={formRef} action={handleSubmit} className="flex flex-col gap-5">
         {/* Basic Info */}
         <div className="rounded-xl bg-white shadow-sm border border-zinc-200 p-5 flex flex-col gap-4">
           <h2 className="text-sm font-semibold text-zinc-700">Event Details</h2>
 
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700">Title <span className="text-red-500">*</span></label>
-            <input name="title" type="text" required placeholder="Monthly Department Meeting" className={inputCls} />
+            <input name="title" type="text" required defaultValue={prefill.title} placeholder="Monthly Department Meeting" className={inputCls} />
           </div>
 
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium text-zinc-700">Event Type <span className="text-red-500">*</span></label>
-              <select name="event_type" required className={inputCls}>
+              <select name="event_type" required defaultValue={prefill.event_type} className={inputCls}>
                 <option value="meeting">Meeting</option>
                 <option value="training">Training</option>
                 <option value="special">Special Event</option>
@@ -82,23 +161,23 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
             </div>
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium text-zinc-700">Location</label>
-              <input name="location" type="text" placeholder="Station 1" className={inputCls} />
+              <input name="location" type="text" defaultValue={prefill.location} placeholder="Station 1" className={inputCls} />
             </div>
           </div>
 
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700">Description</label>
-            <input name="description" type="text" placeholder="Optional notes about this event" className={inputCls} />
+            <input name="description" type="text" defaultValue={prefill.description} placeholder="Optional notes about this event" className={inputCls} />
           </div>
 
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium text-zinc-700">Start Time</label>
-              <input name="start_time" type="time" step="60" className={inputCls} />
+              <input name="start_time" type="time" step="60" defaultValue={prefill.start_time} className={inputCls} />
             </div>
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium text-zinc-700">Duration (minutes)</label>
-              <input name="duration_minutes" type="number" min="1" step="1" placeholder="60" className={inputCls} />
+              <input name="duration_minutes" type="number" min="1" step="1" defaultValue={prefill.duration_minutes} placeholder="60" className={inputCls} />
             </div>
           </div>
         </div>
@@ -121,7 +200,7 @@ export default function NewEventClient({ certTypes }: { certTypes: { id: string;
           {recurrenceType === 'one_time' && (
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700">Event Date <span className="text-red-500">*</span></label>
-              <input name="event_date" type="date" required className={inputCls} />
+              <input name="event_date" type="date" required defaultValue={prefill.event_date} className={inputCls} />
             </div>
           )}
 
