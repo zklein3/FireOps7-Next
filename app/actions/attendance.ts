@@ -412,6 +412,8 @@ export async function updateEventInstance(formData: FormData) {
         hours: training_hours, certification_type_id: training_cert_type_id, cancelled: false,
         topic, description: description || null, instructor: training_instructor,
         start_time: start_time || null, location: location || null,
+        // Follow a moved occurrence so the training record doesn't keep the old date.
+        ...(instRow?.event_date ? { event_date: instRow.event_date } : {}),
       }).eq('id', existingTE.id)
     } else if (instRow) {
       await adminClient.from('training_events').insert({
@@ -507,12 +509,16 @@ export async function updateEventSeries(formData: FormData) {
       await adminClient.from('event_instances').update(instanceUpdate).in('id', unattendedIds)
     }
 
-    // requires_signature is a setting, not a data record — apply to attended instances too
+    // requires_signature is a setting, not a data record — apply to attended instances too.
+    // event_date rides along for the same reason: it is only ever sent for a one_time
+    // event, where changing it is an explicit reschedule of that single occurrence
+    // (postponed golf outing, rained-out standby), not a bulk rewrite of history.
+    // Skipping it once anyone had logged attendance made the save a silent no-op.
     const attendedInstanceIdList = instanceIds.filter(id => attendedInstanceIds.has(id))
     if (attendedInstanceIdList.length > 0) {
-      await adminClient.from('event_instances')
-        .update({ requires_signature, updated_at: new Date().toISOString() })
-        .in('id', attendedInstanceIdList)
+      const attendedUpdate: Record<string, unknown> = { requires_signature, updated_at: new Date().toISOString() }
+      if (event_date) attendedUpdate.event_date = event_date
+      await adminClient.from('event_instances').update(attendedUpdate).in('id', attendedInstanceIdList)
     }
 
     // If requires_signature enabled, create sig records for all present attendees
@@ -573,12 +579,13 @@ export async function updateEventSeries(formData: FormData) {
         }
       }
       if (toUpdateIds.length > 0) {
-        await adminClient.from('training_events')
-          .update({
-            hours: training_hours, certification_type_id: training_cert_type_id, cancelled: false,
-            topic: title, description: description || null, instructor: training_instructor,
-          })
-          .in('id', toUpdateIds)
+        const teUpdate: Record<string, unknown> = {
+          hours: training_hours, certification_type_id: training_cert_type_id, cancelled: false,
+          topic: title, description: description || null, instructor: training_instructor,
+        }
+        // Keep the mirrored training record on the rescheduled date, not the old one.
+        if (event_date) teUpdate.event_date = event_date
+        await adminClient.from('training_events').update(teUpdate).in('id', toUpdateIds)
       }
       if (toInsert.length > 0) {
         await adminClient.from('training_events').insert(toInsert)
